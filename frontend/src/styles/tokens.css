@@ -1,0 +1,178 @@
+/*
+  Atyrau Armsport — токены дизайн-системы.
+
+  Идентичность: нефтепромысловый Атырау на берегу Каспия. Не «спортивный
+  клипарт», а эстетика приборной панели буровой — гейджи, вентили, клёпаный
+  металл, вырезанные из стали цифры. Сила хвата спортсмена = давление в
+  манометре: и то, и другое читается по стрелке на циферблате.
+
+  Палитра (именованная):
+    ink     #0B0F10  — сырая нефть, фон приложения
+    petrol  #12363B  — каспийская вода в глубине, фон панелей
+    petrol-2#1D4F56  — та же вода на свету, hover-панели
+    rust    #C1552C  — окисленный трубопровод, основной акцент/CTA
+    brass   #C9A227  — латунь манометра, медали, вторичный акцент
+    steel   #92A0A6  — сталь, границы и приглушённый текст
+    bone    #EDE7D8  — выбеленный степной песок, текст на тёмном
+    success #4E7A51  — приглушённый индустриальный зелёный, победы
+    danger  #A23B3B  — приглушённый красный, поражения/ошибки
+*/
+
+@theme {
+  --font-display: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-body: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --color-ink: #0b0f10;
+  --color-ink-soft: #12181a;
+  --color-petrol: #12363b;
+  --color-petrol-2: #1d4f56;
+  --color-petrol-3: #29646b;
+  --color-rust: #c1552c;
+  --color-rust-dim: #8f3f21;
+  --color-brass: #c9a227;
+  --color-brass-dim: #96791f;
+  --color-steel: #92a0a6;
+  --color-steel-dim: #5c666b;
+  --color-bone: #ede7d8;
+  --color-bone-dim: #c9c2ae;
+  --color-success: #4e7a51;
+  --color-danger: #a23b3b;
+
+  --shadow-plate: 0 1px 0 0 rgba(237, 231, 216, 0.06) inset, 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+
+  --radius-rivet: 3px;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-ink);
+    color-scheme: dark;
+  }
+
+  body {
+    font-family: var(--font-body);
+    background-color: var(--color-ink);
+    color: var(--color-bone);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: var(--color-rust);
+    color: var(--color-ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brass);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  /* Клёпаная линия-разделитель — тонкая линия с "заклёпками"-точками,
+     обозначающими стык металлических листов. Используется как структурный
+     разделитель секций, а не декорация. */
+  .rivet-line {
+    position: relative;
+    height: 1px;
+    background: repeating-linear-gradient(
+      to right,
+      var(--color-steel-dim) 0,
+      var(--color-steel-dim) 6px,
+      transparent 6px,
+      transparent 14px
+    );
+    opacity: 0.5;
+  }
+
+  .plate {
+    background: linear-gradient(180deg, var(--color-petrol) 0%, var(--color-ink-soft) 100%);
+    box-shadow: var(--shadow-plate);
+    border: 1px solid rgba(146, 160, 166, 0.14);
+  }
+
+  .text-eyebrow {
+    font-family: var(--font-mono);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-size: 0.72rem;
+  }
+
+  /* Многослойная "атмосферная" сцена для hero: радиальные блики по углам
+     (латунь/ржавчина), тонкая сетка чертежа, диагональные световые полосы
+     и виньетка по краям. Все слои — на токенах палитры, не на сырых hex. */
+  .hero-scene {
+    position: relative;
+    isolation: isolate;
+    background:
+      radial-gradient(1200px 600px at 85% 15%, rgba(201, 162, 39, 0.14), transparent 60%),
+      radial-gradient(900px 500px at 8% 95%, rgba(193, 85, 44, 0.16), transparent 60%),
+      linear-gradient(135deg, var(--color-petrol) 0%, var(--color-ink-soft) 45%, var(--color-ink) 100%);
+  }
+
+  .hero-scene::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0.06;
+    background-image:
+      linear-gradient(rgba(237, 231, 216, 0.7) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(237, 231, 216, 0.7) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+  }
+
+  .hero-scene::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    box-shadow: inset 0 0 160px rgba(0, 0, 0, 0.55);
+    pointer-events: none;
+  }
+
+  /* Кнопки: скруглённые, с мягкой тенью у первичной — контраст с рублеными
+     "заклёпочными" элементами интерфейса, для крупных hero-CTA. */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.5rem;
+    padding: 0.75rem 1.75rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .btn-primary {
+    background: var(--color-rust);
+    color: var(--color-bone);
+    box-shadow: 0 8px 24px -6px rgba(193, 85, 44, 0.5);
+  }
+
+  .btn-primary:hover {
+    background: var(--color-rust-dim);
+  }
+
+  .btn-secondary {
+    background: rgba(237, 231, 216, 0.08);
+    color: var(--color-bone);
+    border: 1px solid rgba(237, 231, 216, 0.14);
+  }
+
+  .btn-secondary:hover {
+    background: rgba(237, 231, 216, 0.14);
+  }
+
+  /* Мягкая контактная тень под 3D-объектом, когда он стоит без карточки-подложки. */
+  .table-shadow {
+    filter: drop-shadow(0 28px 34px rgba(0, 0, 0, 0.55));
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+}
