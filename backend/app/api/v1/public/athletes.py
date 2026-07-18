@@ -20,6 +20,7 @@ from app.schemas.athletes import (
     AthleteStatisticsOut,
 )
 from app.schemas.common import Page
+from app.services.elo_engine import elo_combined
 
 router = APIRouter(prefix="/athletes", tags=["public:athletes"])
 
@@ -126,6 +127,9 @@ def get_athlete(athlete_id: int, db: Session = Depends(get_db)):
             gold_count=stats_row.gold_count,
             silver_count=stats_row.silver_count,
             bronze_count=stats_row.bronze_count,
+            elo_left=stats_row.elo_left,
+            elo_right=stats_row.elo_right,
+            elo_combined=elo_combined(stats_row.elo_left, stats_row.elo_right),
         )
         if stats_row
         else None
