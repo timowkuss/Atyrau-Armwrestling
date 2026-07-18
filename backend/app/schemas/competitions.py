@@ -54,6 +54,20 @@ class BracketMatchOut(BaseModel):
     status: str
 
 
+class QueuePairOut(BaseModel):
+    match_id: int
+    category_name: str
+    round_name: str | None
+    p1_name: str
+    p2_name: str
+
+
+class TableQueueOut(BaseModel):
+    table_number: int
+    current: QueuePairOut | None
+    next: list[QueuePairOut]
+
+
 class CompetitionAdminUpdate(BaseModel):
     """Только информационная часть соревнования — сознательно НЕ содержит
     полей сетки/результатов/участников/очков. Их физически нельзя передать

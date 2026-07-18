@@ -68,6 +68,7 @@ class MatchSyncCreate(BaseModel):
     p2_losses: int = 0
     is_bye: bool = False
     status: str = "pending"
+    table_number: int | None = None
 
 
 class MatchSyncUpdate(BaseModel):
@@ -75,3 +76,4 @@ class MatchSyncUpdate(BaseModel):
     p1_losses: int | None = None
     p2_losses: int | None = None
     status: str | None = None
+    table_number: int | None = None
