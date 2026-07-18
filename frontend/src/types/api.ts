@@ -143,6 +143,20 @@ export interface BracketMatchOut {
   status: string
 }
 
+export interface QueuePairOut {
+  match_id: number
+  category_name: string
+  round_name: string | null
+  p1_name: string
+  p2_name: string
+}
+
+export interface TableQueueOut {
+  table_number: number
+  current: QueuePairOut | null
+  next: QueuePairOut[]
+}
+
 export interface CompetitionListParams {
   year?: number
   status?: CompetitionStatus
