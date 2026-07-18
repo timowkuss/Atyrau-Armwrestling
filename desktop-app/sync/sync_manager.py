@@ -1,6 +1,6 @@
 """Оркестрирует синхронизацию действий организатора с центральной БД в
 реальном времени (см. ARCHITECTURE.md §5). Вызывается из обёрток над
-методами Database (см. правки в armwrestling_tournament.py) — сам НИКОГДА
+методами Database (см. правки в armwrestling_tournament.py) -- сам НИКОГДА
 не бросает исключения наружу настолько, чтобы сломать локальную работу:
 любая сетевая ошибка уходит в офлайн-очередь и повторяется позже.
 """
@@ -15,10 +15,24 @@ class SyncManager:
         self.api = api_client or SyncApiClient()
         self.state = state or SyncState()
         self.enabled = config.SYNC_ENABLED
+        # Когда True -- любая операция сразу уходит в офлайн-очередь без
+        # попытки реального HTTP-запроса. Используется десктоп-приложением
+        # при массовой генерации сетки (см. generate_bracket в
+        # armwrestling_tournament.py): без этого каждый матч сетки -- это
+        # отдельный блокирующий HTTP-запрос на UI-потоке (до
+        # REQUEST_TIMEOUT_SECONDS секунд КАЖДЫЙ при проблемах с сетью),
+        # из-за чего окно организатора "замирает" на генерации. Очередь же
+        # потом единоразово разгребается в фоновом потоке через
+        # flush_pending() -- так матчи всё равно долетают до сайта, просто
+        # без блокировки интерфейса.
+        self.force_queue = False
 
     # ── внутренний хелпер: попытка + запись в очередь при неудаче ──
     def _try(self, operation: str, retry_payload: dict, fn):
         if not self.enabled:
+            return None
+        if self.force_queue:
+            self.state.enqueue(operation, retry_payload)
             return None
         try:
             return fn()
@@ -77,9 +91,9 @@ class SyncManager:
         return self._try("update_athlete", payload, go)
 
     # ── спортсмен-участник: поиск или создание на сервере ───────
-    # local_athlete_id — id из ЛОКАЛЬНОЙ таблицы athletes (реестр
+    # local_athlete_id -- id из ЛОКАЛЬНОЙ таблицы athletes (реестр
     # "Спортсмены"), если участник турнира был привязан к карточке.
-    # Если карточка уже засинкана (on_athlete_created отработал раньше) —
+    # Если карточка уже засинкана (on_athlete_created отработал раньше) --
     # переиспользуем готовый remote id вместо поиска/создания по имени,
     # чтобы не плодить дубли на сайте.
     def _find_or_create_athlete(self, name: str, club: str | None,
@@ -168,24 +182,24 @@ class SyncManager:
 
     def on_participant_updated(self, pid, name, weight, club, category_id, hand, age_category):
         # Обновление профиля участника ПОСЛЕ регистрации (например, поправили
-        # вес) намеренно не синхронизируется в этой версии — центральная
+        # вес) намеренно не синхронизируется в этой версии -- центральная
         # competition_participants хранит "снимок" на момент регистрации.
         # Полноценный PATCH можно добавить по необходимости; пока это
         # осознанное упрощение Этапа 6, не баг.
         pass
     
     def on_participant_deleted(self, pid):
-        # 1. если ещё не отправлен — вообще не даём ему уйти
+        # 1. если ещё не отправлен -- вообще не даём ему уйти
         self.state.purge_pending("create_participant", "pid", pid)
 
-        # 2. если уже был на сервере — пробуем удалить и там
+        # 2. если уже был на сервере -- пробуем удалить и там
         remote_id = self.state.map_get("participant", pid)
         if remote_id is None:
-            return  # не долетел раньше — и не долетит теперь
+            return  # не долетел раньше -- и не долетит теперь
 
         delete_fn = getattr(self.api, "delete_participant", None)
         if delete_fn is None:
-            print("[sync] delete_participant: в api_client нет метода удаления — "
+            print("[sync] delete_participant: в api_client нет метода удаления -- "
                 "запись останется на сайте, удали вручную или добавь метод в API")
             return
         try:
@@ -198,7 +212,7 @@ class SyncManager:
         # Турнир мог быть удалён до того, как он сам и/или его дети
         # (категории, участники, матчи) улетели на сервер. Если погасить
         # только create_competition, дочерние операции останутся в очереди
-        # НАВСЕГДА — их remote_competition_id никогда не появится — и будут
+        # НАВСЕГДА -- их remote_competition_id никогда не появится -- и будут
         # блокировать flush_pending для ВСЕХ следующих турниров, т.к. очередь
         # идёт по порядку и останавливается на первой же неудаче.
         self.state.purge_pending("create_competition", "tid", tid)
@@ -221,7 +235,7 @@ class SyncManager:
 
     def on_category_deleted(self, cid):
         # Та же логика, что и для турнира: если категория удалена до того,
-        # как она сама и/или её дети (участники, матчи) улетели на сервер —
+        # как она сама и/или её дети (участники, матчи) улетели на сервер --
         # погасить нужно все дочерние операции, иначе они останутся в очереди
         # НАВСЕГДА (их remote_category_id никогда не появится) и заблокируют
         # flush_pending для всех последующих операций.
@@ -243,19 +257,19 @@ class SyncManager:
             self.state.enqueue("delete_category", {"cid": cid, "remote_id": remote_id})
     
     def on_athlete_deleted(self, aid):
-        # 1. если карточка ещё не улетела на сервер — гасим её create/update
+        # 1. если карточка ещё не улетела на сервер -- гасим её create/update
         #    прямо в очереди, чтобы не создать "призрака" после локального удаления
         self.state.purge_pending("create_athlete", "aid", aid)
         self.state.purge_pending("update_athlete", "aid", aid)
 
-        # 2. если уже был на сервере — пробуем удалить и там
+        # 2. если уже был на сервере -- пробуем удалить и там
         remote_id = self.state.map_get("athlete", aid)
         if remote_id is None:
-            return  # не долетел раньше — и не долетит теперь
+            return  # не долетел раньше -- и не долетит теперь
 
         delete_fn = getattr(self.api, "delete_athlete", None)
         if delete_fn is None:
-            print("[sync] delete_athlete: в api_client нет метода удаления — "
+            print("[sync] delete_athlete: в api_client нет метода удаления -- "
                 "запись останется на сайте, удали вручную или добавь метод в API")
             return
         try:
@@ -341,7 +355,7 @@ class SyncManager:
     def flush_pending(self) -> tuple[int, int]:
         """Повторяет все операции из офлайн-очереди по порядку. Возвращает
         (успешно, осталось). Останавливается на первой операции, которая
-        всё ещё не проходит (обычно значит: до сих пор нет сети) — чтобы не
+        всё ещё не проходит (обычно значит: до сих пор нет сети) -- чтобы не
         нарушать порядок зависимостей (турнир -> категория -> участник)."""
         succeeded = 0
         for row in self.state.pending():
@@ -492,7 +506,7 @@ class SyncManager:
         return False
 
 
-# Единый инстанс на процесс — импортируется как `from sync.sync_manager
+# Единый инстанс на процесс -- импортируется как `from sync.sync_manager
 # import sync_manager` и используется в обёртках над Database (см.
 # armwrestling_tournament.py).
 sync_manager = SyncManager()

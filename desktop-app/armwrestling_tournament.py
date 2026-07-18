@@ -1,6 +1,6 @@
 """
 ╔════╗
-║        АРМРЕСТЛИНГ — МЕНЕДЖЕР СОРЕВНОВАНИЙ               ║
+║        АРМРЕСТЛИНГ -- МЕНЕДЖЕР СОРЕВНОВАНИЙ               ║
 ║        Формат: до 2 поражений (Double Elimination)       ║
 ║        + Бейджики с штрихкодами + Сканер                 ║
 ║        Технологии: Python + CustomTkinter + SQLite       ║
@@ -143,7 +143,7 @@ def compute_age_category(birth_date_str, gender, tournament_year=None):
 def is_eligible_for_category(natural_category, target_category):
     """Может ли спортсмен со своей natural-категорией участвовать в target_category.
     Правило простое: играть можно только вверх (свой уровень или старше),
-    Senior — самый старший уровень, поэтому выше него никто не играет,
+    Senior -- самый старший уровень, поэтому выше него никто не играет,
     а сам Senior никуда, кроме Senior, не спускается."""
     if not natural_category or not target_category:
         return False
@@ -169,6 +169,12 @@ class Database:
     def __init__(self):
         self.conn = sqlite3.connect(DB_PATH)
         self.conn.row_factory = sqlite3.Row
+        # WAL резко ускоряет commit(): вместо полного fsync на каждую запись
+        # используется журнал с батчевой записью. NORMAL синхронность в паре
+        # с WAL безопасна (не теряет данные при сбое приложения, только при
+        # падении ОС) и на порядок быстрее дефолтного FULL.
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA synchronous=NORMAL")
         self._create_tables()
 
     def _create_tables(self):
@@ -299,7 +305,7 @@ class Database:
 
     def add_category(self, tid, name, max_weight, hand="Обе", age_category=None):
         """max_weight: число (55), строка '70+' для верхнего открытого класса,
-        либо строка 'Absolute' — абсолютная категория без ограничения веса."""
+        либо строка 'Absolute' -- абсолютная категория без ограничения веса."""
         if isinstance(max_weight, str) and max_weight.strip().lower() == "absolute":
             is_plus = True
             numeric = 999999.0
@@ -344,12 +350,12 @@ class Database:
         self.conn.commit()
 
     def delete_athlete(self, aid):
-        # participants.athlete_id ссылается на athletes(id) БЕЗ ON DELETE —
+        # participants.athlete_id ссылается на athletes(id) БЕЗ ON DELETE --
         # если не отвязать вручную, после удаления карточки в participants
         # останутся "битые" athlete_id, указывающие в никуда (get_athlete()
         # будет возвращать None там, где код этого не ожидает, например при
         # повторном открытии диалога редактирования участника). Записи
-        # участий при этом НЕ удаляются — ровно то, что обещает диалог
+        # участий при этом НЕ удаляются -- ровно то, что обещает диалог
         # удаления в UI, просто карточка спортсмена отвязывается от них.
         self.conn.execute("UPDATE participants SET athlete_id=NULL WHERE athlete_id=?", (aid,))
         self.conn.execute("DELETE FROM athletes WHERE id=?", (aid,))
@@ -452,7 +458,7 @@ class Database:
 #  без изменений и без сетевых задержек для судей/табло на самом турнире),
 #  и только потом результат уходит в центральную PostgreSQL через FastAPI.
 #  Любая ошибка синхронизации (нет сети и т.п.) НИКОГДА не мешает локальной
-#  работе — она просто уходит в офлайн-очередь (sync/state.py) и
+#  работе -- она просто уходит в офлайн-очередь (sync/state.py) и
 #  повторяется позже через sync_manager.flush_pending().
 # ════════════════════════════════════════════════════════════════
 from sync.sync_manager import sync_manager  # noqa: E402
@@ -677,12 +683,12 @@ class BadgeGenerator:
         # Клуб
         c.setFillColor(colors.HexColor("#555555"))
         c.setFont("Helvetica", 8)
-        club = str(participant["club"]) if participant["club"] else "—"
+        club = str(participant["club"]) if participant["club"] else "--"
         c.drawCentredString(x + bw / 2, y + bh - 2.7 * cm, f"Клуб: {club}")
 
         # Категория и вес
-        cat_name = categories_map.get(participant["category_id"], "—")
-        weight = participant["weight"] if participant["weight"] else "—"
+        cat_name = categories_map.get(participant["category_id"], "--")
+        weight = participant["weight"] if participant["weight"] else "--"
         hand = participant["hand"] if participant["hand"] else "Обе"
         info_line = f"{cat_name}  |  {weight} кг  |  {hand}"
         c.setFont("Helvetica", 7)
@@ -717,6 +723,58 @@ class BadgeGenerator:
 #  ДВИЖОК ТУРНИРНОЙ СЕТКИ (Double Elimination)
 # ════
 
+class _BatchConnProxy:
+    """Прокси вокруг sqlite3.Connection, который глушит commit().
+
+    sqlite3.Connection не позволяет подменить атрибут commit напрямую
+    (read-only C-объект), поэтому вместо этого на время батч-операции
+    подменяется self.db.conn целиком на этот прокси. execute()/fetchone()
+    и т.п. прозрачно уходят в реальное соединение, а commit() ничего не
+    делает -- реальный commit() вызывается один раз в конце вызывающим
+    кодом.
+    """
+    def __init__(self, real_conn):
+        self._real = real_conn
+
+    def commit(self):
+        pass
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+
+def _run_batched_bracket_generation(db, impl_fn, *args):
+    """Общая обвязка для generate_bracket у обоих движков (Double/Single
+    Elimination).
+
+    Решает две независимые проблемы, из-за которых генерация сетки
+    "долго думает":
+    1. Локальные записи в SQLite батчатся в один commit вместо сотен
+       (см. _BatchConnProxy).
+    2. Синхронизация каждого матча с сайтом (sync_manager.on_match_created)
+       по умолчанию делает блокирующий HTTP-запрос на UI-потоке -- для
+       сетки на 32+ участников это десятки последовательных сетевых
+       round-trip'ов (и до REQUEST_TIMEOUT_SECONDS=5с на каждый, если
+       сеть барахлит). На время генерации включаем sync_manager.force_queue
+       -- тогда каждый матч мгновенно (локально) уходит в офлайн-очередь
+       вместо реального запроса, а после того как сетка уже отрисована,
+       очередь отправляется одним фоновым потоком через flush_pending(),
+       не блокируя интерфейс организатора.
+    """
+    real_conn = db.conn
+    db.conn = _BatchConnProxy(real_conn)
+    prev_force_queue = getattr(sync_manager, "force_queue", False)
+    sync_manager.force_queue = True
+    try:
+        impl_fn(*args)
+    finally:
+        db.conn = real_conn
+        real_conn.commit()
+        sync_manager.force_queue = prev_force_queue
+        if sync_manager.enabled:
+            Thread(target=sync_manager.flush_pending, daemon=True).start()
+
+
 class DoubleEliminationEngine:
     """
     Реализация сетки double elimination для произвольного числа участников.
@@ -727,6 +785,12 @@ class DoubleEliminationEngine:
 
     # ──── ГЕНЕРАЦИЯ СЕТКИ ────
     def generate_bracket(self, tournament_id, category_id, hand, participant_ids):
+        _run_batched_bracket_generation(
+            self.db, self._generate_bracket_impl,
+            tournament_id, category_id, hand, participant_ids,
+        )
+
+    def _generate_bracket_impl(self, tournament_id, category_id, hand, participant_ids):
         self.db.clear_matches(category_id, hand)
 
         n = len(participant_ids)
@@ -745,7 +809,7 @@ class DoubleEliminationEngine:
         # ── Раунд 1: реальные пары + максимум ОДИН bye (только если n нечётное) ──
         pool = participant_ids[:]
         num_real_matches = n // 2
-        num_byes = n % 2   # 0 или 1 — вот исправление сути бага
+        num_byes = n % 2   # 0 или 1 -- вот исправление сути бага
 
         round0 = []
         if num_byes:
@@ -757,7 +821,7 @@ class DoubleEliminationEngine:
             round0.append({"p1_id": p1, "p2_id": p2, "is_bye": 0})
         wb_rounds.append(round0)
 
-        # ── Остальные раунды WB — пустые, заполнятся автоматически через propagate ──
+        # ── Остальные раунды WB -- пустые, заполнятся автоматически через propagate ──
         for cnt in round_sizes[2:]:
             wb_rounds.append([{"p1_id": None, "p2_id": None, "is_bye": 0} for _ in range(cnt)])   
 
@@ -963,7 +1027,7 @@ class DoubleEliminationEngine:
 
                 has_player = bool(m["p1_id"] or m["p2_id"])
 
-                # BYE с одним участником — автоматически продвигаем игрока дальше.
+                # BYE с одним участником -- автоматически продвигаем игрока дальше.
                 if m["is_bye"] and has_player:
                     before_status = m["status"]
                     self._resolve_if_bye(m["id"])
@@ -972,7 +1036,7 @@ class DoubleEliminationEngine:
                         changed = True
                     continue
 
-                # Пустой waiting-матч без живых источников — служебный ghost-матч.
+                # Пустой waiting-матч без живых источников -- служебный ghost-матч.
                 if not m["p1_id"] and not m["p2_id"]:
                     has_live_source = any(
                         src["status"] not in ("done", "bye") and
@@ -1144,14 +1208,14 @@ class DoubleEliminationEngine:
             for m in matches:
                 if m["status"] in ("done", "bye"):
                     continue
-                # Если is_bye и хотя бы один игрок есть — резолвим
+                # Если is_bye и хотя бы один игрок есть -- резолвим
                 if m["is_bye"] and (m["p1_id"] or m["p2_id"]) and m["bracket"] != "final":
                     self._resolve_if_bye(m["id"])
                     m2 = self._get_match(m["id"])
                     if m2["status"] in ("done", "bye"):
                         changed = True
                     continue
-                # Если waiting и оба слота никогда не получат игрока — ghost
+                # Если waiting и оба слота никогда не получат игрока -- ghost
                 if m["status"] == "waiting" and not m["p1_id"] and not m["p2_id"]:
                     has_source = False
                     for src in matches:
@@ -1205,7 +1269,7 @@ class DoubleEliminationEngine:
                 defeated_once = None
 
             if undefeated and winner_id == defeated_once:
-                # Непобеждённый проиграл — теперь у обоих по 1 поражению,
+                # Непобеждённый проиграл -- теперь у обоих по 1 поражению,
                 # нужна переигровка (супер-финал)
                 gf2 = self._get_match(m["win_next_id"])
                 if gf2:
@@ -1215,7 +1279,7 @@ class DoubleEliminationEngine:
                         (undefeated, defeated_once, gf2["id"]))
                     self.db.conn.commit()
             else:
-                # Непобеждённый выиграл — турнир завершён, переигровка не нужна
+                # Непобеждённый выиграл -- турнир завершён, переигровка не нужна
                 gf2 = self._get_match(m["win_next_id"])
                 if gf2 and gf2["status"] not in ("done", "bye"):
                     self.db.conn.execute(
@@ -1501,11 +1565,11 @@ class ParticipantCard(ctk.CTkFrame):
                     anchor="w").grid(row=0, column=1, sticky="w", padx=5, pady=(8, 0))
 
         barcode_val = get_barcode_value(p["id"])
-        info = f"⚖️ {p['weight']} кг   🏛 {p['club'] or '—'}   ✋ {p['hand'] or 'Обе'}   🔖 {barcode_val}"
+        info = f"⚖️ {p['weight']} кг   🏛 {p['club'] or '--'}   ✋ {p['hand'] or 'Обе'}   🔖 {barcode_val}"
         ctk.CTkLabel(self, text=info, font=ctk.CTkFont(size=11),
                     text_color="#8899aa", anchor="w").grid(row=1, column=1, sticky="w", padx=5)
         age_cat = p["age_category"] if "age_category" in p.keys() and p["age_category"] else "Senior"
-        ctk.CTkLabel(self, text=f"Категория: {p['cat_name'] or '—'}   |   {age_cat}",
+        ctk.CTkLabel(self, text=f"Категория: {p['cat_name'] or '--'}   |   {age_cat}",
                     font=ctk.CTkFont(size=11), text_color="#5588bb",
                     anchor="w").grid(row=2, column=1, sticky="w", padx=5, pady=(0, 8))
 
@@ -1531,7 +1595,7 @@ class ParticipantGroupCard(ctk.CTkFrame):
         self.configure(fg_color=("#1e2a3a", "#1e2a3a"))
         first = participants[0]
 
-        # ── фото — фиксированный размер, обрезаем по центру под рамку,
+        # ── фото -- фиксированный размер, обрезаем по центру под рамку,
         #    чтобы карточки не "прыгали" от формы исходного файла ──
         photo_holder = ctk.CTkFrame(self, width=self.PHOTO_W, height=self.PHOTO_H,
                     corner_radius=8, fg_color="#0d1420")
@@ -1555,7 +1619,7 @@ class ParticipantGroupCard(ctk.CTkFrame):
                 pass
         photo_label.grid(row=0, column=0, sticky="nsew")
 
-        # ── имя + клуб + возрастная категория — общие для спортсмена,
+        # ── имя + клуб + возрастная категория -- общие для спортсмена,
         #    показываются один раз, а не на каждую весовую категорию ──
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.grid(row=0, column=1, sticky="ew", padx=(0, 10), pady=(10, 4))
@@ -1565,7 +1629,7 @@ class ParticipantGroupCard(ctk.CTkFrame):
                     anchor="w").grid(row=0, column=0, sticky="w")
 
         age_cat = first["age_category"] if "age_category" in first.keys() and first["age_category"] else "Senior"
-        club_text = f"🏛 {first['club'] or '—'}   🎂 {age_cat}"
+        club_text = f"🏛 {first['club'] or '--'}   🎂 {age_cat}"
         ctk.CTkLabel(header, text=club_text, font=ctk.CTkFont(size=11),
                     text_color="#8899aa", anchor="w").grid(row=1, column=0, sticky="w")
 
@@ -1585,7 +1649,7 @@ class ParticipantGroupCard(ctk.CTkFrame):
             barcode_val = get_barcode_value(p["id"])
             info = f"⚖️ {p['weight']} кг   ✋ {p['hand'] or 'Обе'}   🔖 {barcode_val}"
 
-            ctk.CTkLabel(row, text=p["cat_name"] or "—", font=ctk.CTkFont(size=12, weight="bold"),
+            ctk.CTkLabel(row, text=p["cat_name"] or "--", font=ctk.CTkFont(size=12, weight="bold"),
                     text_color="#5588bb", anchor="w"
                     ).grid(row=0, column=0, sticky="w", padx=10, pady=(6, 0))
             ctk.CTkLabel(row, text=info, font=ctk.CTkFont(size=11),
@@ -1609,13 +1673,19 @@ class SingleEliminationEngine:
     """
     Обычная сетка на выбывание. Использует ту же таблицу matches, что и
     DoubleEliminationEngine (win_next_id/win_next_slot), но lose_next_*
-    не используются — проигравший просто выбывает.
+    не используются -- проигравший просто выбывает.
     """
 
     def __init__(self, db):
         self.db = db
 
     def generate_bracket(self, tournament_id, category_id, hand, participant_ids):
+        _run_batched_bracket_generation(
+            self.db, self._generate_bracket_impl,
+            tournament_id, category_id, hand, participant_ids,
+        )
+
+    def _generate_bracket_impl(self, tournament_id, category_id, hand, participant_ids):
         self.db.clear_matches(category_id, hand)
 
         n = len(participant_ids)
@@ -1637,7 +1707,7 @@ class SingleEliminationEngine:
         rounds = [round0]
 
         # ── каждый следующий раунд: BYE ставится только если из предыдущего
-        #    раунда выходит нечётное число победителей — и только в ОДНОМ,
+        #    раунда выходит нечётное число победителей -- и только в ОДНОМ,
         #    последнем матче этого раунда. Никаких заранее заготовленных
         #    "лишних" BYE в глубину сетки. ──
         prev_count = len(round0)
@@ -1869,7 +1939,7 @@ def compute_dvoeborie_standings(db, engine, category):
     DVOEBORIE_POINTS (10,7,5,4,3,2,1,0,0...), очки суммируются, и по убыванию
     суммы очков строится итоговая расстановка мест. Спортсмены, выбывшие
     раньше остальных на обеих руках, автоматически получают меньше очков и
-    оказываются внизу списка — т.е. полная расстановка мест "снизу вверх"
+    оказываются внизу списка -- т.е. полная расстановка мест "снизу вверх"
     получается сама собой, без отдельной ручной сортировки выбывших.
 
     Возвращает список словарей, отсортированный по итоговому месту:
@@ -1897,7 +1967,7 @@ def compute_dvoeborie_standings(db, engine, category):
         rows.append({
             "pid": pid,
             "name": p["name"],
-            "club": p["club"] if "club" in p.keys() and p["club"] else "—",
+            "club": p["club"] if "club" in p.keys() and p["club"] else "--",
             "right_place": r_place,
             "left_place": l_place,
             "right_points": r_pts,
@@ -1910,12 +1980,12 @@ def compute_dvoeborie_standings(db, engine, category):
         places = [x for x in (row["right_place"], row["left_place"]) if x]
         return min(places) if places else 9999
 
-    # Больше очков — выше; при равенстве очков — у кого было лучшее место
-    # на какой-либо руке; иначе — по имени (стабильность порядка).
+    # Больше очков -- выше; при равенстве очков -- у кого было лучшее место
+    # на какой-либо руке; иначе -- по имени (стабильность порядка).
     rows.sort(key=lambda r: (-r["total_points"], r["weight"], best_place(r), r["name"]))
 
 
-    # Итоговое место: спортивная (конкурентная) расстановка —
+    # Итоговое место: спортивная (конкурентная) расстановка --
     # равные суммы очков получают одно и то же место.
     place = 0
     prev_points = None
@@ -1953,7 +2023,7 @@ class BracketWindow(ctk.CTkToplevel):
                 break
         master._open_bracket_windows.append(self)
 
-        self.title(f"Сетка — {category['name']} — {hand} | Стол {self.table_number}")
+        self.title(f"Сетка -- {category['name']} -- {hand} | Стол {self.table_number}")
         self.geometry("1200x800")
         self.configure(fg_color="#0d1117")
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -2005,13 +2075,13 @@ class BracketWindow(ctk.CTkToplevel):
         self.match_info_bar.pack_propagate(False)
         self.lbl_current = ctk.CTkLabel(
             self.match_info_bar,
-            text="⚔️  Текущий поединок: —",
+            text="⚔️  Текущий поединок: --",
             font=ctk.CTkFont(size=13, weight="bold"),
             text_color="#4dccff", anchor="w")
         self.lbl_current.pack(side="left", padx=20, pady=10)
         self.lbl_next = ctk.CTkLabel(
             self.match_info_bar,
-            text="⏭  Следующий: —",
+            text="⏭  Следующий: --",
             font=ctk.CTkFont(size=12),
             text_color="#aabbcc", anchor="w")
         self.lbl_next.pack(side="left", padx=30, pady=10)
@@ -2119,7 +2189,7 @@ class BracketWindow(ctk.CTkToplevel):
 
         if not current:
             self._show_scan_status(
-                f"⚠️ {participant['name']} — нет активного поединка!", "#ffaa00")
+                f"⚠️ {participant['name']} -- нет активного поединка!", "#ffaa00")
             return
 
         # 4. Проверяем, участвует ли в текущем матче
@@ -2185,7 +2255,7 @@ class BracketWindow(ctk.CTkToplevel):
             txt_n = (f"⏭  {pname(nxt['p1_id'])}  vs  {pname(nxt['p2_id'])}")
             self.lbl_next.configure(text=txt_n, text_color="#aabbcc")
         else:
-            self.lbl_next.configure(text="⏭  Следующий: —", text_color="#445566")
+            self.lbl_next.configure(text="⏭  Следующий: --", text_color="#445566")
 
         app = self.master
         if hasattr(app, "display_server"):
@@ -2331,7 +2401,7 @@ class BracketWindow(ctk.CTkToplevel):
                 fill="#cc6633", font=("Arial", 11, "bold"), anchor="w")
 
             # Вычисляем позиции матчей нижней сетки с правильным вертикальным расположением.
-            # В нечётных раундах (0,2,4…) приходят проигравшие из верхней сетки — матчи
+            # В нечётных раундах (0,2,4…) приходят проигравшие из верхней сетки -- матчи
             # расположены попарно и занимают вдвое больше места, чем в предыдущем раунде.
             # В чётных раундах (1,3,5…) победители уплотняются вдвое.
             # Базовый шаг вертикали берём из первого раунда нижней сетки.
@@ -2389,7 +2459,7 @@ class BracketWindow(ctk.CTkToplevel):
                                 self.canvas.create_line(x_mid, y_target, x_in, y_target,
                                     fill=LINE_COLOR, width=1)
                         elif pair_start < len(ys_cur):
-                            # нечётное число — одиночный матч идёт напрямую
+                            # нечётное число -- одиночный матч идёт напрямую
                             y1 = ys_cur[pair_start] + BOX_H // 2
                             target_idx = pair_start // 2
                             if target_idx < len(ys_nxt):
@@ -2469,14 +2539,14 @@ class BracketWindow(ctk.CTkToplevel):
                 p = self.db.get_participant(pid)
                 return p["name"] if p else "?"
             # Слот пуст. Если матч структурно является BYE (один участник
-            # гарантированно отсутствует) — честно пишем "BYE". Но если матч
+            # гарантированно отсутствует) -- честно пишем "BYE". Но если матч
             # НЕ является BYE, слот просто ждёт победителя ещё не сыгранного
-            # предыдущего матча — писать "BYE" тут неверно и вводит в
+            # предыдущего матча -- писать "BYE" тут неверно и вводит в
             # заблуждение (создаёт впечатление, что соперник уже прошёл
             # автоматически, хотя предыдущий матч ещё не завершён).
             if m["is_bye"]:
                 return "BYE"
-            return "— ожидание —"
+            return "-- ожидание --"
 
         p1n = pname(m["p1_id"])
         p2n = pname(m["p2_id"])
@@ -2535,7 +2605,7 @@ class BracketWindow(ctk.CTkToplevel):
         self.canvas.create_rectangle(x0, y0, x1, y1,
                     fill="#0d1f30", outline="", tags="popup")
         self.canvas.create_text(cx, y0 + 22,
-                    text=f"Раунд {m['round_name']} — кто победил?",
+                    text=f"Раунд {m['round_name']} -- кто победил?",
                     fill="#aaccee", font=("Arial", 11, "bold"), tags="popup")
 
         bh = 36
@@ -2617,7 +2687,7 @@ class BracketWindow(ctk.CTkToplevel):
                 return p["name"] if p else "?"
             if m is not None and m["is_bye"]:
                 return "BYE"
-            return "— ожидание —"
+            return "-- ожидание --"
 
         status_map = {
             "done": ("✅ Завершён", "#4dff88"),
@@ -2636,7 +2706,7 @@ class BracketWindow(ctk.CTkToplevel):
             fr = ctk.CTkFrame(self.match_scroll, fg_color=bg, height=38)
             fr.pack(fill="x", padx=2, pady=1)
 
-            winner_name = pname(m["winner_id"]) if m["winner_id"] else "—"
+            winner_name = pname(m["winner_id"]) if m["winner_id"] else "--"
             st_text, st_color = status_map.get(m["status"], (m["status"], "#ffffff"))
 
             marker = "▶ " if is_cur else ""
@@ -2681,7 +2751,7 @@ class BracketWindow(ctk.CTkToplevel):
             ctk.CTkLabel(row, text=f"✅ {s['wins']} побед  ❌ {s['losses']} пораж.",
                     text_color="#8899aa", font=ctk.CTkFont(size=11)
                     ).grid(row=0, column=1, padx=20)
-            ctk.CTkLabel(row, text=p["club"] if "club" in p.keys() and p["club"] else "—",
+            ctk.CTkLabel(row, text=p["club"] if "club" in p.keys() and p["club"] else "--",
                     text_color="#5577aa", font=ctk.CTkFont(size=11)
                     ).grid(row=0, column=2, padx=10)
 
@@ -2733,8 +2803,8 @@ class BracketWindow(ctk.CTkToplevel):
                 medals_txt = {1: "1 (Золото)", 2: "2 (Серебро)", 3: "3 (Бронза)"}
                 data.append([
                     medals_txt.get(place, str(place)),
-                    p["name"], p["club"] or "—",
-                    str(p["weight"]) if p["weight"] else "—",
+                    p["name"], p["club"] or "--",
+                    str(p["weight"]) if p["weight"] else "--",
                     str(s["wins"]), str(s["losses"])
                 ])
             col_widths = [2.5 * cm, 6 * cm, 4.5 * cm, 2 * cm, 2 * cm, 2.5 * cm]
@@ -2768,7 +2838,7 @@ class BracketWindow(ctk.CTkToplevel):
                     return p["name"] if p else "?"
                 if m is not None and m["is_bye"]:
                     return "BYE"
-                return "—"
+                return "--"
 
             for m in matches:
                 m_data.append([
@@ -2776,7 +2846,7 @@ class BracketWindow(ctk.CTkToplevel):
                     {"winners": "Winners", "losers": "Losers", "final": "Финал"}.get(
                     m["bracket"], ""),
                     pname(m["p1_id"], m), pname(m["p2_id"], m),
-                    pname(m["winner_id"]) if m["winner_id"] else "—"
+                    pname(m["winner_id"]) if m["winner_id"] else "--"
                 ])
             col_widths2 = [2 * cm, 2.2 * cm, 4.5 * cm, 4.5 * cm, 4.5 * cm]
             m_table = Table(m_data, colWidths=col_widths2, repeatRows=1)
@@ -2826,7 +2896,7 @@ class CombinedResultsWindow(ctk.CTkToplevel):
         self.engine = SingleEliminationEngine(db) if bracket_system == "single" else DoubleEliminationEngine(db)
         self._rows_cache = []
 
-        self.title(f"Итоги двоеборья — {category['name']}")
+        self.title(f"Итоги двоеборья -- {category['name']}")
         self.geometry("980x680")
         self.minsize(760, 480)
         self.configure(fg_color="#0d1117")
@@ -2862,7 +2932,7 @@ class CombinedResultsWindow(ctk.CTkToplevel):
         rules.pack(fill="x")
         rules.pack_propagate(False)
         ctk.CTkLabel(rules,
-                    text="Очки: 1 место — 10 | 2 — 7 | 3 — 5 | 4 — 4 | 5 — 3 | 6 — 2 | 7 — 1 | 8 и ниже — 0",
+                    text="Очки: 1 место -- 10 | 2 -- 7 | 3 -- 5 | 4 -- 4 | 5 -- 3 | 6 -- 2 | 7 -- 1 | 8 и ниже -- 0",
                     text_color="#aabbcc", font=ctk.CTkFont(size=11)
                     ).pack(padx=20, pady=8, anchor="w")
 
@@ -2880,7 +2950,7 @@ class CombinedResultsWindow(ctk.CTkToplevel):
     @staticmethod
     def _fmt_hand(place, points):
         if not place:
-            return "— (0 очк.)"
+            return "-- (0 очк.)"
         return f"{place} место ({points} очк.)"
 
     def _refresh(self):
@@ -2890,7 +2960,7 @@ class CombinedResultsWindow(ctk.CTkToplevel):
         self._rows_cache = rows
         if not rows:
             ctk.CTkLabel(self.result_scroll,
-                    text="Нет данных — сетки на руках ещё не сыграны",
+                    text="Нет данных -- сетки на руках ещё не сыграны",
                     text_color="#445566").pack(pady=30)
             return
 
@@ -2952,7 +3022,7 @@ class CombinedResultsWindow(ctk.CTkToplevel):
             f"Весовая категория: {self.category['name']}",
             ParagraphStyle("Cat", parent=styles["Normal"], fontSize=12, spaceAfter=8, alignment=1)))
         story.append(Paragraph(
-            "Очки: 1 место — 10, 2 — 7, 3 — 5, 4 — 4, 5 — 3, 6 — 2, 7 — 1, 8 место и ниже — 0.",
+            "Очки: 1 место -- 10, 2 -- 7, 3 -- 5, 4 -- 4, 5 -- 3, 6 -- 2, 7 -- 1, 8 место и ниже -- 0.",
             ParagraphStyle("Rules", parent=styles["Normal"], fontSize=9,
                     textColor=colors.grey, spaceAfter=10, alignment=1)))
         story.append(Spacer(1, 0.3 * cm))
@@ -2960,7 +3030,7 @@ class CombinedResultsWindow(ctk.CTkToplevel):
         data = [["Место", "Спортсмен", "Клуб", "Правая рука", "Левая рука", "Итого очков"]]
         for row in rows:
             def fmt(place, points):
-                return f"{place} место ({points})" if place else "— (0)"
+                return f"{place} место ({points})" if place else "-- (0)"
             data.append([
                 str(row["place"]), row["name"], row["club"],
                 fmt(row["right_place"], row["right_points"]),
@@ -3019,11 +3089,11 @@ class AthleteCard(ctk.CTkFrame):
         gender_label = "Ж" if a["gender"] == "F" else "М"
         turning_age = datetime.now().year - int(a["birth_date"].split(".")[-1])
         natural_cat = compute_age_category(a["birth_date"], a["gender"])
-        info = f"🎂 {a['birth_date']} ({turning_age} лет)   {gender_label}   🏛 {a['club'] or '—'}"
+        info = f"🎂 {a['birth_date']} ({turning_age} лет)   {gender_label}   🏛 {a['club'] or '--'}"
         ctk.CTkLabel(self, text=info, font=ctk.CTkFont(size=11),
                     text_color="#8899aa", anchor="w").grid(row=1, column=1, sticky="w", padx=5)
 
-        cat_text = f"Категория: {natural_cat or '—'}"
+        cat_text = f"Категория: {natural_cat or '--'}"
         if a["rank"]:
             cat_text += f"   |   🥋 {a['rank']}"
         ctk.CTkLabel(self, text=cat_text, font=ctk.CTkFont(size=11), text_color="#5588bb",
@@ -3040,14 +3110,14 @@ class AthleteCard(ctk.CTkFrame):
 
 
     # ════
-    #  ОКНО «СПОРТСМЕНЫ» — общий реестр, не привязан к турниру
+    #  ОКНО «СПОРТСМЕНЫ» -- общий реестр, не привязан к турниру
     # ════
 class AthletesWindow(ctk.CTkToplevel):
     def __init__(self, master, db):
         super().__init__(master)
         self.withdraw()
         self.db = db
-        self.title("👤 Спортсмены — общий реестр")
+        self.title("👤 Спортсмены -- общий реестр")
         self.geometry("820x640")
         self.minsize(600, 400)
         self.configure(fg_color="#0d1117")
@@ -3098,7 +3168,7 @@ class AthletesWindow(ctk.CTkToplevel):
     def _delete_athlete(self, aid):
         if not messagebox.askyesno("Удалить",
                     "Удалить спортсмена из реестра?\n"
-                    "Если он уже участвовал в турнирах — записи участий не удаляются."):
+                    "Если он уже участвовал в турнирах -- записи участий не удаляются."):
             return
 
         entered = simpledialog.askstring(
@@ -3114,13 +3184,13 @@ class AthletesWindow(ctk.CTkToplevel):
         self._refresh_list()
 
     def _sync_now(self):
-        """Ручная отправка офлайн-очереди из окна реестра спортсменов —
+        """Ручная отправка офлайн-очереди из окна реестра спортсменов --
         не привязана к конкретному турниру."""
         from sync.sync_manager import sync_manager
 
         pending = sync_manager.state.pending_count()
         if not pending:
-            messagebox.showinfo("Синхронизация", "Очередь пуста — всё уже отправлено.")
+            messagebox.showinfo("Синхронизация", "Очередь пуста -- всё уже отправлено.")
             return
 
         done, remaining = sync_manager.flush_pending()
@@ -3128,7 +3198,7 @@ class AthletesWindow(ctk.CTkToplevel):
             messagebox.showwarning(
                 "Синхронизация",
                 f"Отправлено {done} из {pending}.\n"
-                f"Осталось {remaining} — похоже, связи всё ещё нет."
+                f"Осталось {remaining} -- похоже, связи всё ещё нет."
             )
         else:
             messagebox.showinfo("Синхронизация", f"Готово! Отправлено {done} операций.")
@@ -3245,7 +3315,7 @@ class AthletesWindow(ctk.CTkToplevel):
             try:
                 datetime.strptime(bd, "%d.%m.%Y")
                 cat = compute_age_category(bd, gender)
-                preview_label.configure(text=f"Возрастная категория: {cat or '—'}")
+                preview_label.configure(text=f"Возрастная категория: {cat or '--'}")
             except ValueError:
                 preview_label.configure(text="")
 
@@ -3384,7 +3454,7 @@ class App(ctk.CTk):
             messagebox.showwarning("Нет турнира", "Сначала выберите турнир.")
             return
 
-        PLACEHOLDER = "— выберите —"
+        PLACEHOLDER = "-- выберите --"
 
         win = ctk.CTkToplevel(self)
         win.title("Мастер добавления категории")
@@ -3564,7 +3634,7 @@ class App(ctk.CTk):
         """Переключает турнир draft -> published в центральной БД (кнопка
         «Опубликовать результаты», Этап 6/7, см. ARCHITECTURE.md §5).
         Сама сетка/участники/матчи к этому моменту уже отправлены в
-        реальном времени по ходу турнира — здесь только финальный шаг."""
+        реальном времени по ходу турнира -- здесь только финальный шаг."""
         if not self.current_tournament_id:
             messagebox.showwarning("Нет турнира", "Сначала выберите турнир.")
             return
@@ -3583,7 +3653,7 @@ class App(ctk.CTk):
             if remaining:
                 messagebox.showerror(
                     "Нет связи",
-                    f"Отправлено {done}, но ещё {remaining} не прошло — "
+                    f"Отправлено {done}, но ещё {remaining} не прошло -- "
                     f"сети всё ещё нет. Попробуйте позже."
                 )
                 return
@@ -3663,7 +3733,7 @@ class App(ctk.CTk):
 
         # Клуб больше не показываем в окне, но переменная нужна для сохранения
         # (заполняется автоматически из карточки спортсмена в choose_athlete)
-        # ── row 2: категория — теперь чекбоксы, можно выбрать до 2 ──
+        # ── row 2: категория -- теперь чекбоксы, можно выбрать до 2 ──
         ctk.CTkLabel(form, text="Категории*:", anchor="e", width=110).grid(
             row=2, column=0, padx=(15, 8), pady=6, sticky="ne")
         cat_list_frame = ctk.CTkFrame(form, fg_color="transparent",width=250, height=1)
@@ -3697,7 +3767,7 @@ class App(ctk.CTk):
                 cat_vars[cid].set(False)
                 messagebox.showwarning("Ограничение",
                     "Нельзя выбрать две категории из одной возрастной группы "
-                    "(например, две Junior или две Senior) — в том числе с учётом "
+                    "(например, две Junior или две Senior) -- в том числе с учётом "
                     "категорий, куда спортсмен уже записан ранее.")
                 validate_form()
                 return
@@ -3737,7 +3807,7 @@ class App(ctk.CTk):
             ]
             already_taken_ids = {p["category_id"] for p in already_parts}
             # возрастные группы, которые спортсмен уже "занял" другими записями
-            # (Абсолютная в этот лимит не входит — как и везде)
+            # (Абсолютная в этот лимит не входит -- как и везде)
             already_taken_ages = {
                 cat_age_map_all.get(p["category_id"])
                 for p in already_parts
@@ -3780,7 +3850,7 @@ class App(ctk.CTk):
 
         fields["weight"].trace_add("write", on_weight_change)
 
-        # ── row 3: рука (скрываем для двоеборья — участник и так борется обеими руками) ──
+        # ── row 3: рука (скрываем для двоеборья -- участник и так борется обеими руками) ──
         hand_var = ctk.StringVar(value=existing["hand"] if existing else "Обе")
         if not is_combined:
             ctk.CTkLabel(form, text="Рука:", anchor="e", width=110).grid(
@@ -3852,7 +3922,7 @@ class App(ctk.CTk):
                         validate_form()
                         picker.destroy()
                     ctk.CTkButton(results_frame,
-                                text=f"{a['first_name']} {a['last_name']} ({a['club'] or '—'})",
+                                text=f"{a['first_name']} {a['last_name']} ({a['club'] or '--'})",
                                 anchor="w", fg_color="#1a1f28", hover_color="#2a2f38",
                                 command=pick).pack(fill="x", padx=5, pady=3)
 
@@ -3862,7 +3932,7 @@ class App(ctk.CTk):
         ctk.CTkButton(form, text="🔍 Выбрать", width=80, height=28,
                     command=choose_athlete).grid(row=0, column=1, padx=(180, 0), pady=6, sticky="w")
 
-        # если это редактирование существующего участника — сразу подтянуть
+        # если это редактирование существующего участника -- сразу подтянуть
         # допустимые категории для уже привязанного спортсмена
         # Показываем штрихкод если редактируем
         if existing:
@@ -3927,7 +3997,7 @@ class App(ctk.CTk):
                     "в одной обычной весовой категории.")
                 return
             
-            # Поле "Возраст. кат." убрано из окна — считаем автоматически по дате рождения
+            # Поле "Возраст. кат." убрано из окна -- считаем автоматически по дате рождения
             computed_age_cat = compute_age_category(athlete["birth_date"], athlete["gender"]) or "Senior"
             if edit_id:
                 self.db.update_participant(edit_id, name, weight, club, selected_cat_ids[0],
