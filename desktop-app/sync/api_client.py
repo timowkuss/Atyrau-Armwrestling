@@ -108,17 +108,18 @@ class SyncApiClient:
     # ── матчи ────────────────────────────────────────────────
     def create_match(self, category_id, hand="Правая", round_name=None, bracket="winners",
                       match_order=0, stage=0, p1_id=None, p2_id=None, winner_id=None,
-                      p1_losses=0, p2_losses=0, is_bye=False, status="pending"):
+                      p1_losses=0, p2_losses=0, is_bye=False, status="pending",
+                      table_number=None):
         return self._request("POST", "/matches", json_body={
             "category_id": category_id, "hand": hand, "round_name": round_name,
             "bracket": bracket, "match_order": match_order, "stage": stage,
             "p1_id": p1_id, "p2_id": p2_id, "winner_id": winner_id,
             "p1_losses": p1_losses, "p2_losses": p2_losses,
-            "is_bye": is_bye, "status": status,
+            "is_bye": is_bye, "status": status, "table_number": table_number,
         })
 
     def update_match(self, remote_match_id, winner_id=None, p1_losses=None,
-                      p2_losses=None, status=None):
+                      p2_losses=None, status=None, table_number=None):
         body = {}
         if winner_id is not None:
             body["winner_id"] = winner_id
@@ -128,6 +129,8 @@ class SyncApiClient:
             body["p2_losses"] = p2_losses
         if status is not None:
             body["status"] = status
+        if table_number is not None:
+            body["table_number"] = table_number
         return self._request("PATCH", f"/matches/{remote_match_id}", json_body=body)
 
     def ping(self):

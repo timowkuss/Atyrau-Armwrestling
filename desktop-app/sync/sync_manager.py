@@ -307,6 +307,7 @@ class SyncManager:
                 p2_losses=match.get("p2_losses", 0),
                 is_bye=bool(match.get("is_bye", 0)),
                 status=match.get("status", "pending"),
+                table_number=match.get("table_number"),
             )
             self.state.map_set("match", mid, remote["id"])
             return remote["id"]
@@ -331,10 +332,31 @@ class SyncManager:
                 p1_losses=match.get("p1_losses"),
                 p2_losses=match.get("p2_losses"),
                 status=match.get("status"),
+                table_number=match.get("table_number"),
             )
             return remote_match_id
 
         return self._try("update_match", payload, go)
+
+    # ── стол: массовая простановка номера стола матчам категории ──
+    # Вызывается из BracketWindow один раз при открытии окна сетки и
+    # один раз после генерации сетки (см. armwrestling_tournament.py) —
+    # НЕ на каждый скан/обновление панели, чтобы не плодить лишние
+    # HTTP-запросы. Нужно для живого табло "кто с кем и за каким
+    # столом" на сайте (см. /public/competitions/{id}/queue).
+    def on_matches_table_assigned(self, mids, table_number):
+        for mid in mids:
+            remote_match_id = self.state.map_get("match", mid)
+            payload = {"mid": mid, "table_number": table_number}
+            if remote_match_id is None:
+                self.state.enqueue("update_match", payload)
+                continue
+
+            def go(remote_match_id=remote_match_id, table_number=table_number):
+                self.api.update_match(remote_match_id, table_number=table_number)
+                return remote_match_id
+
+            self._try("update_match", payload, go)
 
     # ── публикация ───────────────────────────────────────────────
     def publish_tournament(self, tid) -> tuple[bool, str]:
@@ -480,6 +502,7 @@ class SyncManager:
                     p1_id=remote_p1, p2_id=remote_p2, winner_id=remote_winner,
                     p1_losses=payload.get("p1_losses", 0), p2_losses=payload.get("p2_losses", 0),
                     is_bye=bool(payload.get("is_bye", 0)), status=payload.get("status", "pending"),
+                    table_number=payload.get("table_number"),
                 )
                 self.state.map_set("match", payload["mid"], remote["id"])
                 return True
@@ -496,7 +519,7 @@ class SyncManager:
                 self.api.update_match(
                     remote_match_id, winner_id=remote_winner,
                     p1_losses=payload.get("p1_losses"), p2_losses=payload.get("p2_losses"),
-                    status=payload.get("status"),
+                    status=payload.get("status"), table_number=payload.get("table_number"),
                 )
                 return True
 
