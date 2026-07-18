@@ -28,6 +28,12 @@ class Match(Base):
     match_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     stage: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
+    # Номер стола, за которым идёт эта категория/рука в десктопе (см.
+    # BracketWindow.table_number). Проставляется десктопом при открытии
+    # окна сетки/генерации, используется паблик-эндпоинтом /queue для
+    # живого табло "кто с кем и за каким столом".
+    table_number: Mapped[int | None] = mapped_column(Integer)
+
     p1_id: Mapped[int | None] = mapped_column(
         ForeignKey("competition_participants.id", ondelete="SET NULL")
     )
