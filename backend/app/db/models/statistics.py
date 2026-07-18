@@ -36,6 +36,13 @@ class AthleteStatistic(Base):
     silver_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     bronze_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
+    # Эло считается отдельно по руке — единый рейтинг на сайте это
+    # (elo_left + elo_right) / 2, см. app/services/elo_engine.py.
+    # Стартовое значение для новых атлетов — 1000, как для любого
+    # спортсмена без истории.
+    elo_left: Mapped[int] = mapped_column(Integer, default=1000, nullable=False)
+    elo_right: Mapped[int] = mapped_column(Integer, default=1000, nullable=False)
+
     is_manual_override: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
     )

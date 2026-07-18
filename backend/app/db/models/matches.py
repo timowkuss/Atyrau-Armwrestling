@@ -51,3 +51,12 @@ class Match(Base):
         ForeignKey("matches.id", ondelete="SET NULL")
     )
     lose_next_slot: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+
+    # Бухгалтерия Эло для этого матча — см. app/services/elo_engine.py.
+    # elo_applied=True значит рейтинги уже учли этот результат; дельты
+    # хранятся, чтобы при исправлении победителя (winner_id меняется
+    # повторным PATCH из десктопа) можно было откатить старое изменение
+    # перед тем как применить новое, а не задвоить его.
+    elo_applied: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    elo_delta_p1: Mapped[int | None] = mapped_column(Integer)
+    elo_delta_p2: Mapped[int | None] = mapped_column(Integer)
