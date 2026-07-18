@@ -19,6 +19,7 @@ from app.schemas.athletes import (
     AthleteStatisticsUpdate,
     AthleteUpdate,
 )
+from app.services.elo_engine import elo_combined
 
 router = APIRouter(prefix="/athletes", tags=["admin:athletes"])
 
@@ -143,6 +144,9 @@ def get_athlete_statistics(
         gold_count=stats.gold_count,
         silver_count=stats.silver_count,
         bronze_count=stats.bronze_count,
+        elo_left=stats.elo_left,
+        elo_right=stats.elo_right,
+        elo_combined=elo_combined(stats.elo_left, stats.elo_right),
         is_manual_override=stats.is_manual_override,
         overridden_by=stats.overridden_by,
         overridden_at=stats.overridden_at.isoformat() if stats.overridden_at else None,
@@ -191,6 +195,9 @@ def update_athlete_statistics(
         gold_count=stats.gold_count,
         silver_count=stats.silver_count,
         bronze_count=stats.bronze_count,
+        elo_left=stats.elo_left,
+        elo_right=stats.elo_right,
+        elo_combined=elo_combined(stats.elo_left, stats.elo_right),
         is_manual_override=stats.is_manual_override,
         overridden_by=stats.overridden_by,
         overridden_at=stats.overridden_at.isoformat() if stats.overridden_at else None,
