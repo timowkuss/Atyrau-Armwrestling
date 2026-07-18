@@ -5,6 +5,7 @@ import type {
   AthleteListParams,
   AthleteMatchHistoryItem,
   AthleteRankingRow,
+  BracketMatchOut,
   City,
   ClubListItem,
   ClubRankingRow,
@@ -17,6 +18,7 @@ import type {
   NewsListItem,
   Page,
   ResultOut,
+  TableQueueOut,
 } from '@/types/api'
 
 // В десктоп-приложении бизнес-логика (DoubleEliminationEngine и т.д.) не
@@ -77,6 +79,8 @@ export const api = {
     list: (params?: CompetitionListParams) => request<Page<CompetitionListItem>>('/public/competitions', params),
     get: (id: number) => request<CompetitionDetail>(`/public/competitions/${id}`),
     results: (id: number) => request<ResultOut[]>(`/public/competitions/${id}/results`),
+    bracket: (id: number) => request<BracketMatchOut[]>(`/public/competitions/${id}/bracket`),
+    queue: (id: number) => request<TableQueueOut[]>(`/public/competitions/${id}/queue`),
     photos: (id: number) => request<import('@/types/api').GalleryPhoto[]>(`/public/competitions/${id}/photos`),
   },
   news: {
