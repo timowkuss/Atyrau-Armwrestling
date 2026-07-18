@@ -16,7 +16,9 @@ from app.schemas.competitions import (
     CategoryOut,
     CompetitionDetailOut,
     CompetitionListOut,
+    QueuePairOut,
     ResultOut,
+    TableQueueOut,
 )
 from app.schemas.media import PhotoOut
 
@@ -172,6 +174,50 @@ def get_competition_bracket(competition_id: int, db: Session = Depends(get_db)):
             )
         )
     return items
+
+
+@router.get("/{competition_id}/queue", response_model=list[TableQueueOut])
+def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
+    """Живая очередь пар по столам: текущий поединок + до 4 следующих.
+
+    Пара считается определившейся, только когда у матча заполнены оба
+    p1_id/p2_id (см. get_current_and_next_match в десктопе — та же логика).
+    Столы без table_number (старые записи, ещё не досинкан десктоп) в
+    выдачу не попадают.
+    """
+    matches = (
+        db.query(Match, Category)
+        .join(Category, Match.category_id == Category.id)
+        .filter(
+            Match.competition_id == competition_id,
+            Match.status == "pending",
+            Match.p1_id.isnot(None),
+            Match.p2_id.isnot(None),
+            Match.table_number.isnot(None),
+        )
+        .order_by(Match.table_number, Match.stage, Match.id)
+        .all()
+    )
+
+    tables: dict[int, list[QueuePairOut]] = {}
+    for match, category in matches:
+        p1 = db.get(CompetitionParticipant, match.p1_id)
+        p2 = db.get(CompetitionParticipant, match.p2_id)
+        if p1 is None or p2 is None:
+            continue
+        pair = QueuePairOut(
+            match_id=match.id,
+            category_name=category.name,
+            round_name=match.round_name,
+            p1_name=p1.athlete.full_name,
+            p2_name=p2.athlete.full_name,
+        )
+        tables.setdefault(match.table_number, []).append(pair)
+
+    return [
+        TableQueueOut(table_number=tnum, current=pairs[0], next=pairs[1:5])
+        for tnum, pairs in sorted(tables.items())
+    ]
 
 
 @router.get("/{competition_id}/photos", response_model=list[PhotoOut])
