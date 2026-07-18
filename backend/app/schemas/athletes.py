@@ -31,6 +31,14 @@ class AthleteStatisticsOut(BaseModel):
     gold_count: int
     silver_count: int
     bronze_count: int
+    # elo_left/elo_right — независимые рейтинги по руке (см.
+    # app/services/elo_engine.py). elo_combined нигде не хранится, это
+    # (elo_left + elo_right) / 2, посчитанное на момент ответа — тот самый
+    # "общий Эло", который на сайте показывается крупно, а лев/прав
+    # раскрываются по клику.
+    elo_left: int
+    elo_right: int
+    elo_combined: int
 
 
 class AthleteDetailOut(BaseModel):
@@ -115,6 +123,8 @@ class AthleteStatisticsUpdate(BaseModel):
     gold_count: int | None = None
     silver_count: int | None = None
     bronze_count: int | None = None
+    elo_left: int | None = None
+    elo_right: int | None = None
 
 
 class AthleteStatisticsAdminOut(AthleteStatisticsOut):
