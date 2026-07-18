@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useAthlete, useAthleteHistory, useAthleteMatches } from '@/features/athletes/useAthletes'
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/States'
 import { Gauge } from '@/components/ui/Gauge'
+import { EloRating } from '@/components/ui/EloRating'
 import { MedalBadge } from '@/components/ui/Medal'
 
 function formatDate(iso: string): string {
@@ -80,6 +81,11 @@ export function AthleteProfile() {
         <section className="mt-8">
           <h2 className="font-display text-xl text-bone">Статистика</h2>
           <div className="rivet-line my-4" />
+
+          <div className="mb-6 max-w-md">
+            <EloRating eloLeft={stats.elo_left} eloRight={stats.elo_right} eloCombined={stats.elo_combined} />
+          </div>
+
           <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
             <div className="plate flex flex-col items-center rounded-[var(--radius-rivet)] p-4">
               <Gauge value={stats.win_rate * 100} label="Побед" sublabel={`${stats.total_wins}–${stats.total_losses}`} size={120} />
