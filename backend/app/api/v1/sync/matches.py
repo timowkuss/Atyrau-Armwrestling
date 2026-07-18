@@ -5,6 +5,7 @@ from app.api.v1.deps import require_desktop_sync
 from app.db.models.matches import Match
 from app.db.session import get_db
 from app.schemas.sync import MatchSyncCreate, MatchSyncUpdate
+from app.services.elo_engine import apply_match_result
 
 router = APIRouter(prefix="/matches", tags=["sync:matches"])
 
@@ -19,6 +20,11 @@ def create_match(
     (см. ARCHITECTURE.md §5, шаг 4)."""
     match = Match(competition_id=_competition_id_of(db, payload), **payload.model_dump())
     db.add(match)
+    db.flush()
+    # На практике winner_id на создании почти всегда пуст (матч только
+    # появился в сетке), но если это BYE-проброс с сразу известным
+    # победителем — apply_match_result сам отфильтрует BYE и выйдет.
+    apply_match_result(db, match)
     db.commit()
     db.refresh(match)
     return {"id": match.id}
@@ -46,5 +52,10 @@ def update_match(
 
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(match, field, value)
+
+    # Здесь приходит победитель по ходу турнира (или его исправление) —
+    # это и есть точка пересчёта рейтинга, см. app/services/elo_engine.py.
+    apply_match_result(db, match)
+
     db.commit()
     return {"status": "ok"}
