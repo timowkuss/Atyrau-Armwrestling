@@ -2044,6 +2044,7 @@ class BracketWindow(ctk.CTkToplevel):
         try:
             self._build_ui()
             self._load_bracket()
+            self._assign_table_number()
             self.deiconify()
             self.update_idletasks()
         except Exception as e:
@@ -2288,6 +2289,19 @@ class BracketWindow(ctk.CTkToplevel):
         random.shuffle(ids)
         self.engine.generate_bracket(self.tournament_id, self.category["id"], self.hand, ids)
         self._load_bracket()
+        self._assign_table_number()
+
+    def _assign_table_number(self):
+        """Проставляет self.table_number всем матчам этой категории/руки на
+        сайте — чтобы там можно было собрать живую очередь пар по столам
+        (см. sync_manager.on_matches_table_assigned)."""
+        try:
+            matches = self.db.get_matches(self.category["id"], self.hand)
+            mids = [m["id"] for m in matches]
+            if mids:
+                sync_manager.on_matches_table_assigned(mids, self.table_number)
+        except Exception as e:
+            print(f"[sync] assign_table: {e}")
 
     def _reset_bracket(self):
         if not messagebox.askyesno("Сбросить сетку",
