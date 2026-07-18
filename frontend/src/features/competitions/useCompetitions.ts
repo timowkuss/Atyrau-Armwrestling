@@ -25,3 +25,24 @@ export function useCompetitionResults(id: number) {
     enabled: Number.isFinite(id),
   })
 }
+
+export function useCompetitionBracket(id: number) {
+  return useQuery({
+    queryKey: ['competition', id, 'bracket'],
+    queryFn: () => api.competitions.bracket(id),
+    enabled: Number.isFinite(id),
+  })
+}
+
+// Живая очередь по столам — во время турнира меняется каждую минуту,
+// поэтому опрашиваем сервер, а не полагаемся на один запрос при заходе
+// на страницу. Останавливаем опрос, если вкладка не активна.
+export function useCompetitionQueue(id: number) {
+  return useQuery({
+    queryKey: ['competition', id, 'queue'],
+    queryFn: () => api.competitions.queue(id),
+    enabled: Number.isFinite(id),
+    refetchInterval: 5000,
+    refetchIntervalInBackground: false,
+  })
+}
