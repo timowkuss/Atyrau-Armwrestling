@@ -37,6 +37,11 @@ export interface AthleteStatistics {
   gold_count: number
   silver_count: number
   bronze_count: number
+  /** Независимый рейтинг по руке. Общий рейтинг на сайте — elo_combined,
+   * (elo_left + elo_right) / 2, посчитан на бэкенде (backend/app/services/elo_engine.py). */
+  elo_left: number
+  elo_right: number
+  elo_combined: number
 }
 
 export interface AthleteDetail {
