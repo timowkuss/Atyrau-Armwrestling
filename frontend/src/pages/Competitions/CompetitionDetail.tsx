@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
-import { useCompetition, useCompetitionResults } from '@/features/competitions/useCompetitions'
+import { useCompetition, useCompetitionBracket, useCompetitionQueue, useCompetitionResults } from '@/features/competitions/useCompetitions'
 import { api } from '@/lib/api'
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/States'
 import { MedalBadge } from '@/components/ui/Medal'
+import { BracketBoard } from '@/components/ui/BracketBoard'
+import { LiveQueueBoard } from '@/components/ui/LiveQueueBoard'
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' })
@@ -15,6 +17,8 @@ export function CompetitionDetail() {
 
   const competition = useCompetition(competitionId)
   const results = useCompetitionResults(competitionId)
+  const queue = useCompetitionQueue(competitionId)
+  const bracket = useCompetitionBracket(competitionId)
   const photos = useQuery({
     queryKey: ['competition', competitionId, 'photos'],
     queryFn: () => api.competitions.photos(competitionId),
@@ -78,6 +82,14 @@ export function CompetitionDetail() {
         </div>
       )}
 
+      {queue.data && queue.data.length > 0 && (
+        <section className="mt-10">
+          <h2 className="font-display text-xl text-bone">Кто с кем борется</h2>
+          <div className="rivet-line my-4" />
+          <LiveQueueBoard tables={queue.data} />
+        </section>
+      )}
+
       <section className="mt-10 mb-16">
         <h2 className="font-display text-xl text-bone">Результаты</h2>
         <div className="rivet-line my-4" />
@@ -112,6 +124,14 @@ export function CompetitionDetail() {
           </div>
         ))}
       </section>
+
+      {c.status === 'published' && bracket.data && bracket.data.length > 0 && (
+        <section className="mt-10 mb-16">
+          <h2 className="font-display text-xl text-bone">Турнирная сетка</h2>
+          <div className="rivet-line my-4" />
+          <BracketBoard matches={bracket.data} />
+        </section>
+      )}
     </div>
   )
 }
