@@ -103,24 +103,26 @@ export function CompetitionDetail() {
         {Object.entries(resultsByCategory).map(([category, rows]) => (
           <div key={category} className="mb-6">
             <h3 className="font-display text-sm text-brass">{category}</h3>
-            <table className="mt-2 w-full border-collapse text-left text-sm">
-              <tbody>
-                {rows?.map((r, i) => (
-                  <tr key={i} className="border-b border-steel-dim/15">
-                    <td className="py-2 pr-4 font-mono text-bone">{r.place ?? '—'}</td>
-                    <td className="py-2 pr-4">
-                      <Link to={`/athletes/${r.athlete_id}`} className="text-bone hover:text-brass">
-                        {r.athlete_name}
-                      </Link>
-                    </td>
-                    <td className="py-2 pr-4 text-steel">{r.club_name ?? '—'}</td>
-                    <td className="py-2">
-                      <MedalBadge medal={r.medal} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="mt-2 w-full min-w-[420px] border-collapse text-left text-sm">
+                <tbody>
+                  {rows?.map((r, i) => (
+                    <tr key={i} className="border-b border-steel-dim/15">
+                      <td className="py-2 pr-4 font-mono text-bone">{r.place ?? '—'}</td>
+                      <td className="py-2 pr-4">
+                        <Link to={`/athletes/${r.athlete_id}`} className="text-bone hover:text-brass">
+                          {r.athlete_name}
+                        </Link>
+                      </td>
+                      <td className="py-2 pr-4 text-steel">{r.club_name ?? '—'}</td>
+                      <td className="py-2">
+                        <MedalBadge medal={r.medal} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         ))}
       </section>
