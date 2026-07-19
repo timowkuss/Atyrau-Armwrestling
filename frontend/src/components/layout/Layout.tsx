@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Главная', end: true },
@@ -9,6 +10,22 @@ const NAV_ITEMS = [
 ]
 
 export function Layout() {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const location = useLocation()
+
+  // Закрываем мобильное меню при переходе на другую страницу
+  useEffect(() => {
+    setMenuOpen(false)
+  }, [location.pathname])
+
+  // Блокируем скролл фона, пока открыто мобильное меню
+  useEffect(() => {
+    document.body.style.overflow = menuOpen ? 'hidden' : ''
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [menuOpen])
+
   return (
     <div className="flex min-h-screen flex-col bg-ink text-bone">
       <header className="sticky top-0 z-30 border-b border-steel-dim/30 bg-ink/90 backdrop-blur">
@@ -17,7 +34,7 @@ export function Layout() {
             <img
               src="/brand/logo-armsport.png"
               alt="Федерация армрестлинга города Атырау"
-              className="h-11 w-auto drop-shadow-[0_2px_6px_rgba(0,0,0,0.4)]"
+              className="h-10 w-auto drop-shadow-[0_2px_6px_rgba(0,0,0,0.4)] sm:h-11"
             />
             <span className="hidden font-display text-sm font-bold uppercase leading-tight tracking-wide text-bone sm:block">
               Atyrau
@@ -25,7 +42,9 @@ export function Layout() {
               <span className="text-rust">Armwrestling</span>
             </span>
           </NavLink>
-          <nav className="flex items-center gap-1" aria-label="Основная навигация">
+
+          {/* Десктоп-навигация */}
+          <nav className="hidden items-center gap-1 md:flex" aria-label="Основная навигация">
             {NAV_ITEMS.map((item) => (
               <NavLink
                 key={item.to}
@@ -41,8 +60,54 @@ export function Layout() {
               </NavLink>
             ))}
           </nav>
+
+          {/* Кнопка мобильного меню */}
+          <button
+            type="button"
+            onClick={() => setMenuOpen((v) => !v)}
+            className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-rivet)] text-bone md:hidden"
+            aria-label={menuOpen ? 'Закрыть меню' : 'Открыть меню'}
+            aria-expanded={menuOpen}
+            aria-controls="mobile-nav"
+          >
+            {menuOpen ? (
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M5 5L19 19M19 5L5 19" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            ) : (
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M4 6.5H20M4 12H20M4 17.5H20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            )}
+          </button>
         </div>
         <div className="rivet-line" />
+
+        {/* Мобильное выпадающее меню */}
+        {menuOpen && (
+          <nav
+            id="mobile-nav"
+            className="border-b border-steel-dim/30 bg-ink px-5 py-3 md:hidden"
+            aria-label="Мобильная навигация"
+          >
+            <div className="flex flex-col gap-1">
+              {NAV_ITEMS.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  className={({ isActive }) =>
+                    `rounded-[var(--radius-rivet)] px-3 py-3 text-base font-medium transition-colors ${
+                      isActive ? 'bg-petrol-2 text-brass' : 'text-steel hover:text-bone'
+                    }`
+                  }
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
+          </nav>
+        )}
       </header>
 
       <main className="flex-1">
@@ -52,7 +117,7 @@ export function Layout() {
       <footer className="border-t border-steel-dim/30 bg-ink-soft">
         <div className="mx-auto max-w-6xl px-5 py-8">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-4">
               <img
                 src="/brand/logo-armsport.png"
                 alt="Федерация армрестлинга города Атырау"
