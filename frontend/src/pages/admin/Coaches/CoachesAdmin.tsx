@@ -60,7 +60,7 @@ export function CoachesAdmin() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-eyebrow text-rust">Справочник федерации</p>
           <h1 className="mt-2 font-display text-2xl text-bone">Тренеры</h1>
