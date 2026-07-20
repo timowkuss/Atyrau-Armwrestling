@@ -491,7 +491,14 @@ def _synced_create_tournament(self, name, date, location="", weight_tolerance=0,
 def _synced_add_category(self, tid, name, max_weight, hand="Обе", age_category=None):
     cid = _original_add_category(self, tid, name, max_weight, hand, age_category)
     try:
-        sync_manager.on_category_created(tid, cid, name, max_weight, hand, age_category)
+        # Сервер ждёт max_weight числом (float|None). Локально "Absolute" и
+        # "70+" тоже приводятся к числу в add_category — повторяем ту же
+        # логику здесь, чтобы не слать на бэкенд сырые строки.
+        if isinstance(max_weight, str) and max_weight.strip().lower() == "absolute":
+            sync_max_weight = None
+        else:
+            sync_max_weight = float(str(max_weight).rstrip("+"))
+        sync_manager.on_category_created(tid, cid, name, sync_max_weight, hand, age_category)
     except Exception as e:
         print(f"[sync] add_category: {e}")
     return cid
