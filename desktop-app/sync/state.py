@@ -121,6 +121,19 @@ class SyncState:
                 "SELECT * FROM pending_queue ORDER BY id"
             ).fetchall()
 
+    def exists(self, queue_id: int) -> bool:
+        """Проверяет, что строка очереди ещё не была удалена — нужно
+        внутри flush_pending(), т.к. pending() забирает весь список ОДИН
+        раз в начале прогонки, а самолечение (см.
+        _self_heal_missing_tournament) может по ходу удалить из БД ещё не
+        обработанные строки того же tid, которые уже сидят в этом старом
+        списке в памяти."""
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT 1 FROM pending_queue WHERE id=?", (queue_id,)
+            ).fetchone()
+            return row is not None
+
     def mark_done(self, queue_id: int) -> None:
         with self._lock:
             self.conn.execute("DELETE FROM pending_queue WHERE id=?", (queue_id,))

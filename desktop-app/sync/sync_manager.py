@@ -484,6 +484,13 @@ class SyncManager:
         нарушать порядок зависимостей (турнир -> категория -> участник)."""
         succeeded = 0
         for row in self.state.pending():
+            if not self.state.exists(row["id"]):
+                # Эту строку уже удалило самолечение (см.
+                # _self_heal_missing_tournament), сработавшее на более
+                # ранней строке той же прогонки, — pending() забрал список
+                # один раз в начале, поэтому такие строки могут остаться в
+                # нём "призраками". Пропускаем без попытки реплея.
+                continue
             op, payload = row["operation"], __import__("json").loads(row["payload"])
             print(f"[sync] TRY: {op} payload={payload}")
             ok = self._replay(op, payload)
