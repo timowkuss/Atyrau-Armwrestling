@@ -141,6 +141,11 @@ class SyncManager:
         никогда не создавалось локально — самолечить нечего)."""
         source = self.state.get_competition_source(tid)
         if source is None:
+            print(
+                f"[sync] не могу пересоздать соревнование tid={tid}: нет снимка "
+                "competition_source (турнир был создан до включения самолечения "
+                "— заполни снимок через backfill_competition_source.py)"
+            )
             return None
         remote = self.api.create_competition(source["name"], source["date"], source["location"])
         self.state.map_set("competition", tid, remote["id"])
