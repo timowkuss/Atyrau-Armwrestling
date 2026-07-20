@@ -594,7 +594,7 @@ class SyncManager:
                 remote_competition_id = self.state.map_get("competition", payload["tid"])
                 remote_category_id = self.state.map_get("category", payload["category_id"])
                 if remote_competition_id is None or remote_category_id is None:
-                    print(f"[sync] DEBUG: create_category ждёт competition tid={payload['tid']}")
+                    print(f"[sync] DEBUG: create_participant ждёт tid={payload['tid']}")
                     return False
                 athlete_id = self._find_or_create_athlete(
                     payload["name"], payload["club"], local_athlete_id=payload.get("athlete_id")
@@ -626,7 +626,7 @@ class SyncManager:
             if operation == "create_match":
                 remote_category_id = self.state.map_get("category", payload["category_id"])
                 if remote_category_id is None:
-                    print(f"[sync] DEBUG: create_category ждёт competition tid={payload['tid']}")
+                    print(f"[sync] DEBUG: create_match ждёт category_id={payload['category_id']}")
                     return False
                 remote_p1 = self.state.map_get("participant", payload["p1_id"]) if payload.get("p1_id") else None
                 remote_p2 = self.state.map_get("participant", payload["p2_id"]) if payload.get("p2_id") else None
@@ -649,7 +649,7 @@ class SyncManager:
             if operation == "update_match":
                 remote_match_id = self.state.map_get("match", payload["mid"])
                 if remote_match_id is None:
-                    print(f"[sync] DEBUG: create_category ждёт competition tid={payload['tid']}")
+                    print(f"[sync] DEBUG: update_match ждёт match mid={payload['mid']}")
                     return False
                 remote_winner = (
                     self.state.map_get("participant", payload["winner_id"])

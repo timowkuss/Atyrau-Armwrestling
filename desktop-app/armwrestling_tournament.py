@@ -4508,7 +4508,7 @@ class App(ctk.CTk):
                     fg_color="#2a2a3a", hover_color="#3a3a4a",
                     command=dlg.destroy).pack(side="right", padx=(8, 0))
         ctk.CTkButton(btn_frame, text="✅  Создать турнир", height=42,
-                    fg_color="#1a5a2a", hover_color="#2a7a3a",
+                    fg_color="#1a5a2a", hover_color="#57a667",
                     font=ctk.CTkFont(size=13, weight="bold"),
                     command=save).pack(side="right")
 
