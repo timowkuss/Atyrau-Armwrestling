@@ -20,3 +20,5 @@ dist/
 # Database
 *.db
 *.sqlite
+
+sync_config.json
