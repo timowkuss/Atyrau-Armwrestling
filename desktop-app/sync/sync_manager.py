@@ -649,8 +649,12 @@ class SyncManager:
             if operation == "update_match":
                 remote_match_id = self.state.map_get("match", payload["mid"])
                 if remote_match_id is None:
-                    print(f"[sync] DEBUG: update_match ждёт match mid={payload['mid']}")
-                    return False
+                    # create_match ещё не прошёл (remote_id неизвестен) —
+                    # пропускаем, чтобы не блокировать очередь. table_number
+                    # и прочие поля уже записаны локально и подхватятся
+                    # при create_match.
+                    print(f"[sync] DEBUG: update_match пропуск — create_match для mid={payload['mid']} ещё не прошёл")
+                    return True
                 remote_winner = (
                     self.state.map_get("participant", payload["winner_id"])
                     if payload.get("winner_id") else None
