@@ -46,6 +46,32 @@ def _find_or_create_club(db: Session, club_name: str | None) -> int | None:
     return club.id
 
 
+def _find_existing_athlete(db: Session, full_name: str, birth_date: date | None) -> Athlete | None:
+    """Серверная проверка дублей при синхронизации.
+
+    Раньше защита от дублей держалась только на локальной id_map
+    десктоп-приложения: если эту карту потерять (переустановка, второй
+    компьютер, ручная синхронизация с нуля), один и тот же спортсмен мог
+    улететь на сервер второй раз под новым id. Здесь — вторая линия
+    защиты уже на центральной базе.
+
+    Сопоставляем по ФИО (без учёта регистра) + дате рождения — этого
+    достаточно, чтобы не путать полных тёзок, и в то же время не
+    сработает ложно на "Иванов Иван" без даты рождения. Если дата
+    рождения не пришла — не пытаемся сопоставлять по одному имени,
+    слишком велик риск склеить разных людей."""
+    if not birth_date:
+        return None
+    name = full_name.strip()
+    if not name:
+        return None
+    return (
+        db.query(Athlete)
+        .filter(Athlete.full_name.ilike(name), Athlete.birth_date == birth_date)
+        .first()
+    )
+
+
 @router.get("/search", response_model=list[AthleteSearchResultItem])
 def search_athletes(
     q: str,
@@ -83,6 +109,23 @@ def create_athlete(
     birth_date = _parse_birth_date(payload.birth_date) if payload.birth_date else None
     gender = _normalize_gender(payload.gender)
 
+    existing = _find_existing_athlete(db, payload.full_name, birth_date)
+    if existing is not None:
+        # Уже есть спортсмен с таким же ФИО и датой рождения — не создаём
+        # дубль, отдаём его id (десктоп сохранит его в своей id_map, как
+        # будто сам его создал). Заодно тихо доливаем те поля, которые у
+        # существующей карточки ещё пустые — но НЕ перетираем то, что там
+        # уже есть, чтобы не потерять ранее внесённые данные.
+        if not existing.club_id and club_id:
+            existing.club_id = club_id
+        if not existing.gender and gender:
+            existing.gender = gender
+        if not existing.rank and payload.rank:
+            existing.rank = payload.rank
+        if not existing.photo_path and payload.photo_path:
+            existing.photo_path = payload.photo_path
+        db.commit()
+        return {"id": existing.id, "status": "existing"}
 
     athlete = Athlete(
         full_name=payload.full_name,
@@ -96,7 +139,7 @@ def create_athlete(
     db.flush()
     db.add(AthleteStatistic(athlete_id=athlete.id))
     db.commit()
-    return {"id": athlete.id}
+    return {"id": athlete.id, "status": "created"}
 
 
 @router.patch("/{athlete_id}")

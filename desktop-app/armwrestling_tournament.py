@@ -188,6 +188,8 @@ class Database:
             location TEXT,
             bracket_system TEXT DEFAULT 'double',
             format_type TEXT DEFAULT 'separate',
+            status TEXT DEFAULT 'active',
+            finished_at TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         );
 
@@ -268,7 +270,11 @@ class Database:
             self.conn.execute("ALTER TABLE tournaments ADD COLUMN bracket_system TEXT DEFAULT 'double'")
         if "format_type" not in t_cols:
             self.conn.execute("ALTER TABLE tournaments ADD COLUMN format_type TEXT DEFAULT 'separate'")
-        
+        if "status" not in t_cols:
+            self.conn.execute("ALTER TABLE tournaments ADD COLUMN status TEXT DEFAULT 'active'")
+        if "finished_at" not in t_cols:
+            self.conn.execute("ALTER TABLE tournaments ADD COLUMN finished_at TEXT")
+
         self.conn.commit()
         cols = [r[1] for r in self.conn.execute("PRAGMA table_info(matches)").fetchall()]
         for col, defval in [("win_next_id", "NULL"), ("win_next_slot", "1"),
@@ -302,6 +308,26 @@ class Database:
     def delete_tournament(self, tid):
         self.conn.execute("DELETE FROM tournaments WHERE id=?", (tid,))
         self.conn.commit()
+
+    def finish_tournament(self, tid):
+        """Помечает турнир завершённым: редактирование (участники, категории,
+        сетки) блокируется в UI, но результаты и составы сохраняются как
+        исторический архив. Если позже удалить спортсмена из общего реестра,
+        его записи участия в завершённых турнирах НЕ удаляются."""
+        self.conn.execute(
+            "UPDATE tournaments SET status='finished', finished_at=datetime('now') WHERE id=?",
+            (tid,))
+        self.conn.commit()
+
+    def reopen_tournament(self, tid):
+        """Возвращает турнир в активное состояние (снова доступно редактирование)."""
+        self.conn.execute(
+            "UPDATE tournaments SET status='active', finished_at=NULL WHERE id=?", (tid,))
+        self.conn.commit()
+
+    def is_tournament_finished(self, tid):
+        t = self.get_tournament(tid)
+        return bool(t and "status" in t.keys() and t["status"] == "finished")
 
     def add_category(self, tid, name, max_weight, hand="Обе", age_category=None):
         """max_weight: число (55), строка '70+' для верхнего открытого класса,
@@ -351,12 +377,33 @@ class Database:
 
     def delete_athlete(self, aid):
         # participants.athlete_id ссылается на athletes(id) БЕЗ ON DELETE —
-        # если не отвязать вручную, после удаления карточки в participants
-        # останутся "битые" athlete_id, указывающие в никуда (get_athlete()
-        # будет возвращать None там, где код этого не ожидает, например при
-        # повторном открытии диалога редактирования участника). Записи
-        # участий при этом НЕ удаляются — ровно то, что обещает диалог
-        # удаления в UI, просто карточка спортсмена отвязывается от них.
+        # если не отвязать/не удалить вручную, после удаления карточки в
+        # participants останутся "битые" athlete_id, указывающие в никуда.
+        #
+        # Поведение зависит от статуса турнира, в котором участвовал спортсмен:
+        #  - турнир АКТИВНЫЙ (не завершён) → запись участия удаляется целиком,
+        #    спортсмена как будто там никогда не было (он больше не должен
+        #    "висеть" в живом турнире после удаления из общего реестра);
+        #  - турнир ЗАВЕРШЁН → запись участия остаётся как исторический архив,
+        #    только сама карточка спортсмена отвязывается (athlete_id=NULL).
+        rows = self.conn.execute(
+            "SELECT p.id AS pid, p.category_id AS cid, t.status AS tstatus "
+            "FROM participants p JOIN tournaments t ON t.id = p.tournament_id "
+            "WHERE p.athlete_id=?", (aid,)).fetchall()
+
+        for r in rows:
+            if r["tstatus"] == "finished":
+                continue  # оставляем запись, отвяжем athlete_id ниже
+            pid = r["pid"]
+            # Убираем участника из ещё не сыгранных поединков сетки, чтобы не
+            # остались "битые" ссылки на удалённого участника.
+            self.conn.execute(
+                "UPDATE matches SET p1_id=NULL WHERE p1_id=? AND status='pending'", (pid,))
+            self.conn.execute(
+                "UPDATE matches SET p2_id=NULL WHERE p2_id=? AND status='pending'", (pid,))
+            self.conn.execute("DELETE FROM dvoeborie_overrides WHERE pid=?", (pid,))
+            self.conn.execute("DELETE FROM participants WHERE id=?", (pid,))
+
         self.conn.execute("UPDATE participants SET athlete_id=NULL WHERE athlete_id=?", (aid,))
         self.conn.execute("DELETE FROM athletes WHERE id=?", (aid,))
         self.conn.commit()
@@ -2065,13 +2112,22 @@ class BracketWindow(ctk.CTkToplevel):
         top.pack(fill="x", padx=0, pady=0)
         top.pack_propagate(False)
 
-        ctk.CTkLabel(top, text=f"🏆  {self.category['name']}  |  {self.hand}  |  До 2 поражений",
-                    font=ctk.CTkFont(size=15, weight="bold")).pack(side="left", padx=20)
+        title_text = f"🏆  {self.category['name']}  |  {self.hand}  |  До 2 поражений"
+        locked = self.db.is_tournament_finished(self.tournament_id)
+        if locked:
+            title_text += "   🔒 ТУРНИР ЗАВЕРШЁН — ТОЛЬКО ПРОСМОТР"
+        title_label_kwargs = {"text_color": "#ff8866"} if locked else {}
+        ctk.CTkLabel(top, text=title_text,
+                    font=ctk.CTkFont(size=15, weight="bold"),
+                    **title_label_kwargs
+                    ).pack(side="left", padx=20)
 
         ctk.CTkButton(top, text="⚡ Создать сетку", width=140, height=34,
+                    state="disabled" if locked else "normal",
                     command=self._generate).pack(side="right", padx=10, pady=10)
         ctk.CTkButton(top, text="🗑 Сбросить сетку", width=140, height=34,
                     fg_color="#4a1a1a", hover_color="#6a2a2a",
+                    state="disabled" if locked else "normal",
                     command=self._reset_bracket).pack(side="right", padx=5, pady=10)
         ctk.CTkButton(top, text="📄 Протокол PDF", width=140, height=34,
                     fg_color="#1a4a2a", hover_color="#2a6a3a",
@@ -2281,7 +2337,18 @@ class BracketWindow(ctk.CTkToplevel):
         self._render_match_list()
         self._render_results()
 
+    def _tournament_locked(self, show_warning=True):
+        """True, если турнир этой сетки завершён — редактирование запрещено."""
+        locked = self.db.is_tournament_finished(self.tournament_id)
+        if locked and show_warning:
+            messagebox.showwarning("Турнир завершён",
+                    "Турнир завершён — изменения недоступны.\n"
+                    "Можно только просматривать сетку и результаты.")
+        return locked
+
     def _generate(self):
+        if self._tournament_locked():
+            return
         all_participants = self.db.get_participants(self.tournament_id, self.category["id"])
         participants = [p for p in all_participants if p["hand"] in (self.hand, "Обе")]
         if len(participants) < 2:
@@ -2311,6 +2378,8 @@ class BracketWindow(ctk.CTkToplevel):
             print(f"[sync] assign_table: {e}")
 
     def _reset_bracket(self):
+        if self._tournament_locked():
+            return
         if not messagebox.askyesno("Сбросить сетку",
                     "Все результаты поединков будут удалены. Продолжить?"):
             return
@@ -2596,6 +2665,8 @@ class BracketWindow(ctk.CTkToplevel):
         c.tag_bind(tag, "<Button-1>", lambda e, mid=m["id"]: self._open_result_dialog(mid))
 
     def _open_result_dialog(self, match_id):
+        if self._tournament_locked():
+            return
         m = self.db.conn.execute("SELECT * FROM matches WHERE id=?", (match_id,)).fetchone()
         if not m:
             return
@@ -3189,7 +3260,8 @@ class AthletesWindow(ctk.CTkToplevel):
     def _delete_athlete(self, aid):
         if not messagebox.askyesno("Удалить",
                     "Удалить спортсмена из реестра?\n"
-                    "Если он уже участвовал в турнирах — записи участий не удаляются."):
+                    "Из активных (незавершённых) турниров он будет удалён полностью.\n"
+                    "В уже завершённых турнирах запись об участии сохранится."):
             return
 
         entered = simpledialog.askstring(
@@ -3395,6 +3467,7 @@ class App(ctk.CTk):
         self.configure(fg_color="#0d1117")
 
         self._build_ui()
+        self._refresh_status_badge()
         self._refresh_tournament_list()
 
     def _build_ui(self):
@@ -3441,6 +3514,16 @@ class App(ctk.CTk):
                     font=ctk.CTkFont(size=18, weight="bold"))
         self.title_label.pack(side="left", padx=25, pady=15)
 
+        self.status_badge = ctk.CTkLabel(self.header, text="", text_color="#0d1117",
+                    corner_radius=6, font=ctk.CTkFont(size=11, weight="bold"))
+        self.status_badge.pack(side="left", padx=(0, 10), ipadx=8, ipady=3)
+
+        self.finish_btn = ctk.CTkButton(self.header, text="🏁 Завершить турнир",
+                    width=170, height=34,
+                    fg_color="#4a3a1a", hover_color="#6a5a2a",
+                    command=self._toggle_finish_tournament)
+        self.finish_btn.pack(side="right", padx=20, pady=13)
+
         self.notebook = ctk.CTkTabview(self.main, fg_color="#0d1117")
         self.notebook.pack(fill="both", expand=True, padx=8, pady=8)
         self.notebook.add("⚖️ Категории")
@@ -3473,6 +3556,8 @@ class App(ctk.CTk):
     def _open_category_wizard(self):
         if not self.current_tournament_id:
             messagebox.showwarning("Нет турнира", "Сначала выберите турнир.")
+            return
+        if self._tournament_locked():
             return
 
         PLACEHOLDER = "— выберите —"
@@ -3571,6 +3656,8 @@ class App(ctk.CTk):
                     ).pack(side="right", padx=10)
 
     def _delete_category(self, cid):
+        if self._tournament_locked():
+            return
         if messagebox.askyesno("Удалить", "Удалить категорию и всех её участников?"):
             self.db.delete_category(cid)
             self._refresh_categories()
@@ -3695,6 +3782,8 @@ class App(ctk.CTk):
     def _add_participant_dialog(self, edit_id=None):
         if not self.current_tournament_id:
             messagebox.showwarning("Нет турнира", "Сначала выберите турнир.")
+            return
+        if self._tournament_locked():
             return
         cats = self.db.get_categories(self.current_tournament_id)
         if not cats:
@@ -4096,6 +4185,8 @@ class App(ctk.CTk):
                     on_delete=self._delete_participant)
             card.pack(fill="x", padx=5, pady=4)
     def _delete_participant(self, pid):
+        if self._tournament_locked():
+            return
         if messagebox.askyesno("Удалить", "Удалить участника?"):
             self.db.delete_participant(pid)
             self._refresh_participants()
@@ -4228,10 +4319,59 @@ class App(ctk.CTk):
         t = self.db.get_tournament(tid)
         self.title_label.configure(
             text=f"🏆  {t['name']}  |  {t['date']}  |  {t['location'] or ''}")
+        self._refresh_status_badge(t)
         self._refresh_tournament_list()
         self._refresh_categories()
         self._refresh_participants()
         self._refresh_brackets_tab()
+
+    def _refresh_status_badge(self, tournament=None):
+        """Обновляет бейджик статуса и текст кнопки завершения/возобновления."""
+        if not self.current_tournament_id:
+            self.status_badge.configure(text="")
+            self.finish_btn.configure(text="🏁 Завершить турнир",
+                    fg_color="#4a3a1a", hover_color="#6a5a2a", state="disabled")
+            return
+        t = tournament or self.db.get_tournament(self.current_tournament_id)
+        finished = bool(t and "status" in t.keys() and t["status"] == "finished")
+        if finished:
+            self.status_badge.configure(text="ЗАВЕРШЁН", fg_color="#ff6666")
+            self.finish_btn.configure(text="↩️ Возобновить турнир",
+                    fg_color="#1a3a5a", hover_color="#2a5a7a", state="normal")
+        else:
+            self.status_badge.configure(text="АКТИВЕН", fg_color="#4dff88")
+            self.finish_btn.configure(text="🏁 Завершить турнир",
+                    fg_color="#4a3a1a", hover_color="#6a5a2a", state="normal")
+
+    def _toggle_finish_tournament(self):
+        if not self.current_tournament_id:
+            return
+        if self.db.is_tournament_finished(self.current_tournament_id):
+            if messagebox.askyesno("Возобновить турнир",
+                        "Возобновить турнир?\n"
+                        "Снова станут доступны добавление/удаление участников, "
+                        "категорий и создание сеток."):
+                self.db.reopen_tournament(self.current_tournament_id)
+        else:
+            if messagebox.askyesno("Завершить турнир",
+                        "Завершить турнир?\n"
+                        "После этого нельзя будет добавлять/удалять участников, "
+                        "категории и создавать/сбрасывать сетки — только просмотр.\n"
+                        "Завершённый турнир можно будет возобновить в любой момент."):
+                self.db.finish_tournament(self.current_tournament_id)
+        self._select_tournament(self.current_tournament_id)
+
+    def _tournament_locked(self, show_warning=True):
+        """True, если текущий турнир завершён и изменения запрещены."""
+        if not self.current_tournament_id:
+            return False
+        locked = self.db.is_tournament_finished(self.current_tournament_id)
+        if locked and show_warning:
+            messagebox.showwarning("Турнир завершён",
+                    "Турнир завершён — изменения недоступны.\n"
+                    "Можно только просматривать участников и сетки.\n"
+                    "Чтобы снова редактировать, нажмите «Возобновить турнир».")
+        return locked
     
     def _open_athletes_window(self):
         if hasattr(self, "_athletes_window") and self._athletes_window.winfo_exists():
