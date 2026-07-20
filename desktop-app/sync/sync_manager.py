@@ -5,9 +5,16 @@
 любая сетевая ошибка уходит в офлайн-очередь и повторяется позже.
 """
 
+import sqlite3
+from pathlib import Path
+
 from .api_client import ApiClientError, SyncApiClient
 from .state import SyncState
 from . import config
+
+# armwrestling.db лежит в desktop-app/ (родитель папки sync/) — см. тот же
+# путь в armwrestling_tournament.py (DB_PATH).
+_TOURNAMENT_DB_PATH = Path(__file__).resolve().parent.parent / "armwrestling.db"
 
 
 class SyncManager:
@@ -135,16 +142,42 @@ class SyncManager:
             go,
         )
 
+    def _backfill_competition_source_from_local_db(self, tid) -> None:
+        """Для турниров, созданных ДО включения самолечения (нет снимка
+        competition_source): читает name/date/location напрямую из
+        armwrestling.db и сохраняет снимок — тот же приём, что раньше
+        приходилось делать руками через fix_stale_competition.py."""
+        if not _TOURNAMENT_DB_PATH.exists():
+            return
+        conn = sqlite3.connect(str(_TOURNAMENT_DB_PATH))
+        conn.row_factory = sqlite3.Row
+        try:
+            row = conn.execute(
+                "SELECT name, date, location FROM tournaments WHERE id=?", (tid,)
+            ).fetchone()
+        finally:
+            conn.close()
+        if row is None:
+            return
+        self.state.save_competition_source(tid, row["name"], row["date"], row["location"])
+        print(f"[sync] снимок competition_source для tid={tid} восстановлен из armwrestling.db")
+
     def _recreate_competition(self, tid) -> int | None:
         """Пересоздаёт соревнование на сервере по сохранённому снимку и
-        обновляет id_map. Возвращает None, если снимка нет (соревнование
-        никогда не создавалось локально — самолечить нечего)."""
+        обновляет id_map. Возвращает None, если восстановить данные турнира
+        не удалось вообще ниоткуда."""
         source = self.state.get_competition_source(tid)
         if source is None:
+            # Снимка нет — вероятно, турнир создан до включения самолечения.
+            # Раньше это чинилось вручную через fix_stale_competition.py,
+            # теперь пробуем восстановить снимок сами прямо из локальной БД.
+            self._backfill_competition_source_from_local_db(tid)
+            source = self.state.get_competition_source(tid)
+        if source is None:
             print(
-                f"[sync] не могу пересоздать соревнование tid={tid}: нет снимка "
-                "competition_source (турнир был создан до включения самолечения "
-                "— заполни снимок через backfill_competition_source.py)"
+                f"[sync] не могу пересоздать соревнование tid={tid}: нет ни снимка "
+                "competition_source, ни записи в armwrestling.db (турнир, похоже, "
+                "был удалён локально)"
             )
             return None
         remote = self.api.create_competition(source["name"], source["date"], source["location"])
