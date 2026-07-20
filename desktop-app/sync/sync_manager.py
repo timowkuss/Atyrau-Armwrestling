@@ -188,6 +188,29 @@ class SyncManager:
     def _is_stale_competition_error(self, e: ApiClientError) -> bool:
         return e.status_code == 404 and "оревнован" in str(e)
 
+    def _self_heal_missing_tournament(self, tid) -> None:
+        """Вызывается, когда _recreate_competition окончательно не смог
+        восстановить турнир (нет ни снимка competition_source, ни записи в
+        armwrestling.db) — то есть турнир был удалён локально в обход
+        on_tournament_deleted (например, через reset_db/пересоздание БД).
+        Без этого зависшая операция по несуществующему tid раз за разом
+        проваливается в flush_pending(), а flush_pending() останавливается
+        на первой же неудаче (чтобы не нарушать порядок турнир->категория->
+        участник) — и тем самым НАВСЕГДА блокирует отправку всех остальных,
+        живых турниров. Здесь применяется та же зачистка очереди по tid,
+        что и в on_tournament_deleted, чтобы разгрести затор."""
+        removed = 0
+        removed += self.state.purge_pending("create_competition", "tid", tid)
+        removed += self.state.purge_pending("create_category", "tid", tid)
+        removed += self.state.purge_pending("create_participant", "tid", tid)
+        removed += self.state.purge_pending("create_match", "tournament_id", tid)
+        removed += self.state.purge_pending("update_match", "tournament_id", tid)
+        print(
+            f"[sync] tid={tid} не восстановить (удалён локально) — "
+            f"вычищено {removed} операций из очереди, чтобы не блокировать "
+            "остальные турниры"
+        )
+
     # ── категория ────────────────────────────────────────────────
     def on_category_created(self, tid, cid, name, max_weight, hand, age_category=None):
         remote_competition_id = self.state.map_get("competition", tid)
@@ -207,7 +230,8 @@ class SyncManager:
                     raise
                 comp_id = self._recreate_competition(tid)
                 if comp_id is None:
-                    raise
+                    self._self_heal_missing_tournament(tid)
+                    return None
                 remote = self.api.create_category(comp_id, name, max_weight, hand)
             self.state.map_set("category", cid, remote["id"])
             return remote["id"]
@@ -248,7 +272,8 @@ class SyncManager:
                     raise
                 comp_id = self._recreate_competition(tid)
                 if comp_id is None:
-                    raise
+                    self._self_heal_missing_tournament(tid)
+                    return None
                 remote = self.api.create_participant(
                     comp_id, pid, remote_athlete_id, remote_category_id, weight, club
                 )
@@ -520,7 +545,11 @@ class SyncManager:
                         raise
                     remote_competition_id = self._recreate_competition(payload["tid"])
                     if remote_competition_id is None:
-                        return False
+                        # Турнир безвозвратно потерян — самолечим очередь
+                        # (в т.ч. и эту саму строку) и НЕ блокируем
+                        # flush_pending для остальных турниров.
+                        self._self_heal_missing_tournament(payload["tid"])
+                        return True
                     remote = self.api.create_category(
                         remote_competition_id, payload["name"], payload["max_weight"], payload["hand"]
                     )
@@ -575,7 +604,11 @@ class SyncManager:
                         raise
                     remote_competition_id = self._recreate_competition(payload["tid"])
                     if remote_competition_id is None:
-                        return False
+                        # Турнир безвозвратно потерян — самолечим очередь
+                        # (в т.ч. и эту саму строку) и НЕ блокируем
+                        # flush_pending для остальных турниров.
+                        self._self_heal_missing_tournament(payload["tid"])
+                        return True
                     remote = self.api.create_participant(
                         remote_competition_id, payload["pid"], athlete_id,
                         remote_category_id, payload["weight"], payload["club"],

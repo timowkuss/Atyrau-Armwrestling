@@ -13,10 +13,10 @@ export function AthleteCard({ athlete }: { athlete: AthleteListItem }) {
   return (
     <Link
       to={`/athletes/${athlete.id}`}
-      className="plate group flex flex-col rounded-[var(--radius-rivet)] p-4 transition-transform hover:-translate-y-0.5 hover:border-brass/50"
+      className="plate group flex flex-col rounded-[var(--radius-rivet)] p-5 transition-transform hover:-translate-y-0.5 hover:border-brass/50"
     >
       <div className="flex items-start justify-between">
-        <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-steel-dim bg-ink font-display text-lg text-steel">
+        <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-steel-dim bg-ink font-display text-lg text-steel">
           {athlete.photo_path ? (
             <img src={athlete.photo_path} alt="" className="h-full w-full object-cover" />
           ) : (
@@ -33,16 +33,16 @@ export function AthleteCard({ athlete }: { athlete: AthleteListItem }) {
           </span>
         )}
       </div>
-      <h3 className="mt-3 font-display text-base leading-snug text-bone group-hover:text-brass">
+      <h3 className="mt-3 font-display text-lg leading-snug text-bone group-hover:text-brass">
         {athlete.full_name}
       </h3>
-      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-xs text-steel">
+      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-xs text-steel">
         {a !== null && <span>{a} лет</span>}
         <span>{athlete.gender === 'male' ? 'муж' : 'жен'}</span>
         {athlete.city_name && <span>{athlete.city_name}</span>}
       </div>
       {(athlete.club_name || athlete.coach_name) && (
-        <div className="mt-3 border-t border-steel-dim/30 pt-2 text-xs text-steel-dim">
+        <div className="mt-4 border-t border-steel-dim/30 pt-3 text-xs text-steel-dim">
           {athlete.club_name && <div className="truncate">Клуб: {athlete.club_name}</div>}
           {athlete.coach_name && <div className="truncate">Тренер: {athlete.coach_name}</div>}
         </div>

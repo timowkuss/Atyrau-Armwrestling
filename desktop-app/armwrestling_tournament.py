@@ -45,6 +45,12 @@ try:
     from reportlab.pdfgen import canvas as pdf_canvas
     from reportlab.graphics.barcode.code128 import Code128
     REPORTLAB_AVAILABLE = True
+    _FONT_DIR = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
+    try:
+        pdfmetrics.registerFont(TTFont("Arial", str(_FONT_DIR / "arial.ttf")))
+        pdfmetrics.registerFont(TTFont("Arial-Bold", str(_FONT_DIR / "arialbd.ttf")))
+    except Exception:
+        pass
 except ImportError:
     REPORTLAB_AVAILABLE = False
 
@@ -718,25 +724,25 @@ class BadgeGenerator:
 
         # Название турнира
         c.setFillColor(colors.white)
-        c.setFont("Helvetica-Bold", 8)
+        c.setFont("Arial-Bold", 8)
         t_name = str(tournament["name"])[:40] if tournament else "Турнир"
         c.drawCentredString(x + bw / 2, y + bh - 0.7 * cm, t_name)
 
         t_date = str(tournament["date"]) if tournament else ""
-        c.setFont("Helvetica", 6)
+        c.setFont("Arial", 6)
         c.drawCentredString(x + bw / 2, y + bh - 1.1 * cm, t_date)
 
         # Имя участника (крупно)
         c.setFillColor(colors.HexColor("#111111"))
-        c.setFont("Helvetica-Bold", 14)
+        c.setFont("Arial-Bold", 14)
         name = str(participant["name"])
         if len(name) > 24:
-            c.setFont("Helvetica-Bold", 11)
+            c.setFont("Arial-Bold", 11)
         c.drawCentredString(x + bw / 2, y + bh - 2.1 * cm, name)
 
         # Клуб
         c.setFillColor(colors.HexColor("#555555"))
-        c.setFont("Helvetica", 8)
+        c.setFont("Arial", 8)
         club = str(participant["club"]) if participant["club"] else "—"
         c.drawCentredString(x + bw / 2, y + bh - 2.7 * cm, f"Клуб: {club}")
 
@@ -745,7 +751,7 @@ class BadgeGenerator:
         weight = participant["weight"] if participant["weight"] else "—"
         hand = participant["hand"] if participant["hand"] else "Обе"
         info_line = f"{cat_name}  |  {weight} кг  |  {hand}"
-        c.setFont("Helvetica", 7)
+        c.setFont("Arial", 7)
         c.setFillColor(colors.HexColor("#336699"))
         c.drawCentredString(x + bw / 2, y + bh - 3.2 * cm, info_line)
 
@@ -759,7 +765,7 @@ class BadgeGenerator:
 
         # Значение штрихкода текстом
         c.setFillColor(colors.HexColor("#333333"))
-        c.setFont("Helvetica", 7)
+        c.setFont("Arial", 7)
         c.drawCentredString(x + bw / 2, y + 0.2 * cm, barcode_value)
 
         # Линия-разделитель (для вырезания)
@@ -2866,26 +2872,26 @@ class BracketWindow(ctk.CTkToplevel):
         story = []
 
         title_style = ParagraphStyle("Title", parent=styles["Title"],
-                    fontSize=18, spaceAfter=6, alignment=1)
+                    fontName="Arial-Bold", fontSize=18, spaceAfter=6, alignment=1)
         story.append(Paragraph("ПРОТОКОЛ СОРЕВНОВАНИЙ ПО АРМРЕСТЛИНГУ", title_style))
 
         t = self.db.get_tournament(self.tournament_id)
         if t:
             info_style = ParagraphStyle("Info", parent=styles["Normal"],
-                    fontSize=11, spaceAfter=4, alignment=1)
+                    fontName="Arial", fontSize=11, spaceAfter=4, alignment=1)
             story.append(Paragraph(
                 f"{t['name']}  |  {t['date']}  |  {t['location'] or ''}", info_style))
 
         story.append(Paragraph(
             f"Весовая категория: {self.category['name']}  |  Рука: {self.hand}  |  Формат: До 2 поражений",
-            ParagraphStyle("Cat", parent=styles["Normal"], fontSize=12, spaceAfter=12, alignment=1)))
+            ParagraphStyle("Cat", parent=styles["Normal"], fontName="Arial", fontSize=12, spaceAfter=12, alignment=1)))
         story.append(Spacer(1, 0.5 * cm))
 
         standings = self.engine.get_standings(self.category["id"], self.hand)
         if standings:
             story.append(Paragraph("ИТОГОВЫЕ РЕЗУЛЬТАТЫ",
                     ParagraphStyle("Section", parent=styles["Heading2"],
-                    fontSize=13, spaceAfter=6)))
+                    fontName="Arial-Bold", fontSize=13, spaceAfter=6)))
             data = [["Место", "Спортсмен", "Клуб", "Вес (кг)", "Победы", "Поражения"]]
             for i, s in enumerate(standings):
                 p = self.db.get_participant(s["pid"])
@@ -2904,7 +2910,8 @@ class BracketWindow(ctk.CTkToplevel):
             t_table.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a3a5c")),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTNAME", (0, 0), (-1, 0), "Arial-Bold"),
+                ("FONTNAME", (0, 1), (-1, -1), "Arial"),
                 ("FONTSIZE", (0, 0), (-1, -1), 10),
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -2921,7 +2928,7 @@ class BracketWindow(ctk.CTkToplevel):
         if matches:
             story.append(Paragraph("ВСЕ ПОЕДИНКИ",
                     ParagraphStyle("Section", parent=styles["Heading2"],
-                    fontSize=13, spaceAfter=6)))
+                    fontName="Arial-Bold", fontSize=13, spaceAfter=6)))
             m_data = [["Раунд", "Bracket", "Участник 1", "Участник 2", "Победитель"]]
 
             def pname(pid, m=None):
@@ -2945,7 +2952,8 @@ class BracketWindow(ctk.CTkToplevel):
             m_table.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2a4a6c")),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTNAME", (0, 0), (-1, 0), "Arial-Bold"),
+                ("FONTNAME", (0, 1), (-1, -1), "Arial"),
                 ("FONTSIZE", (0, 0), (-1, -1), 9),
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -2960,7 +2968,7 @@ class BracketWindow(ctk.CTkToplevel):
         story.append(Paragraph(
             f"Дата создания протокола: {datetime.now().strftime('%d.%m.%Y %H:%M')}",
             ParagraphStyle("Footer", parent=styles["Normal"],
-                    fontSize=8, textColor=colors.grey, alignment=2)))
+                    fontName="Arial", fontSize=8, textColor=colors.grey, alignment=2)))
         try:
             doc.build(story)
             messagebox.showinfo("Готово", f"PDF сохранён:\n{filepath}")
@@ -3100,22 +3108,22 @@ class CombinedResultsWindow(ctk.CTkToplevel):
         story = []
 
         title_style = ParagraphStyle("Title", parent=styles["Title"],
-                    fontSize=18, spaceAfter=6, alignment=1)
+                    fontName="Arial-Bold", fontSize=18, spaceAfter=6, alignment=1)
         story.append(Paragraph("ИТОГИ ДВОЕБОРЬЯ", title_style))
 
         t = self.db.get_tournament(self.tournament_id)
         if t:
             info_style = ParagraphStyle("Info", parent=styles["Normal"],
-                    fontSize=11, spaceAfter=4, alignment=1)
+                    fontName="Arial", fontSize=11, spaceAfter=4, alignment=1)
             story.append(Paragraph(
                 f"{t['name']}  |  {t['date']}  |  {t['location'] or ''}", info_style))
 
         story.append(Paragraph(
             f"Весовая категория: {self.category['name']}",
-            ParagraphStyle("Cat", parent=styles["Normal"], fontSize=12, spaceAfter=8, alignment=1)))
+            ParagraphStyle("Cat", parent=styles["Normal"], fontName="Arial", fontSize=12, spaceAfter=8, alignment=1)))
         story.append(Paragraph(
             "Очки: 1 место — 10, 2 — 7, 3 — 5, 4 — 4, 5 — 3, 6 — 2, 7 — 1, 8 место и ниже — 0.",
-            ParagraphStyle("Rules", parent=styles["Normal"], fontSize=9,
+            ParagraphStyle("Rules", parent=styles["Normal"], fontName="Arial", fontSize=9,
                     textColor=colors.grey, spaceAfter=10, alignment=1)))
         story.append(Spacer(1, 0.3 * cm))
 
@@ -3134,7 +3142,8 @@ class CombinedResultsWindow(ctk.CTkToplevel):
         table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a3a5c")),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTNAME", (0, 0), (-1, 0), "Arial-Bold"),
+            ("FONTNAME", (0, 1), (-1, -1), "Arial"),
             ("FONTSIZE", (0, 0), (-1, -1), 9),
             ("ALIGN", (0, 0), (-1, -1), "CENTER"),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -3149,7 +3158,7 @@ class CombinedResultsWindow(ctk.CTkToplevel):
         story.append(Paragraph(
             f"Дата создания протокола: {datetime.now().strftime('%d.%m.%Y %H:%M')}",
             ParagraphStyle("Footer", parent=styles["Normal"],
-                    fontSize=8, textColor=colors.grey, alignment=2)))
+                    fontName="Arial", fontSize=8, textColor=colors.grey, alignment=2)))
         try:
             doc.build(story)
             messagebox.showinfo("Готово", f"PDF сохранён:\n{filepath}")

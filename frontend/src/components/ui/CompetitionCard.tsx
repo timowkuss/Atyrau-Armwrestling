@@ -11,7 +11,7 @@ export function CompetitionCard({ competition }: { competition: CompetitionListI
   return (
     <Link
       to={`/competitions/${competition.id}`}
-      className="plate group flex flex-col justify-between rounded-[var(--radius-rivet)] p-5 transition-transform hover:-translate-y-0.5 hover:border-brass/50"
+      className="plate group flex flex-col justify-between rounded-[var(--radius-rivet)] p-6 transition-transform hover:-translate-y-0.5 hover:border-brass/50"
     >
       <div>
         <div className="flex items-center justify-between">
@@ -22,14 +22,14 @@ export function CompetitionCard({ competition }: { competition: CompetitionListI
             </span>
           )}
         </div>
-        <h3 className="mt-2 font-display text-lg leading-snug text-bone group-hover:text-brass">
+        <h3 className="mt-2.5 font-display text-xl leading-snug text-bone group-hover:text-brass">
           {competition.name}
         </h3>
         {competition.location_city_name && (
           <p className="mt-1 text-sm text-steel">{competition.location_city_name}</p>
         )}
       </div>
-      <div className="mt-4 flex items-center justify-between border-t border-steel-dim/30 pt-3 font-mono text-xs text-steel-dim">
+      <div className="mt-5 flex items-center justify-between border-t border-steel-dim/30 pt-3 font-mono text-xs text-steel-dim">
         <span>{competition.organizer ?? 'Федерация армрестлинга Атырау'}</span>
         <span>{competition.participants_count} участников</span>
       </div>

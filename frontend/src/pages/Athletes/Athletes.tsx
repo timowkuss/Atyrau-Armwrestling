@@ -120,7 +120,7 @@ export function Athletes() {
         )}
         {data && data.items.length > 0 && (
           <div
-            className="grid gap-4 transition-opacity sm:grid-cols-2 lg:grid-cols-4"
+            className="grid gap-5 transition-opacity sm:grid-cols-2 lg:grid-cols-3"
             style={{ opacity: isPlaceholderData ? 0.6 : 1 }}
           >
             {data.items.map((a) => (

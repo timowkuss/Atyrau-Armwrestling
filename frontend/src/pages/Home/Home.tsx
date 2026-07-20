@@ -91,7 +91,7 @@ export function Home() {
           <EmptyState title="Опубликованных турниров пока нет" message="Загляните позже — здесь появятся результаты." />
         )}
         {competitions.data && competitions.data.items.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {competitions.data.items.map((c) => (
               <CompetitionCard key={c.id} competition={c} />
             ))}
@@ -114,7 +114,7 @@ export function Home() {
           <ErrorState message={(athletes.error as Error).message} onRetry={() => athletes.refetch()} />
         )}
         {athletes.data && athletes.data.items.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {athletes.data.items.map((a) => (
               <AthleteCard key={a.id} athlete={a} />
             ))}

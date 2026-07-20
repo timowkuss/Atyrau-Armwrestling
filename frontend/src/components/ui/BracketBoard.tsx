@@ -23,7 +23,7 @@ function MatchRow({ match }: { match: BracketMatchOut }) {
   const p2Won = isDone && match.winner_name != null && match.winner_name === match.p2_name
 
   return (
-    <div className="flex flex-col gap-2 rounded-[var(--radius-rivet)] border border-steel-dim/20 bg-black/10 px-4 py-3 text-base">
+    <div className="flex flex-col gap-2.5 rounded-[var(--radius-rivet)] border border-steel-dim/20 bg-black/10 px-5 py-4 text-base">
       <div className="flex items-center justify-between gap-3">
         <p className={p1Won ? 'break-words font-medium text-brass' : 'break-words text-bone'}>
           {match.p1_name ?? '—'}
@@ -60,13 +60,13 @@ export function BracketBoard({ matches }: { matches: BracketMatchOut[] }) {
               {Object.entries(byBracket).map(([bracket, bracketMatches]) => {
                 const byRound = groupBy(bracketMatches, (m) => m.round_name ?? '—')
                 return (
-                  <div key={bracket} className="plate min-w-0 rounded-[var(--radius-rivet)] p-5">
+                  <div key={bracket} className="plate min-w-0 rounded-[var(--radius-rivet)] p-6">
                     <p className="text-eyebrow text-steel">{BRACKET_LABEL[bracket] ?? bracket}</p>
-                    <div className="mt-4 space-y-5">
+                    <div className="mt-5 space-y-6">
                       {Object.entries(byRound).map(([round, roundMatches]) => (
                         <div key={round}>
                           <p className="mb-3 font-mono text-xs text-steel">{round}</p>
-                          <div className="space-y-3">
+                          <div className="space-y-3.5">
                             {roundMatches
                               .sort((a, b) => a.match_order - b.match_order)
                               .map((m) => (
