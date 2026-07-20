@@ -3466,6 +3466,20 @@ class App(ctk.CTk):
         self.minsize(900, 600)
         self.configure(fg_color="#0d1117")
 
+        # Открываем сразу на весь экран. 'zoomed' — стандартный способ на
+        # Windows и большинстве Linux-WM; если он не поддерживается (бывает
+        # на некоторых Linux/macOS сборках Tk) — пробуем -zoomed через
+        # attributes, а если и это недоступно — просто растягиваем окно на
+        # размер экрана вручную, чтобы приложение в любом случае открылось
+        # на весь экран, а не в маленьком окне 1280x800.
+        try:
+            self.state("zoomed")
+        except Exception:
+            try:
+                self.attributes("-zoomed", True)
+            except Exception:
+                self.geometry(f"{self.winfo_screenwidth()}x{self.winfo_screenheight()}+0+0")
+
         self._build_ui()
         self._refresh_status_badge()
         self._refresh_tournament_list()
@@ -4382,7 +4396,7 @@ class App(ctk.CTk):
     def _new_tournament(self):
         dlg = tk.Toplevel(self)
         dlg.title("Новый турнир")
-        dlg.geometry("460x400")
+        dlg.geometry("500x800")
         dlg.minsize(420, 500)
         dlg.configure(bg="#161b22")
         dlg.resizable(True, True)
@@ -4390,7 +4404,7 @@ class App(ctk.CTk):
         dlg.update_idletasks()
         x = self.winfo_x() + self.winfo_width() // 2 - 230
         y = self.winfo_y() + self.winfo_height() // 2 - 190
-        dlg.geometry(f"460x380+{x}+{y}")
+        dlg.geometry(f"500x800+{x}+{y}")
 
         ctk.CTkLabel(dlg, text="🏆  Создать турнир",
                     font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(25, 15))
