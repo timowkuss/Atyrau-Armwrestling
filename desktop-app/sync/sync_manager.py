@@ -119,6 +119,11 @@ class SyncManager:
 
     # ── турнир ───────────────────────────────────────────────────
     def on_tournament_created(self, tid, name, date, location):
+        # Сохраняем снимок ДО попытки отправки — нужен, если позже
+        # соревнование "протухнет" на сервере (например, база была
+        # пересоздана) и его придётся пересоздавать автоматически.
+        self.state.save_competition_source(tid, name, date, location)
+
         def go():
             remote = self.api.create_competition(name, date, location)
             self.state.map_set("competition", tid, remote["id"])
@@ -129,6 +134,21 @@ class SyncManager:
             {"tid": tid, "name": name, "date": date, "location": location},
             go,
         )
+
+    def _recreate_competition(self, tid) -> int | None:
+        """Пересоздаёт соревнование на сервере по сохранённому снимку и
+        обновляет id_map. Возвращает None, если снимка нет (соревнование
+        никогда не создавалось локально — самолечить нечего)."""
+        source = self.state.get_competition_source(tid)
+        if source is None:
+            return None
+        remote = self.api.create_competition(source["name"], source["date"], source["location"])
+        self.state.map_set("competition", tid, remote["id"])
+        print(f"[sync] соревнование tid={tid} пересоздано на сервере, новый remote_id={remote['id']}")
+        return remote["id"]
+
+    def _is_stale_competition_error(self, e: ApiClientError) -> bool:
+        return e.status_code == 404 and "оревнован" in str(e)
 
     # ── категория ────────────────────────────────────────────────
     def on_category_created(self, tid, cid, name, max_weight, hand, age_category=None):
@@ -141,7 +161,16 @@ class SyncManager:
             return None
 
         def go():
-            remote = self.api.create_category(remote_competition_id, name, max_weight, hand)
+            comp_id = remote_competition_id
+            try:
+                remote = self.api.create_category(comp_id, name, max_weight, hand)
+            except ApiClientError as e:
+                if not self._is_stale_competition_error(e):
+                    raise
+                comp_id = self._recreate_competition(tid)
+                if comp_id is None:
+                    raise
+                remote = self.api.create_category(comp_id, name, max_weight, hand)
             self.state.map_set("category", cid, remote["id"])
             return remote["id"]
 
@@ -168,12 +197,23 @@ class SyncManager:
             return None
 
         def go():
+            comp_id = remote_competition_id
             remote_athlete_id = self._find_or_create_athlete(name, club, local_athlete_id=athlete_id)
             if remote_athlete_id is None:
                 raise ApiClientError("не удалось получить athlete_id")
-            remote = self.api.create_participant(
-                remote_competition_id, pid, remote_athlete_id, remote_category_id, weight, club
-            )
+            try:
+                remote = self.api.create_participant(
+                    comp_id, pid, remote_athlete_id, remote_category_id, weight, club
+                )
+            except ApiClientError as e:
+                if not self._is_stale_competition_error(e):
+                    raise
+                comp_id = self._recreate_competition(tid)
+                if comp_id is None:
+                    raise
+                remote = self.api.create_participant(
+                    comp_id, pid, remote_athlete_id, remote_category_id, weight, club
+                )
             self.state.map_set("participant", pid, remote["id"])
             self.state.map_set("athlete_of_participant", pid, remote_athlete_id)
             return remote["id"]
@@ -433,9 +473,19 @@ class SyncManager:
                 if remote_competition_id is None:
                     print(f"[sync] DEBUG: create_category ждёт competition tid={payload['tid']}")
                     return False
-                remote = self.api.create_category(
-                    remote_competition_id, payload["name"], payload["max_weight"], payload["hand"]
-                )
+                try:
+                    remote = self.api.create_category(
+                        remote_competition_id, payload["name"], payload["max_weight"], payload["hand"]
+                    )
+                except ApiClientError as e:
+                    if not self._is_stale_competition_error(e):
+                        raise
+                    remote_competition_id = self._recreate_competition(payload["tid"])
+                    if remote_competition_id is None:
+                        return False
+                    remote = self.api.create_category(
+                        remote_competition_id, payload["name"], payload["max_weight"], payload["hand"]
+                    )
                 self.state.map_set("category", payload["cid"], remote["id"])
                 return True
 
@@ -477,10 +527,21 @@ class SyncManager:
                 )
                 if athlete_id is None:
                     return False
-                remote = self.api.create_participant(
-                    remote_competition_id, payload["pid"], athlete_id,
-                    remote_category_id, payload["weight"], payload["club"],
-                )
+                try:
+                    remote = self.api.create_participant(
+                        remote_competition_id, payload["pid"], athlete_id,
+                        remote_category_id, payload["weight"], payload["club"],
+                    )
+                except ApiClientError as e:
+                    if not self._is_stale_competition_error(e):
+                        raise
+                    remote_competition_id = self._recreate_competition(payload["tid"])
+                    if remote_competition_id is None:
+                        return False
+                    remote = self.api.create_participant(
+                        remote_competition_id, payload["pid"], athlete_id,
+                        remote_category_id, payload["weight"], payload["club"],
+                    )
                 self.state.map_set("participant", payload["pid"], remote["id"])
                 return True
 

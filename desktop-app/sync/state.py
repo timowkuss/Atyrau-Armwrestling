@@ -57,6 +57,18 @@ class SyncState:
                     attempts INTEGER NOT NULL DEFAULT 0,
                     last_error TEXT
                 );
+
+                -- Снимок данных турнира (name/date/location) на момент
+                -- первой попытки синхронизации. Нужен, чтобы при 404
+                -- "Соревнование не найдено" (например, после пересоздания
+                -- центральной БД) можно было пересоздать соревнование на
+                -- сервере заново, не заглядывая в armwrestling.db.
+                CREATE TABLE IF NOT EXISTS competition_source (
+                    local_id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    date TEXT NOT NULL,
+                    location TEXT
+                );
                 """
             )
             self.conn.commit()
@@ -77,6 +89,22 @@ class SyncState:
                 (entity_type, local_id, remote_id),
             )
             self.conn.commit()
+
+    # ── снимок данных турнира для самолечения ────────────────
+    def save_competition_source(self, tid: int, name: str, date: str, location: str | None) -> None:
+        with self._lock:
+            self.conn.execute(
+                "INSERT OR REPLACE INTO competition_source (local_id, name, date, location) "
+                "VALUES (?,?,?,?)",
+                (tid, name, date, location),
+            )
+            self.conn.commit()
+
+    def get_competition_source(self, tid: int) -> sqlite3.Row | None:
+        with self._lock:
+            return self.conn.execute(
+                "SELECT * FROM competition_source WHERE local_id=?", (tid,)
+            ).fetchone()
 
     # ── офлайн-очередь ───────────────────────────────────────
     def enqueue(self, operation: str, payload: dict) -> None:

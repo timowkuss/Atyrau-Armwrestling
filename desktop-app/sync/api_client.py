@@ -8,7 +8,9 @@ from . import config
 
 
 class ApiClientError(Exception):
-    pass
+    def __init__(self, message: str, status_code: int | None = None):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class SyncApiClient:
@@ -31,7 +33,10 @@ class SyncApiClient:
             raise ApiClientError(f"Сеть недоступна ({url}): {e}") from e
 
         if resp.status_code >= 400:
-            raise ApiClientError(f"{method} {path} -> {resp.status_code}: {resp.text}")
+            raise ApiClientError(
+                f"{method} {path} -> {resp.status_code}: {resp.text}",
+                status_code=resp.status_code,
+            )
         return resp.json() if resp.content else {}
 
     # ── спортсмены ────────────────────────────────────────────
