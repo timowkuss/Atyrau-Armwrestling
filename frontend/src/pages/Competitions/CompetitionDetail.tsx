@@ -6,9 +6,25 @@ import { LoadingState, ErrorState, EmptyState } from '@/components/ui/States'
 import { MedalBadge } from '@/components/ui/Medal'
 import { BracketBoard } from '@/components/ui/BracketBoard'
 import { LiveQueueBoard } from '@/components/ui/LiveQueueBoard'
+import type { CompetitionStatus } from '@/types/api'
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' })
+}
+
+function statusBadge(status: CompetitionStatus) {
+  const map: Record<CompetitionStatus, { label: string; cls: string }> = {
+    draft:        { label: 'черновик',  cls: 'bg-steel-dim/30 text-steel-dim' },
+    published:    { label: 'скоро',     cls: 'bg-brass/15 text-brass' },
+    in_progress:  { label: 'идёт',     cls: 'bg-emerald-500/20 text-emerald-400' },
+    completed:    { label: 'завершён',  cls: 'bg-rust/15 text-rust' },
+  }
+  const b = map[status]
+  return (
+    <span className={`text-eyebrow rounded-[var(--radius-rivet)] px-2.5 py-0.5 ${b.cls}`}>
+      {b.label}
+    </span>
+  )
 }
 
 export function CompetitionDetail() {
@@ -40,6 +56,8 @@ export function CompetitionDetail() {
   if (!competition.data) return null
 
   const c = competition.data
+  const isActive = c.status === 'in_progress'
+  const isFinished = c.status === 'completed'
   const resultsByCategory = (results.data ?? []).reduce<Record<string, typeof results.data>>((acc, r) => {
     ;(acc[r.category_name] ??= []).push(r)
     return acc
@@ -52,7 +70,10 @@ export function CompetitionDetail() {
       </Link>
 
       <div className="plate mt-4 rounded-[var(--radius-rivet)] p-6">
-        <p className="text-eyebrow text-rust">{formatDate(c.date)}</p>
+        <div className="flex items-center justify-between">
+          <p className="text-eyebrow text-rust">{formatDate(c.date)}</p>
+          {statusBadge(c.status)}
+        </div>
         <h1 className="mt-2 font-display text-2xl text-bone sm:text-3xl">{c.name}</h1>
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-sm text-steel">
           {c.location_city_name && <span>{c.location_city_name}</span>}
@@ -82,23 +103,37 @@ export function CompetitionDetail() {
         </div>
       )}
 
-      {queue.data && queue.data.length > 0 && (
+      {(isActive || queue.data?.some(t => t.current || t.next.length > 0)) && (
         <section className="mt-10">
-          <h2 className="font-display text-xl text-bone">Кто с кем борется</h2>
+          <h2 className="font-display text-xl text-bone">Очередь схваток</h2>
           <div className="rivet-line my-4" />
-          <LiveQueueBoard tables={queue.data} />
+          {queue.data && queue.data.length > 0 ? (
+            <LiveQueueBoard tables={queue.data} />
+          ) : (
+            <p className="text-sm text-steel-dim">Очередь пуста</p>
+          )}
+        </section>
+      )}
+
+      {bracket.data && bracket.data.length > 0 && (
+        <section className="mt-10 mb-16">
+          <h2 className="font-display text-xl text-bone">Турнирная сетка</h2>
+          <div className="rivet-line my-4" />
+          <BracketBoard matches={bracket.data} />
         </section>
       )}
 
       <section className="mt-10 mb-16">
-        <h2 className="font-display text-xl text-bone">Результаты</h2>
+        <h2 className="font-display text-xl text-bone">
+          {isFinished ? 'Результаты' : isActive ? 'Ход турнира' : 'Результаты'}
+        </h2>
         <div className="rivet-line my-4" />
         {results.isLoading && <LoadingState label="Загрузка результатов" />}
         {results.isError && (
           <ErrorState message={(results.error as Error).message} onRetry={() => results.refetch()} />
         )}
         {results.data && results.data.length === 0 && (
-          <EmptyState title="Результаты ещё не внесены" />
+          <EmptyState title={isFinished ? 'Результаты не найдены' : 'Результаты ещё не внесены'} />
         )}
         {Object.entries(resultsByCategory).map(([category, rows]) => (
           <div key={category} className="mb-6">
@@ -126,14 +161,6 @@ export function CompetitionDetail() {
           </div>
         ))}
       </section>
-
-      {c.status === 'published' && bracket.data && bracket.data.length > 0 && (
-        <section className="mt-10 mb-16">
-          <h2 className="font-display text-xl text-bone">Турнирная сетка</h2>
-          <div className="rivet-line my-4" />
-          <BracketBoard matches={bracket.data} />
-        </section>
-      )}
     </div>
   )
 }

@@ -26,7 +26,10 @@ class Competition(Base):
 
     __tablename__ = "competitions"
     __table_args__ = (
-        CheckConstraint("status in ('draft','published')", name="ck_competitions_status"),
+        CheckConstraint(
+            "status in ('draft','published','in_progress','completed')",
+            name="ck_competitions_status",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

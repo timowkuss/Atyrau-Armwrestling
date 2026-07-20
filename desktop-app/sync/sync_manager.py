@@ -476,6 +476,17 @@ class SyncManager:
         except ApiClientError as e:
             return False, f"Не удалось опубликовать: {e}"
 
+    def update_tournament_status(self, tid, status) -> tuple[bool, str]:
+        """Обновляет фазу турнира: in_progress / completed."""
+        remote_id = self.state.map_get("competition", tid)
+        if remote_id is None:
+            return False, "Турнир ещё не синхронизирован."
+        try:
+            self.api.update_competition_status(remote_id, status)
+            return True, f"Статус обновлён → {status}"
+        except ApiClientError as e:
+            return False, f"Не удалось обновить статус: {e}"
+
     # ── повтор офлайн-очереди ───────────────────────────────────
     def flush_pending(self) -> tuple[int, int]:
         """Повторяет все операции из офлайн-очереди по порядку. Возвращает

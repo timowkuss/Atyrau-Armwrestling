@@ -28,7 +28,7 @@ router = APIRouter(prefix="/competitions", tags=["public:competitions"])
 @router.get("", response_model=Page[CompetitionListOut])
 def list_competitions(
     year: int | None = None,
-    status: str = "published",
+    status: str = "",
     page: int = 1,
     page_size: int = 20,
     db: Session = Depends(get_db),
@@ -48,6 +48,8 @@ def list_competitions(
     )
     if status:
         query = query.filter(Competition.status == status)
+    else:
+        query = query.filter(Competition.status != "draft")
     if year is not None:
         query = query.filter(func.date_part("year", Competition.date) == year)
 

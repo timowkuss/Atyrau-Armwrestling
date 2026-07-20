@@ -103,6 +103,10 @@ class SyncApiClient:
 
     def publish_competition(self, remote_competition_id):
         return self._request("POST", f"/competitions/{remote_competition_id}/publish")
+
+    def update_competition_status(self, remote_competition_id, status):
+        return self._request("PATCH", f"/competitions/{remote_competition_id}/status",
+                             json_body={"status": status})
     
     def delete_competition(self, remote_id):
         return self._request("DELETE", f"/competitions/{remote_id}")

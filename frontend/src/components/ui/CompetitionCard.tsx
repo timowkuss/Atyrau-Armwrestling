@@ -1,13 +1,27 @@
 import { Link } from 'react-router-dom'
-import type { CompetitionListItem } from '@/types/api'
+import type { CompetitionListItem, CompetitionStatus } from '@/types/api'
 
 function formatDate(iso: string): string {
   const d = new Date(iso)
   return d.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' })
 }
 
+function statusBadge(status: CompetitionStatus) {
+  const map: Record<CompetitionStatus, { label: string; cls: string }> = {
+    draft:        { label: 'черновик',  cls: 'bg-steel-dim/30 text-steel-dim' },
+    published:    { label: 'скоро',     cls: 'bg-brass/15 text-brass' },
+    in_progress:  { label: 'идёт',     cls: 'bg-emerald-500/20 text-emerald-400' },
+    completed:    { label: 'завершён',  cls: 'bg-rust/15 text-rust' },
+  }
+  const b = map[status]
+  return (
+    <span className={`text-eyebrow rounded-[var(--radius-rivet)] px-2 py-0.5 ${b.cls}`}>
+      {b.label}
+    </span>
+  )
+}
+
 export function CompetitionCard({ competition }: { competition: CompetitionListItem }) {
-  const upcoming = new Date(competition.date).getTime() > Date.now()
   return (
     <Link
       to={`/competitions/${competition.id}`}
@@ -16,11 +30,7 @@ export function CompetitionCard({ competition }: { competition: CompetitionListI
       <div>
         <div className="flex items-center justify-between">
           <span className="text-eyebrow text-rust">{formatDate(competition.date)}</span>
-          {upcoming && (
-            <span className="text-eyebrow rounded-[var(--radius-rivet)] bg-brass/15 px-2 py-0.5 text-brass">
-              скоро
-            </span>
-          )}
+          {statusBadge(competition.status)}
         </div>
         <h3 className="mt-2.5 font-display text-xl leading-snug text-bone group-hover:text-brass">
           {competition.name}

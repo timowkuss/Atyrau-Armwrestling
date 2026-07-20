@@ -3761,11 +3761,8 @@ class App(ctk.CTk):
         except Exception as e:
             messagebox.showerror("Ошибка", f"Не удалось создать PDF:\n{str(e)}")
 
-    def _publish_tournament(self):
-        """Переключает турнир draft -> published в центральной БД (кнопка
-        «Опубликовать результаты», Этап 6/7, см. ARCHITECTURE.md §5).
-        Сама сетка/участники/матчи к этому моменту уже отправлены в
-        реальном времени по ходу турнира — здесь только финальный шаг."""
+    def _sync_tournament(self):
+        """Отправляет все накопленные данные в центральную БД."""
         if not self.current_tournament_id:
             messagebox.showwarning("Нет турнира", "Сначала выберите турнир.")
             return
@@ -3774,32 +3771,23 @@ class App(ctk.CTk):
 
         pending = sync_manager.state.pending_count()
         if pending:
-            if not messagebox.askyesno(
-                "Есть несинхронизированные данные",
-                f"В офлайн-очереди {pending} операций (нет связи ранее?).\n"
-                f"Сначала попробовать отправить их?"
-            ):
-                return
             done, remaining = sync_manager.flush_pending()
             if remaining:
-                messagebox.showerror(
-                    "Нет связи",
-                    f"Отправлено {done}, но ещё {remaining} не прошло — "
-                    f"сети всё ещё нет. Попробуйте позже."
+                messagebox.showwarning(
+                    "Синхронизация",
+                    f"Отправлено {done} операций.\n"
+                    f"Ещё {remaining} не прошло — повторите позже."
                 )
-                return
-
-        if not messagebox.askyesno(
-            "Опубликовать результаты",
-            "Результаты турнира станут видны на публичном сайте.\nПродолжить?"
-        ):
-            return
-
-        ok, message = sync_manager.publish_tournament(self.current_tournament_id)
-        if ok:
-            messagebox.showinfo("Готово", message)
+            else:
+                messagebox.showinfo(
+                    "Готово",
+                    f"Все {done} операций успешно отправлены."
+                )
         else:
-            messagebox.showerror("Не удалось опубликовать", message)
+            messagebox.showinfo(
+                "Синхронизация",
+                "Нет операций для отправки — всё уже синхронизировано."
+            )
 
     
     def _add_participant_dialog(self, edit_id=None):
@@ -4223,10 +4211,10 @@ class App(ctk.CTk):
                     text="Выберите категорию и руку для открытия сетки:",
                     font=ctk.CTkFont(size=13), text_color="#778899"
                     ).pack(side="left")
-        # ═══ КНОПКА ПУБЛИКАЦИИ РЕЗУЛЬТАТОВ НА САЙТЕ (Этап 6) ═══
-        ctk.CTkButton(top, text="📡 Опубликовать результаты", width=190, height=38,
+        # ═══ КНОПКА СИНХРОНИЗАЦИИ ═══
+        ctk.CTkButton(top, text="🔄 Синхронизация", width=190, height=38,
                     fg_color="#1a3a5a", hover_color="#2a5a7a",
-                    command=self._publish_tournament).pack(side="right")
+                    command=self._sync_tournament).pack(side="right")
 
         self.bracket_list = ScrollableFrame(tab, fg_color="#0d1117")
         self.bracket_list.pack(fill="both", expand=True, padx=20, pady=10)
@@ -4375,6 +4363,8 @@ class App(ctk.CTk):
                         "Снова станут доступны добавление/удаление участников, "
                         "категорий и создание сеток."):
                 self.db.reopen_tournament(self.current_tournament_id)
+                from sync.sync_manager import sync_manager
+                sync_manager.update_tournament_status(self.current_tournament_id, "in_progress")
         else:
             if messagebox.askyesno("Завершить турнир",
                         "Завершить турнир?\n"
@@ -4382,6 +4372,8 @@ class App(ctk.CTk):
                         "категории и создавать/сбрасывать сетки — только просмотр.\n"
                         "Завершённый турнир можно будет возобновить в любой момент."):
                 self.db.finish_tournament(self.current_tournament_id)
+                from sync.sync_manager import sync_manager
+                sync_manager.update_tournament_status(self.current_tournament_id, "completed")
         self._select_tournament(self.current_tournament_id)
 
     def _tournament_locked(self, show_warning=True):

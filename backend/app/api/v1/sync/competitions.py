@@ -3,6 +3,7 @@ from app.api.v1.sync._common import parse_flexible_date
 
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.v1.deps import require_desktop_sync
@@ -19,30 +20,44 @@ from app.schemas.sync import (
 router = APIRouter(prefix="/competitions", tags=["sync:competitions"])
 
 
+def _compute_phase(comp_date: date) -> str:
+    """Вычисляет фазу турнира по дате: in_progress сегодня, completed если
+    прошёл, published (ожидается) если в будущем."""
+    today = date.today()
+    if comp_date < today:
+        return "completed"
+    elif comp_date == today:
+        return "in_progress"
+    return "published"
+
+
 @router.post("", status_code=201)
 def create_competition(
     payload: CompetitionSyncCreate,
     db: Session = Depends(get_db),
     _: bool = Depends(require_desktop_sync),
 ):
-    """Создаётся сразу при создании турнира в десктопе, статус=draft —
-    на сайте ещё не публичен, но уже существует в единой БД
-    (см. ARCHITECTURE.md §0/§5)."""
+    """Создаётся сразу при создании турнира в десктопе.
+    Автоматически публикуется с фазой based on дате."""
     city_id = None
     if payload.location_name and payload.location_name.strip():
         city = db.query(City).filter(City.name.ilike(payload.location_name.strip())).first()
         city_id = city.id if city else None
 
+    comp_date = parse_flexible_date(payload.date)
+    phase = _compute_phase(comp_date)
+
     competition = Competition(
         name=payload.name,
-        date=parse_flexible_date(payload.date),
+        date=comp_date,
         location_city_id=city_id,
-        status="draft",
+        status=phase,
+        published_at=datetime.now(timezone.utc),
     )
     db.add(competition)
     db.commit()
     db.refresh(competition)
-    return {"id": competition.id, "matched_city": city_id is not None}
+    return {"id": competition.id, "matched_city": city_id is not None, "status": phase}
 
 
 @router.post("/{competition_id}/categories", status_code=201)
@@ -97,10 +112,7 @@ def publish_competition(
     db: Session = Depends(get_db),
     _: bool = Depends(require_desktop_sync),
 ):
-    """Переключает статус draft -> published (см. ARCHITECTURE.md §5).
-    Полный пересчёт статистики/рейтингов (stats_engine/ranking_engine) —
-    Этап 7; здесь пока только смена статуса, этого достаточно, чтобы
-    проверить сквозной поток десктоп -> центральная БД -> сайт."""
+    """Переключает статус draft -> published."""
     competition = db.query(Competition).filter(Competition.id == competition_id).first()
     if competition is None:
         raise HTTPException(status_code=404, detail="Соревнование не найдено")
@@ -109,6 +121,32 @@ def publish_competition(
     competition.published_at = datetime.now(timezone.utc)
     db.commit()
     return {"status": "published"}
+
+
+class StatusUpdate(BaseModel):
+    status: str  # published | in_progress | completed
+
+
+@router.patch("/{competition_id}/status")
+def update_competition_status(
+    competition_id: int,
+    payload: StatusUpdate,
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_desktop_sync),
+):
+    """Обновляет фазу турнира (published / in_progress / completed)."""
+    if payload.status not in ("published", "in_progress", "completed"):
+        raise HTTPException(status_code=400, detail="Недопустимый статус")
+
+    competition = db.query(Competition).filter(Competition.id == competition_id).first()
+    if competition is None:
+        raise HTTPException(status_code=404, detail="Соревнование не найдено")
+
+    competition.status = payload.status
+    if payload.status == "published" and not competition.published_at:
+        competition.published_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"status": competition.status}
 
 @router.delete("/{competition_id}")
 def delete_competition(
