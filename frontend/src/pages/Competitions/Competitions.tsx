@@ -14,7 +14,6 @@ export function Competitions() {
   const year = params.get('year') ? Number(params.get('year')) : undefined
 
   const { data, isLoading, isError, error, refetch, isPlaceholderData } = useCompetitions({
-    status: 'published',
     year,
     page,
     page_size: PAGE_SIZE,
@@ -33,8 +32,7 @@ export function Competitions() {
       <p className="text-eyebrow text-rust">Календарь федерации</p>
       <h1 className="mt-2 font-display text-3xl text-bone">Соревнования</h1>
       <p className="mt-2 max-w-2xl text-steel">
-        Публикуются сразу после того, как организатор нажимает «Опубликовать результаты» в
-        судейском приложении на площадке.
+        Турниры появляются автоматически после создания в судейском приложении.
       </p>
 
       <div className="mt-8 flex flex-wrap items-center gap-2">
