@@ -481,24 +481,29 @@ class SyncManager:
         """Повторяет все операции из офлайн-очереди по порядку. Возвращает
         (успешно, осталось). Останавливается на первой операции, которая
         всё ещё не проходит (обычно значит: до сих пор нет сети) — чтобы не
-        нарушать порядок зависимостей (турнир -> категория -> участник)."""
+        нарушать порядок зависимостей (турнир -> категория -> участник).
+
+        Возвращаемые значения _replay:
+          True  — операция выполнена, удаляем из очереди
+          None  — ещё не готова (зависит от другой операции), пропускаем
+          False — ошибка, стоп и повторим позже
+        """
         succeeded = 0
         for row in self.state.pending():
             if not self.state.exists(row["id"]):
-                # Эту строку уже удалило самолечение (см.
-                # _self_heal_missing_tournament), сработавшее на более
-                # ранней строке той же прогонки, — pending() забрал список
-                # один раз в начале, поэтому такие строки могут остаться в
-                # нём "призраками". Пропускаем без попытки реплея.
                 continue
             op, payload = row["operation"], __import__("json").loads(row["payload"])
             print(f"[sync] TRY: {op} payload={payload}")
             ok = self._replay(op, payload)
             print(f"[sync] RESULT: {op} -> {ok}")
 
-            if ok:
+            if ok is True:
                 self.state.mark_done(row["id"])
                 succeeded += 1
+            elif ok is None:
+                # Ещё не готово (create_match не прошёл) — пропускаем,
+                # оставляем в очереди, НЕ останавливаем flush.
+                continue
             else:
                 break
         return succeeded, self.state.pending_count()
@@ -509,28 +514,48 @@ class SyncManager:
                 delete_fn = getattr(self.api, "delete_participant", None)
                 if delete_fn is None:
                     return False
-                delete_fn(payload["remote_id"])
+                try:
+                    delete_fn(payload["remote_id"])
+                except ApiClientError as e:
+                    if e.status_code == 404:
+                        return True
+                    raise
                 return True
 
             if operation == "delete_competition":
                 delete_fn = getattr(self.api, "delete_competition", None)
                 if delete_fn is None:
                     return False
-                delete_fn(payload["remote_id"])
+                try:
+                    delete_fn(payload["remote_id"])
+                except ApiClientError as e:
+                    if e.status_code == 404:
+                        return True
+                    raise
                 return True
-            
+
             if operation == "delete_category":
                 delete_fn = getattr(self.api, "delete_category", None)
                 if delete_fn is None:
                     return False
-                delete_fn(payload["remote_id"])
+                try:
+                    delete_fn(payload["remote_id"])
+                except ApiClientError as e:
+                    if e.status_code == 404:
+                        return True
+                    raise
                 return True
-            
+
             if operation == "delete_athlete":
                 delete_fn = getattr(self.api, "delete_athlete", None)
                 if delete_fn is None:
                     return False
-                delete_fn(payload["remote_id"])
+                try:
+                    delete_fn(payload["remote_id"])
+                except ApiClientError as e:
+                    if e.status_code == 404:
+                        return True
+                    raise
                 return True
 
             if operation == "create_competition":
@@ -542,7 +567,7 @@ class SyncManager:
                 remote_competition_id = self.state.map_get("competition", payload["tid"])
                 if remote_competition_id is None:
                     print(f"[sync] DEBUG: create_category ждёт competition tid={payload['tid']}")
-                    return False
+                    return None
                 try:
                     remote = self.api.create_category(
                         remote_competition_id, payload["name"], payload["max_weight"], payload["hand"]
@@ -578,7 +603,8 @@ class SyncManager:
             if operation == "update_athlete":
                 remote_athlete_id = self.state.map_get("athlete", payload["aid"])
                 if remote_athlete_id is None:
-                    return False
+                    print(f"[sync] DEBUG: update_athlete ждёт create_athlete aid={payload['aid']}")
+                    return None
                 self.api.update_athlete(
                     remote_athlete_id,
                     full_name=f"{payload['first_name']} {payload['last_name']}".strip(),
@@ -595,7 +621,7 @@ class SyncManager:
                 remote_category_id = self.state.map_get("category", payload["category_id"])
                 if remote_competition_id is None or remote_category_id is None:
                     print(f"[sync] DEBUG: create_participant ждёт tid={payload['tid']}")
-                    return False
+                    return None
                 athlete_id = self._find_or_create_athlete(
                     payload["name"], payload["club"], local_athlete_id=payload.get("athlete_id")
                 )
@@ -627,7 +653,7 @@ class SyncManager:
                 remote_category_id = self.state.map_get("category", payload["category_id"])
                 if remote_category_id is None:
                     print(f"[sync] DEBUG: create_match ждёт category_id={payload['category_id']}")
-                    return False
+                    return None
                 remote_p1 = self.state.map_get("participant", payload["p1_id"]) if payload.get("p1_id") else None
                 remote_p2 = self.state.map_get("participant", payload["p2_id"]) if payload.get("p2_id") else None
                 remote_winner = (
@@ -649,12 +675,11 @@ class SyncManager:
             if operation == "update_match":
                 remote_match_id = self.state.map_get("match", payload["mid"])
                 if remote_match_id is None:
-                    # create_match ещё не прошёл (remote_id неизвестен) —
-                    # пропускаем, чтобы не блокировать очередь. table_number
-                    # и прочие поля уже записаны локально и подхватятся
-                    # при create_match.
-                    print(f"[sync] DEBUG: update_match пропуск — create_match для mid={payload['mid']} ещё не прошёл")
-                    return True
+                    # create_match ещё не прошёл — НЕ удаляем из очереди,
+                    # чтобы table_number не потерялся. Вернём None: flush
+                    # пропустит эту строку и вернётся к ней позже.
+                    print(f"[sync] DEBUG: update_match ждёт create_match mid={payload['mid']}")
+                    return None
                 remote_winner = (
                     self.state.map_get("participant", payload["winner_id"])
                     if payload.get("winner_id") else None
