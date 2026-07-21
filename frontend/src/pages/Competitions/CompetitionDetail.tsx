@@ -164,7 +164,7 @@ export function CompetitionDetail() {
         </section>
       )}
 
-      {isFinished && bracket.data && bracket.data.length > 0 && (
+       {(isFinished || isLive) && bracket.data && bracket.data.length > 0 && (
         <section className="mt-10 mb-16">
           <h2 className="font-display text-xl text-bone">Турнирная сетка</h2>
           <div className="rivet-line my-4" />
