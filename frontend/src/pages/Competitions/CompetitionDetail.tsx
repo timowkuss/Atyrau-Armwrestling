@@ -1,7 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 import { useCompetition, useCompetitionBracket, useCompetitionParticipants, useCompetitionResults } from '@/features/competitions/useCompetitions'
-import { api } from '@/lib/api'
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/States'
 import { MedalBadge } from '@/components/ui/Medal'
 import { BracketBoard } from '@/components/ui/BracketBoard'
@@ -84,11 +82,6 @@ export function CompetitionDetail() {
   const results = useCompetitionResults(competitionId)
   const participants = useCompetitionParticipants(competitionId)
   const bracket = useCompetitionBracket(competitionId)
-  const photos = useQuery({
-    queryKey: ['competition', competitionId, 'photos'],
-    queryFn: () => api.competitions.photos(competitionId),
-    enabled: Number.isFinite(competitionId),
-  })
 
   if (competition.isLoading) return <LoadingState label="Загрузка турнира" />
   if (competition.isError) {
@@ -163,14 +156,6 @@ export function CompetitionDetail() {
         )}
       </div>
 
-      {photos.data && photos.data.length > 0 && (
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {photos.data.map((p) => (
-            <img key={p.id} src={p.url} alt={p.caption ?? ''} className="aspect-square rounded-[var(--radius-rivet)] object-cover" />
-          ))}
-        </div>
-      )}
-
       {participants.data && participants.data.length > 0 && (
         <section className="mt-10">
           <h2 className="font-display text-xl text-bone">Участники</h2>
@@ -187,7 +172,7 @@ export function CompetitionDetail() {
         </section>
       )}
 
-      <section className={`mt-10 ${isFinished && bracket.data && bracket.data.length > 0 ? '' : 'mb-16'}`}>
+      <section className="mt-10 mb-16">
         <h2 className="font-display text-xl text-bone">Результаты</h2>
         <div className="rivet-line my-4" />
         {results.isLoading && <LoadingState label="Загрузка результатов" />}
