@@ -16,6 +16,7 @@ from app.schemas.competitions import (
     CategoryOut,
     CompetitionDetailOut,
     CompetitionListOut,
+    EliminatedOut,
     QueuePairOut,
     ResultOut,
     TableQueueOut,
@@ -181,14 +182,14 @@ def get_competition_bracket(competition_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{competition_id}/queue", response_model=list[TableQueueOut])
 def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
-    """Живая очередь пар по столам: текущий поединок + до 3 следующих.
+    """Живая очередь пар по столам: текущий поединок + до 3 следующих + выбывшие.
 
     Пара считается определившейся, только когда у матча заполнены оба
     p1_id/p2_id (см. get_current_and_next_match в десктопе — та же логика).
     Столы без table_number (старые записи, ещё не досинкан десктоп) в
     выдачу не попадают.
     """
-    matches = (
+    pending = (
         db.query(Match, Category)
         .join(Category, Match.category_id == Category.id)
         .filter(
@@ -198,12 +199,13 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
             Match.p2_id.isnot(None),
             Match.table_number.isnot(None),
         )
-        .order_by(Match.table_number, Match.stage, Match.id)
+        .order_by(Match.table_number, Match.stage, Match.match_order, Match.id)
         .all()
     )
 
     tables: dict[int, list[QueuePairOut]] = {}
-    for match, category in matches:
+    table_cat_hand: dict[int, tuple[int, str]] = {}
+    for match, category in pending:
         p1 = db.get(CompetitionParticipant, match.p1_id)
         p2 = db.get(CompetitionParticipant, match.p2_id)
         if p1 is None or p2 is None:
@@ -217,9 +219,72 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
             p2_name=p2.athlete.full_name,
         )
         tables.setdefault(match.table_number, []).append(pair)
+        if match.table_number not in table_cat_hand:
+            table_cat_hand[match.table_number] = (match.category_id, match.hand)
+
+    def _round_score(bracket: str, round_name: str | None) -> int:
+        weights = {"winners": 0, "losers": 100, "final": 200}
+        base = weights.get(bracket, 0)
+        if round_name:
+            digits = "".join(ch for ch in round_name if ch.isdigit())
+            return base + (int(digits) if digits else 0)
+        return base
+
+    def _compute_eliminated(category_id: int, hand: str) -> list:
+        all_matches = (
+            db.query(Match)
+            .filter(
+                Match.competition_id == competition_id,
+                Match.category_id == category_id,
+                Match.hand == hand,
+            )
+            .all()
+        )
+        stats: dict[int, dict] = {}
+        def ensure(pid: int | None):
+            if pid is None or pid in stats:
+                return
+            stats[pid] = {"pid": pid, "wins": 0, "losses": 0,
+                          "eliminated": False, "elim_round_score": -1}
+        for m in all_matches:
+            ensure(m.p1_id)
+            ensure(m.p2_id)
+            if m.status in ("done", "bye") and m.winner_id:
+                winner = m.winner_id
+                loser = m.p2_id if winner == m.p1_id else m.p1_id
+                if m.status == "done":
+                    ensure(winner)
+                    stats[winner]["wins"] += 1
+                    if loser:
+                        ensure(loser)
+                        stats[loser]["losses"] += 1
+                        rs = _round_score(m.bracket, m.round_name)
+                        if rs > stats[loser]["elim_round_score"]:
+                            stats[loser]["elim_round_score"] = rs
+                            stats[loser]["eliminated"] = True
+        eliminated = [s for s in stats.values() if s["eliminated"]]
+        eliminated.sort(key=lambda s: s["elim_round_score"])
+        result = []
+        total = len(stats)
+        for i, s in enumerate(eliminated):
+            cp = db.get(CompetitionParticipant, s["pid"])
+            name = cp.athlete.full_name if cp and cp.athlete else "—"
+            result.append(EliminatedOut(
+                athlete_name=name,
+                place=total - len(eliminated) + i + 1,
+                wins=s["wins"],
+                losses=s["losses"],
+            ))
+        return result
 
     return [
-        TableQueueOut(table_number=tnum, current=pairs[0], next=pairs[1:4])
+        TableQueueOut(
+            table_number=tnum,
+            current=pairs[0],
+            next=pairs[1:4],
+            eliminated=_compute_eliminated(*table_cat_hand[tnum])
+            if tnum in table_cat_hand else [],
+        )
         for tnum, pairs in sorted(tables.items())
     ]
 

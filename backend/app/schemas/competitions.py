@@ -67,10 +67,18 @@ class QueuePairOut(BaseModel):
     p2_name: str
 
 
+class EliminatedOut(BaseModel):
+    athlete_name: str
+    place: int
+    wins: int
+    losses: int
+
+
 class TableQueueOut(BaseModel):
     table_number: int
     current: QueuePairOut | None
     next: list[QueuePairOut]
+    eliminated: list[EliminatedOut]
 
 
 class CompetitionAdminUpdate(BaseModel):

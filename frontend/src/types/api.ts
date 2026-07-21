@@ -156,10 +156,18 @@ export interface QueuePairOut {
   p2_name: string
 }
 
+export interface EliminatedOut {
+  athlete_name: string
+  place: number
+  wins: number
+  losses: number
+}
+
 export interface TableQueueOut {
   table_number: number
   current: QueuePairOut | null
   next: QueuePairOut[]
+  eliminated: EliminatedOut[]
 }
 
 export interface CompetitionListParams {

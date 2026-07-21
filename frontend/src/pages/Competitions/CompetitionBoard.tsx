@@ -41,6 +41,22 @@ function QueueBlock({ table }: { table: TableQueueOut }) {
           ))}
         </div>
       )}
+
+      {table.eliminated.length > 0 && (
+        <div className="mt-6 border-t border-steel-dim/20 pt-5">
+          <p className="text-eyebrow text-center text-sm text-rust mb-3">Выбывшие</p>
+          <div className="space-y-1.5">
+            {[...table.eliminated].reverse().map((e) => (
+              <p key={e.athlete_name} className="text-center font-mono text-sm text-steel-dim">
+                {e.place}. {e.athlete_name}
+                <span className="ml-2 text-steel-dim/60">
+                  {e.wins} побед{e.losses > 0 ? `, ${e.losses} ${e.losses === 1 ? 'поражение' : 'поражения'}` : ''}
+                </span>
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -136,7 +152,7 @@ export function CompetitionBoard() {
           (p): p is QueuePairOut => p !== null && selectedNames.has(p.category_name),
         )
         if (pairs.length === 0) return null
-        return { table_number: table.table_number, current: pairs[0], next: pairs.slice(1) }
+        return { table_number: table.table_number, current: pairs[0], next: pairs.slice(1), eliminated: table.eliminated }
       })
       .filter((t): t is TableQueueOut => t !== null)
   }, [allTables, selectedNames])
