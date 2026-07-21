@@ -155,5 +155,11 @@ class SyncApiClient:
             body["table_number"] = table_number
         return self._request("PATCH", f"/matches/{remote_match_id}", json_body=body)
 
+    def delete_matches_for_category(self, remote_category_id, hand):
+        return self._request(
+            "DELETE", "/matches",
+            params={"category_id": remote_category_id, "hand": hand},
+        )
+
     def ping(self):
         return self._request("GET", "/ping")

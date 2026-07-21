@@ -462,8 +462,35 @@ class SyncManager:
 
         return self._try("create_match", payload, go)
 
+    # ── сброс/пересоздание сетки категории ──────────────────────
+    def on_bracket_reset(self, category_id, hand, local_mids):
+        """Database.clear_matches удаляет матчи из sqlite напрямую, без
+        сети — иначе старые матчи (с их p1/p2) остаются висеть на сайте
+        и дают дубли пар в живой очереди. Чистим id_map/офлайн-очередь
+        для них и, если категория уже синкана, удаляем матчи на сервере."""
+        for mid in local_mids:
+            self.state.map_delete("match", mid)
+            self.state.purge_pending("create_match", "mid", mid)
+            self.state.purge_pending("update_match", "mid", mid)
+
+        remote_category_id = self.state.map_get("category", category_id)
+        if remote_category_id is None:
+            # Категория ещё не долетела до сервера — значит и матчей
+            # там нет, чистить нечего.
+            return None
+
+        payload = {"category_id": remote_category_id, "hand": hand}
+
+        def go():
+            self.api.delete_matches_for_category(remote_category_id, hand)
+            return True
+
+        return self._try("delete_matches", payload, go)
+
     def on_match_updated(self, mid, match: dict):
         remote_match_id = self.state.map_get("match", mid)
+        remote_p1 = self.state.map_get("participant", match["p1_id"]) if match.get("p1_id") else None
+        remote_p2 = self.state.map_get("participant", match["p2_id"]) if match.get("p2_id") else None
         remote_winner = (
             self.state.map_get("participant", match["winner_id"]) if match.get("winner_id") else None
         )
@@ -485,6 +512,8 @@ class SyncManager:
         def go():
             self.api.update_match(
                 remote_match_id,
+                p1_id=remote_p1,
+                p2_id=remote_p2,
                 winner_id=remote_winner,
                 p1_losses=match.get("p1_losses"),
                 p2_losses=match.get("p2_losses"),
@@ -617,6 +646,18 @@ class SyncManager:
                     return False
                 try:
                     delete_fn(payload["remote_id"])
+                except ApiClientError as e:
+                    if e.status_code == 404:
+                        return True
+                    raise
+                return True
+
+            if operation == "delete_matches":
+                delete_fn = getattr(self.api, "delete_matches_for_category", None)
+                if delete_fn is None:
+                    return False
+                try:
+                    delete_fn(payload["category_id"], payload["hand"])
                 except ApiClientError as e:
                     if e.status_code == 404:
                         return True

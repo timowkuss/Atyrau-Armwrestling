@@ -59,3 +59,21 @@ def update_match(
 
     db.commit()
     return {"status": "ok"}
+
+
+@router.delete("")
+def delete_matches(
+    category_id: int,
+    hand: str,
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_desktop_sync),
+):
+    """Вызывается десктопом при сбросе/пересоздании сетки категории
+    (см. Database.clear_matches). Без этого старые матчи остаются
+    висеть на сервере и дают дубли пар в живой очереди
+    (/public/competitions/{id}/queue)."""
+    db.query(Match).filter(
+        Match.category_id == category_id, Match.hand == hand
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"status": "ok"}

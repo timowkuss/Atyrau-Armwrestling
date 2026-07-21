@@ -1,3 +1,29 @@
+diff --git a/backend/app/api/v1/sync/matches.py b/backend/app/api/v1/sync/matches.py
+index 2fa944d..6a47f65 100644
+--- a/backend/app/api/v1/sync/matches.py
++++ b/backend/app/api/v1/sync/matches.py
+@@ -59,3 +59,21 @@ def update_match(
+ 
+     db.commit()
+     return {"status": "ok"}
++
++
++@router.delete("")
++def delete_matches(
++    category_id: int,
++    hand: str,
++    db: Session = Depends(get_db),
++    _: bool = Depends(require_desktop_sync),
++):
++    """Вызывается десктопом при сбросе/пересоздании сетки категории
++    (см. Database.clear_matches). Без этого старые матчи остаются
++    висеть на сервере и дают дубли пар в живой очереди
++    (/public/competitions/{id}/queue)."""
++    db.query(Match).filter(
++        Match.category_id == category_id, Match.hand == hand
++    ).delete(synchronize_session=False)
++    db.commit()
++    return {"status": "ok"}
 diff --git a/backend/app/schemas/sync.py b/backend/app/schemas/sync.py
 index 34707c3..2bd588f 100644
 --- a/backend/app/schemas/sync.py
@@ -12,10 +38,30 @@ index 34707c3..2bd588f 100644
      p1_losses: int | None = None
      p2_losses: int | None = None
 diff --git a/desktop-app/armwrestling_tournament.py b/desktop-app/armwrestling_tournament.py
-index 902beac..542493e 100644
+index 902beac..0753bec 100644
 --- a/desktop-app/armwrestling_tournament.py
 +++ b/desktop-app/armwrestling_tournament.py
-@@ -1216,6 +1216,18 @@ class DoubleEliminationEngine:
+@@ -852,7 +852,19 @@ class DoubleEliminationEngine:
+             tournament_id, category_id, hand, participant_ids,
+         )
+ 
++    def _sync_bracket_reset(self, category_id, hand):
++        """clear_matches ниже удаляет старые матчи только локально —
++        без этого на сайте остаются висеть прежние пары и дублируются
++        с новосгенерированными в живой очереди. Снимаем список id ДО
++        удаления и просим sync_manager убрать их и на сервере."""
++        try:
++            local_mids = [m["id"] for m in self.db.get_matches(category_id, hand)]
++            sync_manager.on_bracket_reset(category_id, hand, local_mids)
++        except Exception as e:
++            print(f"[sync] _sync_bracket_reset: {e}")
++
+     def _generate_bracket_impl(self, tournament_id, category_id, hand, participant_ids):
++        self._sync_bracket_reset(category_id, hand)
+         self.db.clear_matches(category_id, hand)
+ 
+         n = len(participant_ids)
+@@ -1216,6 +1228,18 @@ class DoubleEliminationEngine:
      def _get_match(self, match_id):
          return self.db.conn.execute("SELECT * FROM matches WHERE id=?", (match_id,)).fetchone()
  
@@ -34,7 +80,7 @@ index 902beac..542493e 100644
      def _place_player(self, match_id, slot, player_id):
          if player_id is None:
              return
-@@ -1237,6 +1249,7 @@ class DoubleEliminationEngine:
+@@ -1237,6 +1261,7 @@ class DoubleEliminationEngine:
          elif (m["p1_id"] or m["p2_id"]) and m["bracket"] != "final":
              pass
          self._resolve_if_bye(match_id)
@@ -42,7 +88,7 @@ index 902beac..542493e 100644
  
      def _resolve_if_bye(self, match_id):
          m = self._get_match(match_id)
-@@ -1251,6 +1264,7 @@ class DoubleEliminationEngine:
+@@ -1251,6 +1276,7 @@ class DoubleEliminationEngine:
                      "UPDATE matches SET status='bye', winner_id=? WHERE id=?",
                      (winner, match_id))
                  self.db.conn.commit()
@@ -50,7 +96,7 @@ index 902beac..542493e 100644
                  self._propagate(match_id, winner, loser_id=None, is_bye=True)
  
      def _propagate(self, match_id, winner_id, loser_id, is_bye=False):
-@@ -1304,6 +1318,7 @@ class DoubleEliminationEngine:
+@@ -1304,6 +1330,7 @@ class DoubleEliminationEngine:
              "UPDATE matches SET winner_id=?, status='done' WHERE id=?",
              (winner_id, match_id))
          self.db.conn.commit()
@@ -58,7 +104,7 @@ index 902beac..542493e 100644
  
          if m["bracket"] == "final" and m["round_name"] == "Гранд-финал":
              # Определяем у кого 0 поражений до этого матча (пришёл из верхней сетки)
-@@ -1340,6 +1355,7 @@ class DoubleEliminationEngine:
+@@ -1340,6 +1367,7 @@ class DoubleEliminationEngine:
                          "round_name='Супер-финал (переигровка)' WHERE id=?",
                          (undefeated, defeated_once, gf2["id"]))
                      self.db.conn.commit()
@@ -66,7 +112,7 @@ index 902beac..542493e 100644
              else:
                  # Непобеждённый выиграл — турнир завершён, переигровка не нужна
                  gf2 = self._get_match(m["win_next_id"])
-@@ -1347,6 +1363,7 @@ class DoubleEliminationEngine:
+@@ -1347,6 +1375,7 @@ class DoubleEliminationEngine:
                      self.db.conn.execute(
                          "UPDATE matches SET status='bye' WHERE id=?", (gf2["id"],))
                      self.db.conn.commit()
@@ -74,7 +120,25 @@ index 902beac..542493e 100644
              return
  
          if m["bracket"] == "final" and "переигровка" in m["round_name"]:
-@@ -1850,6 +1867,17 @@ class SingleEliminationEngine:
+@@ -1747,7 +1776,17 @@ class SingleEliminationEngine:
+             tournament_id, category_id, hand, participant_ids,
+         )
+ 
++    def _sync_bracket_reset(self, category_id, hand):
++        """См. одноимённый метод в DoubleEliminationEngine — без него
++        старые матчи остаются висеть на сайте после пересоздания сетки."""
++        try:
++            local_mids = [m["id"] for m in self.db.get_matches(category_id, hand)]
++            sync_manager.on_bracket_reset(category_id, hand, local_mids)
++        except Exception as e:
++            print(f"[sync] _sync_bracket_reset: {e}")
++
+     def _generate_bracket_impl(self, tournament_id, category_id, hand, participant_ids):
++        self._sync_bracket_reset(category_id, hand)
+         self.db.clear_matches(category_id, hand)
+ 
+         n = len(participant_ids)
+@@ -1850,6 +1889,17 @@ class SingleEliminationEngine:
      def _get_match(self, match_id):
          return self.db.conn.execute("SELECT * FROM matches WHERE id=?", (match_id,)).fetchone()
  
@@ -92,7 +156,7 @@ index 902beac..542493e 100644
      def _place_player(self, match_id, slot, player_id):
          if player_id is None:
              return
-@@ -1869,6 +1897,7 @@ class SingleEliminationEngine:
+@@ -1869,6 +1919,7 @@ class SingleEliminationEngine:
              self.db.conn.execute("UPDATE matches SET status='pending' WHERE id=?", (match_id,))
              self.db.conn.commit()
          self._resolve_if_bye(match_id)
@@ -100,7 +164,7 @@ index 902beac..542493e 100644
  
      def _resolve_if_bye(self, match_id):
          m = self._get_match(match_id)
-@@ -1881,6 +1910,7 @@ class SingleEliminationEngine:
+@@ -1881,6 +1932,7 @@ class SingleEliminationEngine:
                      "UPDATE matches SET status='bye', winner_id=? WHERE id=?",
                      (winner, match_id))
                  self.db.conn.commit()
@@ -108,7 +172,7 @@ index 902beac..542493e 100644
                  if m["win_next_id"]:
                      self._place_player(m["win_next_id"], m["win_next_slot"], winner)
  
-@@ -1907,6 +1937,7 @@ class SingleEliminationEngine:
+@@ -1907,6 +1959,7 @@ class SingleEliminationEngine:
              "UPDATE matches SET winner_id=?, status='done' WHERE id=?",
              (winner_id, match_id))
          self.db.conn.commit()
@@ -116,8 +180,20 @@ index 902beac..542493e 100644
  
          if m["win_next_id"]:
              self._place_player(m["win_next_id"], m["win_next_slot"], winner_id)
+@@ -2391,6 +2444,11 @@ class BracketWindow(ctk.CTkToplevel):
+         if not messagebox.askyesno("Сбросить сетку",
+                     "Все результаты поединков будут удалены. Продолжить?"):
+             return
++        try:
++            local_mids = [m["id"] for m in self.db.get_matches(self.category["id"], self.hand)]
++            sync_manager.on_bracket_reset(self.category["id"], self.hand, local_mids)
++        except Exception as e:
++            print(f"[sync] _reset_bracket: {e}")
+         self.db.clear_matches(self.category["id"], self.hand)
+         self._load_bracket()
+         messagebox.showinfo("Готово", "Сетка сброшена.")
 diff --git a/desktop-app/sync/api_client.py b/desktop-app/sync/api_client.py
-index 4aff747..5fb8424 100644
+index 4aff747..a37f14b 100644
 --- a/desktop-app/sync/api_client.py
 +++ b/desktop-app/sync/api_client.py
 @@ -131,9 +131,13 @@ class SyncApiClient:
@@ -136,12 +212,51 @@ index 4aff747..5fb8424 100644
          if winner_id is not None:
              body["winner_id"] = winner_id
          if p1_losses is not None:
+@@ -146,5 +150,11 @@ class SyncApiClient:
+             body["table_number"] = table_number
+         return self._request("PATCH", f"/matches/{remote_match_id}", json_body=body)
+ 
++    def delete_matches_for_category(self, remote_category_id, hand):
++        return self._request(
++            "DELETE", "/matches",
++            params={"category_id": remote_category_id, "hand": hand},
++        )
++
+     def ping(self):
+         return self._request("GET", "/ping")
 diff --git a/desktop-app/sync/sync_manager.py b/desktop-app/sync/sync_manager.py
-index 2a0fe8f..de5eda7 100644
+index 2a0fe8f..42fdeaf 100644
 --- a/desktop-app/sync/sync_manager.py
 +++ b/desktop-app/sync/sync_manager.py
-@@ -464,6 +464,8 @@ class SyncManager:
+@@ -462,8 +462,35 @@ class SyncManager:
  
+         return self._try("create_match", payload, go)
+ 
++    # ── сброс/пересоздание сетки категории ──────────────────────
++    def on_bracket_reset(self, category_id, hand, local_mids):
++        """Database.clear_matches удаляет матчи из sqlite напрямую, без
++        сети — иначе старые матчи (с их p1/p2) остаются висеть на сайте
++        и дают дубли пар в живой очереди. Чистим id_map/офлайн-очередь
++        для них и, если категория уже синкана, удаляем матчи на сервере."""
++        for mid in local_mids:
++            self.state.map_delete("match", mid)
++            self.state.purge_pending("create_match", "mid", mid)
++            self.state.purge_pending("update_match", "mid", mid)
++
++        remote_category_id = self.state.map_get("category", category_id)
++        if remote_category_id is None:
++            # Категория ещё не долетела до сервера — значит и матчей
++            # там нет, чистить нечего.
++            return None
++
++        payload = {"category_id": remote_category_id, "hand": hand}
++
++        def go():
++            self.api.delete_matches_for_category(remote_category_id, hand)
++            return True
++
++        return self._try("delete_matches", payload, go)
++
      def on_match_updated(self, mid, match: dict):
          remote_match_id = self.state.map_get("match", mid)
 +        remote_p1 = self.state.map_get("participant", match["p1_id"]) if match.get("p1_id") else None
@@ -149,7 +264,7 @@ index 2a0fe8f..de5eda7 100644
          remote_winner = (
              self.state.map_get("participant", match["winner_id"]) if match.get("winner_id") else None
          )
-@@ -476,6 +478,8 @@ class SyncManager:
+@@ -476,6 +503,8 @@ class SyncManager:
          def go():
              self.api.update_match(
                  remote_match_id,
@@ -158,7 +273,26 @@ index 2a0fe8f..de5eda7 100644
                  winner_id=remote_winner,
                  p1_losses=match.get("p1_losses"),
                  p2_losses=match.get("p2_losses"),
-@@ -757,13 +761,21 @@ class SyncManager:
+@@ -614,6 +643,18 @@ class SyncManager:
+                     raise
+                 return True
+ 
++            if operation == "delete_matches":
++                delete_fn = getattr(self.api, "delete_matches_for_category", None)
++                if delete_fn is None:
++                    return False
++                try:
++                    delete_fn(payload["category_id"], payload["hand"])
++                except ApiClientError as e:
++                    if e.status_code == 404:
++                        return True
++                    raise
++                return True
++
+             if operation == "create_competition":
+                 remote = self.api.create_competition(
+                     payload["name"], payload["date"], payload["location"],
+@@ -757,13 +798,21 @@ class SyncManager:
                      # пропустит эту строку и вернётся к ней позже.
                      print(f"[sync] DEBUG: update_match ждёт create_match mid={payload['mid']}")
                      return None

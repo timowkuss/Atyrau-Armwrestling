@@ -877,7 +877,19 @@ class DoubleEliminationEngine:
             tournament_id, category_id, hand, participant_ids,
         )
 
+    def _sync_bracket_reset(self, category_id, hand):
+        """clear_matches ниже удаляет старые матчи только локально —
+        без этого на сайте остаются висеть прежние пары и дублируются
+        с новосгенерированными в живой очереди. Снимаем список id ДО
+        удаления и просим sync_manager убрать их и на сервере."""
+        try:
+            local_mids = [m["id"] for m in self.db.get_matches(category_id, hand)]
+            sync_manager.on_bracket_reset(category_id, hand, local_mids)
+        except Exception as e:
+            print(f"[sync] _sync_bracket_reset: {e}")
+
     def _generate_bracket_impl(self, tournament_id, category_id, hand, participant_ids):
+        self._sync_bracket_reset(category_id, hand)
         self.db.clear_matches(category_id, hand)
 
         n = len(participant_ids)
@@ -1241,6 +1253,18 @@ class DoubleEliminationEngine:
     def _get_match(self, match_id):
         return self.db.conn.execute("SELECT * FROM matches WHERE id=?", (match_id,)).fetchone()
 
+    def _sync_match(self, match_id):
+        """Двигатель сетки пишет в matches напрямую через SQL (в обход
+        Database.save_match), поэтому обёртка _synced_save_match не видит
+        эти изменения и на сайт ничего не летит — очередь/табло замирают.
+        Дёргаем sync_manager вручную после каждого изменения матча."""
+        try:
+            m = self._get_match(match_id)
+            if m:
+                sync_manager.on_match_updated(match_id, dict(m))
+        except Exception as e:
+            print(f"[sync] _sync_match({match_id}): {e}")
+
     def _place_player(self, match_id, slot, player_id):
         if player_id is None:
             return
@@ -1262,6 +1286,7 @@ class DoubleEliminationEngine:
         elif (m["p1_id"] or m["p2_id"]) and m["bracket"] != "final":
             pass
         self._resolve_if_bye(match_id)
+        self._sync_match(match_id)
 
     def _resolve_if_bye(self, match_id):
         m = self._get_match(match_id)
@@ -1276,6 +1301,7 @@ class DoubleEliminationEngine:
                     "UPDATE matches SET status='bye', winner_id=? WHERE id=?",
                     (winner, match_id))
                 self.db.conn.commit()
+                self._sync_match(match_id)
                 self._propagate(match_id, winner, loser_id=None, is_bye=True)
 
     def _propagate(self, match_id, winner_id, loser_id, is_bye=False):
@@ -1329,6 +1355,7 @@ class DoubleEliminationEngine:
             "UPDATE matches SET winner_id=?, status='done' WHERE id=?",
             (winner_id, match_id))
         self.db.conn.commit()
+        self._sync_match(match_id)
 
         if m["bracket"] == "final" and m["round_name"] == "Гранд-финал":
             # Определяем у кого 0 поражений до этого матча (пришёл из верхней сетки)
@@ -1365,6 +1392,7 @@ class DoubleEliminationEngine:
                         "round_name='Супер-финал (переигровка)' WHERE id=?",
                         (undefeated, defeated_once, gf2["id"]))
                     self.db.conn.commit()
+                    self._sync_match(gf2["id"])
             else:
                 # Непобеждённый выиграл — турнир завершён, переигровка не нужна
                 gf2 = self._get_match(m["win_next_id"])
@@ -1372,6 +1400,7 @@ class DoubleEliminationEngine:
                     self.db.conn.execute(
                         "UPDATE matches SET status='bye' WHERE id=?", (gf2["id"],))
                     self.db.conn.commit()
+                    self._sync_match(gf2["id"])
             return
 
         if m["bracket"] == "final" and "переигровка" in m["round_name"]:
@@ -1772,7 +1801,17 @@ class SingleEliminationEngine:
             tournament_id, category_id, hand, participant_ids,
         )
 
+    def _sync_bracket_reset(self, category_id, hand):
+        """См. одноимённый метод в DoubleEliminationEngine — без него
+        старые матчи остаются висеть на сайте после пересоздания сетки."""
+        try:
+            local_mids = [m["id"] for m in self.db.get_matches(category_id, hand)]
+            sync_manager.on_bracket_reset(category_id, hand, local_mids)
+        except Exception as e:
+            print(f"[sync] _sync_bracket_reset: {e}")
+
     def _generate_bracket_impl(self, tournament_id, category_id, hand, participant_ids):
+        self._sync_bracket_reset(category_id, hand)
         self.db.clear_matches(category_id, hand)
 
         n = len(participant_ids)
@@ -1875,6 +1914,17 @@ class SingleEliminationEngine:
     def _get_match(self, match_id):
         return self.db.conn.execute("SELECT * FROM matches WHERE id=?", (match_id,)).fetchone()
 
+    def _sync_match(self, match_id):
+        """См. одноимённый метод в DoubleEliminationEngine: движок пишет
+        матчи в обход Database.save_match, так что без ручного вызова
+        синка изменения (в т.ч. результат поединка) на сайт не долетают."""
+        try:
+            m = self._get_match(match_id)
+            if m:
+                sync_manager.on_match_updated(match_id, dict(m))
+        except Exception as e:
+            print(f"[sync] _sync_match({match_id}): {e}")
+
     def _place_player(self, match_id, slot, player_id):
         if player_id is None:
             return
@@ -1894,6 +1944,7 @@ class SingleEliminationEngine:
             self.db.conn.execute("UPDATE matches SET status='pending' WHERE id=?", (match_id,))
             self.db.conn.commit()
         self._resolve_if_bye(match_id)
+        self._sync_match(match_id)
 
     def _resolve_if_bye(self, match_id):
         m = self._get_match(match_id)
@@ -1906,6 +1957,7 @@ class SingleEliminationEngine:
                     "UPDATE matches SET status='bye', winner_id=? WHERE id=?",
                     (winner, match_id))
                 self.db.conn.commit()
+                self._sync_match(match_id)
                 if m["win_next_id"]:
                     self._place_player(m["win_next_id"], m["win_next_slot"], winner)
 
@@ -1932,6 +1984,7 @@ class SingleEliminationEngine:
             "UPDATE matches SET winner_id=?, status='done' WHERE id=?",
             (winner_id, match_id))
         self.db.conn.commit()
+        self._sync_match(match_id)
 
         if m["win_next_id"]:
             self._place_player(m["win_next_id"], m["win_next_slot"], winner_id)
@@ -2536,6 +2589,11 @@ class BracketWindow(ctk.CTkToplevel):
         if not messagebox.askyesno("Сбросить сетку",
                     "Все результаты поединков будут удалены. Продолжить?"):
             return
+        try:
+            local_mids = [m["id"] for m in self.db.get_matches(self.category["id"], self.hand)]
+            sync_manager.on_bracket_reset(self.category["id"], self.hand, local_mids)
+        except Exception as e:
+            print(f"[sync] _reset_bracket: {e}")
         self.db.clear_matches(self.category["id"], self.hand)
         self._load_bracket()
         messagebox.showinfo("Готово", "Сетка сброшена.")
