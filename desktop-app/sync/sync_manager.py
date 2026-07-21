@@ -6,6 +6,7 @@
 """
 
 import sqlite3
+import threading
 from pathlib import Path
 
 from .api_client import ApiClientError, SyncApiClient
@@ -35,6 +36,14 @@ class SyncManager:
         self.force_queue = False
         self._last_flush_attempt = 0
         self._flush_in_progress = False
+        # Настоящая блокировка на случай, если flush_pending() вызовут
+        # из нескольких мест одновременно (фоновый поток после генерации
+        # сетки, периодический авто-тик UI, кнопка "Синхронизация") —
+        # без неё оба вызова читают одну и ту же офлайн-очередь и оба
+        # успевают отправить create_match для одних и тех же матчей до
+        # того, как первый пометит их выполненными, что даёт дубли на
+        # сервере (см. flush_pending).
+        self._flush_lock = threading.Lock()
 
     def is_online(self) -> bool:
         """Быстрая проверка доступности сервера через ping."""
@@ -50,18 +59,15 @@ class SyncManager:
         (succeeded, remaining) или None если пытаться не стоит."""
         import time as _time
         now = _time.time()
-        if self._flush_in_progress:
-            return None
         if self.state.pending_count() == 0:
             return None
         if now - self._last_flush_attempt < 15:
             return None
         self._last_flush_attempt = now
-        self._flush_in_progress = True
-        try:
-            return self.flush_pending()
-        finally:
-            self._flush_in_progress = False
+        # flush_pending() сам себя защищает через _flush_lock (см. ниже),
+        # так что если генерация сетки уже гонит очередь в фоновом потоке,
+        # этот вызов просто сразу вернёт None вместо дублирования отправки.
+        return self.flush_pending()
 
     # ── внутренний хелпер: попытка + запись в очередь при неудаче ──
     def _try(self, operation: str, retry_payload: dict, fn):
@@ -582,25 +588,37 @@ class SyncManager:
           None  — ещё не готова (зависит от другой операции), пропускаем
           False — ошибка, стоп и повторим позже
         """
-        succeeded = 0
-        for row in self.state.pending():
-            if not self.state.exists(row["id"]):
-                continue
-            op, payload = row["operation"], __import__("json").loads(row["payload"])
-            print(f"[sync] TRY: {op} payload={payload}")
-            ok = self._replay(op, payload)
-            print(f"[sync] RESULT: {op} -> {ok}")
+        # Не блокируем поток — если другой flush уже идёт (например, фоновый
+        # поток после генерации сетки), просто выходим без работы: тот,
+        # другой вызов доберёт всю текущую очередь сам. Без этой проверки
+        # два одновременных flush_pending() читают одну и ту же очередь и
+        # оба успевают выполнить create_match для одних и тех же матчей до
+        # mark_done() — отсюда дубли матчей на сервере.
+        if not self._flush_lock.acquire(blocking=False):
+            print("[sync] flush_pending: уже выполняется в другом потоке — пропуск")
+            return 0, self.state.pending_count()
+        try:
+            succeeded = 0
+            for row in self.state.pending():
+                if not self.state.exists(row["id"]):
+                    continue
+                op, payload = row["operation"], __import__("json").loads(row["payload"])
+                print(f"[sync] TRY: {op} payload={payload}")
+                ok = self._replay(op, payload)
+                print(f"[sync] RESULT: {op} -> {ok}")
 
-            if ok is True:
-                self.state.mark_done(row["id"])
-                succeeded += 1
-            elif ok is None:
-                # Ещё не готово (create_match не прошёл) — пропускаем,
-                # оставляем в очереди, НЕ останавливаем flush.
-                continue
-            else:
-                break
-        return succeeded, self.state.pending_count()
+                if ok is True:
+                    self.state.mark_done(row["id"])
+                    succeeded += 1
+                elif ok is None:
+                    # Ещё не готово (create_match не прошёл) — пропускаем,
+                    # оставляем в очереди, НЕ останавливаем flush.
+                    continue
+                else:
+                    break
+            return succeeded, self.state.pending_count()
+        finally:
+            self._flush_lock.release()
 
     def _replay(self, operation: str, payload: dict) -> bool:
         try:
