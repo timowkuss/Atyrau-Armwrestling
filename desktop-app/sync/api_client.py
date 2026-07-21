@@ -138,9 +138,14 @@ class SyncApiClient:
             "is_bye": is_bye, "status": status, "table_number": table_number,
         })
 
-    def update_match(self, remote_match_id, winner_id=None, p1_losses=None,
+    def update_match(self, remote_match_id, p1_id=None, p2_id=None,
+                      winner_id=None, p1_losses=None,
                       p2_losses=None, status=None, table_number=UNSET):
         body = {}
+        if p1_id is not None:
+            body["p1_id"] = p1_id
+        if p2_id is not None:
+            body["p2_id"] = p2_id
         if winner_id is not None:
             body["winner_id"] = winner_id
         if p1_losses is not None:

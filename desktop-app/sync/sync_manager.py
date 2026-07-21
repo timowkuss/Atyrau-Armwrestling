@@ -840,9 +840,13 @@ class SyncManager:
                     {"table_number": payload["table_number"]}
                     if "table_number" in payload else {}
                 )
+                remote_p1 = self.state.map_get("participant", payload["p1_id"]) if payload.get("p1_id") else None
+                remote_p2 = self.state.map_get("participant", payload["p2_id"]) if payload.get("p2_id") else None
                 try:
                     self.api.update_match(
-                        remote_match_id, winner_id=remote_winner,
+                        remote_match_id,
+                        p1_id=remote_p1, p2_id=remote_p2,
+                        winner_id=remote_winner,
                         p1_losses=payload.get("p1_losses"), p2_losses=payload.get("p2_losses"),
                         status=payload.get("status"), **table_number_kwargs,
                     )
