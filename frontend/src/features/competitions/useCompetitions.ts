@@ -26,25 +26,23 @@ export function useCompetitionResults(id: number) {
   })
 }
 
+// Сетка турнира: во время турнира пары/победители меняются по ходу
+// раундов, поэтому опрашиваем сервер так же, как и живую очередь по
+// столам — иначе зритель видит статичный снимок на момент открытия
+// страницы, пока не обновит вкладку руками.
 export function useCompetitionBracket(id: number) {
   return useQuery({
     queryKey: ['competition', id, 'bracket'],
     queryFn: () => api.competitions.bracket(id),
     enabled: Number.isFinite(id),
+    refetchInterval: 10000,
+    refetchIntervalInBackground: false,
   })
 }
 
 // Живая очередь по столам — во время турнира меняется каждую минуту,
 // поэтому опрашиваем сервер, а не полагаемся на один запрос при заходе
 // на страницу. Останавливаем опрос, если вкладка не активна.
-export function useCompetitionParticipants(id: number) {
-  return useQuery({
-    queryKey: ['competition', id, 'participants'],
-    queryFn: () => api.competitions.participants(id),
-    enabled: Number.isFinite(id),
-  })
-}
-
 export function useCompetitionQueue(id: number) {
   return useQuery({
     queryKey: ['competition', id, 'queue'],
