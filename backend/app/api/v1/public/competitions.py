@@ -221,7 +221,7 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
         tables.setdefault(match.table_number, []).append(pair)
 
     return [
-        TableQueueOut(table_number=tnum, current=pairs[0], next=pairs[1:5])
+        TableQueueOut(table_number=tnum, current=pairs[0], next=pairs[1:4])
         for tnum, pairs in sorted(tables.items())
     ]
 
