@@ -16,6 +16,7 @@ from app.schemas.competitions import (
     CategoryOut,
     CompetitionDetailOut,
     CompetitionListOut,
+    ParticipantOut,
     QueuePairOut,
     ResultOut,
     TableQueueOut,
@@ -222,6 +223,34 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
     return [
         TableQueueOut(table_number=tnum, current=pairs[0], next=pairs[1:5])
         for tnum, pairs in sorted(tables.items())
+    ]
+
+
+@router.get("/{competition_id}/participants", response_model=list[ParticipantOut])
+def get_competition_participants(competition_id: int, db: Session = Depends(get_db)):
+    """Список участников соревнования, сгруппированный по категориям."""
+    rows = (
+        db.query(
+            CompetitionParticipant,
+            Category.name.label("category_name"),
+            Category.hand.label("hand"),
+        )
+        .join(Category, CompetitionParticipant.category_id == Category.id)
+        .join(Athlete, CompetitionParticipant.athlete_id == Athlete.id)
+        .filter(CompetitionParticipant.competition_id == competition_id)
+        .order_by(Category.name, Athlete.full_name)
+        .all()
+    )
+    return [
+        ParticipantOut(
+            athlete_id=cp.athlete_id,
+            athlete_name=cp.athlete.full_name,
+            category_name=cat_name,
+            hand=hand,
+            weight_at_event=cp.weight_at_event,
+            club_at_event=cp.club_at_event,
+        )
+        for cp, cat_name, hand in rows
     ]
 
 

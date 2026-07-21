@@ -3494,6 +3494,7 @@ class App(ctk.CTk):
         self._build_ui()
         self._refresh_status_badge()
         self._refresh_tournament_list()
+        self._start_auto_sync()
 
     def _build_ui(self):
         self.sidebar = ctk.CTkFrame(self, width=240, corner_radius=0, fg_color="#161b22")
@@ -4560,6 +4561,35 @@ class App(ctk.CTk):
         if messagebox.askyesno("Выход", "Закрыть программу?"):
             self.db.close()
             self.destroy()
+
+    def _start_auto_sync(self):
+        """Запускает периодическую проверку подключения и авто-flush очереди."""
+        self.after(10000, self._auto_sync_tick)
+
+    def _auto_sync_tick(self):
+        from sync.sync_manager import sync_manager
+        if sync_manager.state.pending_count() > 0:
+            result = sync_manager.try_auto_flush()
+            if result:
+                succeeded, remaining = result
+                if succeeded > 0:
+                    print(f"[auto-sync] отправлено {succeeded}, осталось {remaining}")
+                    self._refresh_status_badge()
+                    if remaining == 0:
+                        self._show_sync_toast("Все данные синхронизированы")
+        self.after(10000, self._auto_sync_tick)
+
+    def _show_sync_toast(self, message):
+        import tkinter as tk
+        toast = tk.Toplevel(self)
+        toast.overrideredirect(True)
+        toast.configure(bg="#1a3a5a")
+        x = self.winfo_x() + self.winfo_width() // 2 - 150
+        y = self.winfo_y() + self.winfo_height() - 60
+        toast.geometry(f"300x36+{x}+{y}")
+        tk.Label(toast, text=message, bg="#1a3a5a", fg="#e0e0e0",
+                 font=("Segoe UI", 11)).pack(expand=True)
+        toast.after(3000, toast.destroy)
 
 
 # ════

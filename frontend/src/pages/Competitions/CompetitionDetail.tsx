@@ -1,12 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
-import { useCompetition, useCompetitionBracket, useCompetitionQueue, useCompetitionResults } from '@/features/competitions/useCompetitions'
+import { useCompetition, useCompetitionBracket, useCompetitionParticipants, useCompetitionResults } from '@/features/competitions/useCompetitions'
 import { api } from '@/lib/api'
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/States'
 import { MedalBadge } from '@/components/ui/Medal'
 import { BracketBoard } from '@/components/ui/BracketBoard'
-import { LiveQueueBoard } from '@/components/ui/LiveQueueBoard'
-import type { CompetitionStatus } from '@/types/api'
+import type { CompetitionStatus, ParticipantOut } from '@/types/api'
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' })
@@ -45,13 +44,48 @@ function statusBadge(status: CompetitionStatus) {
   )
 }
 
+function ParticipantList({ participants }: { participants: ParticipantOut[] }) {
+  if (participants.length === 0) return null
+
+  const byCategory = participants.reduce<Record<string, ParticipantOut[]>>((acc, p) => {
+    ;(acc[p.category_name] ??= []).push(p)
+    return acc
+  }, {})
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      {Object.entries(byCategory).map(([category, members]) => (
+        <div key={category} className="plate rounded-[var(--radius-rivet)] p-5">
+          <div className="flex items-center justify-between">
+            <h3 className="font-display text-sm text-brass">{category}</h3>
+            <span className="text-eyebrow text-steel">{members.length}</span>
+          </div>
+          <ol className="mt-3 space-y-1.5">
+            {members.map((m, i) => (
+              <li key={m.athlete_id} className="flex items-baseline gap-2 text-sm">
+                <span className="shrink-0 w-5 text-right font-mono text-steel-dim">{i + 1}.</span>
+                <Link to={`/athletes/${m.athlete_id}`} className="truncate text-bone hover:text-brass">
+                  {m.athlete_name}
+                </Link>
+                {m.weight_at_event != null && (
+                  <span className="shrink-0 font-mono text-xs text-steel">{m.weight_at_event} кг</span>
+                )}
+              </li>
+            ))}
+          </ol>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function CompetitionDetail() {
   const { id } = useParams<{ id: string }>()
   const competitionId = Number(id)
 
   const competition = useCompetition(competitionId)
   const results = useCompetitionResults(competitionId)
-  const queue = useCompetitionQueue(competitionId)
+  const participants = useCompetitionParticipants(competitionId)
   const bracket = useCompetitionBracket(competitionId)
   const photos = useQuery({
     queryKey: ['competition', competitionId, 'photos'],
@@ -74,7 +108,6 @@ export function CompetitionDetail() {
   if (!competition.data) return null
 
   const c = competition.data
-  const isActive = c.status === 'in_progress'
   const isFinished = c.status === 'completed'
   const resultsByCategory = (results.data ?? []).reduce<Record<string, typeof results.data>>((acc, r) => {
     ;(acc[r.category_name] ??= []).push(r)
@@ -94,8 +127,9 @@ export function CompetitionDetail() {
         </div>
         <h1 className="mt-2 font-display text-2xl text-bone sm:text-3xl">{c.name}</h1>
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-sm text-steel">
+          {c.location_city_name && <span>{c.location_city_name}</span>}
+          <span>{c.organizer ?? 'Федерация армрестлинга Атырау'}</span>
           <span>{c.participants_count} участников</span>
-          <span>{c.categories.length} категорий</span>
         </div>
         {formatLabel(c).length > 0 && (
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-steel-dim">
@@ -127,33 +161,25 @@ export function CompetitionDetail() {
         </div>
       )}
 
-      {(isActive || queue.data?.some(t => t.current || t.next.length > 0)) && (
+      {participants.data && participants.data.length > 0 && (
         <section className="mt-10">
-          <div className="flex items-center justify-between gap-4">
-            <h2 className="font-display text-xl text-bone">Очередь схваток</h2>
-            {isActive && (
-              <a
-                href={`/competitions/${competitionId}/board`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-eyebrow rounded-[var(--radius-rivet)] border border-steel-dim px-3 py-1.5 text-steel hover:border-brass hover:text-brass"
-              >
-                📺 Открыть табло
-              </a>
-            )}
-          </div>
+          <h2 className="font-display text-xl text-bone">Участники</h2>
           <div className="rivet-line my-4" />
-          {queue.data && queue.data.length > 0 ? (
-            <LiveQueueBoard tables={queue.data} />
-          ) : (
-            <p className="text-sm text-steel-dim">Очередь пуста</p>
-          )}
+          <ParticipantList participants={participants.data} />
+        </section>
+      )}
+
+      {bracket.data && bracket.data.length > 0 && (
+        <section className="mt-10 mb-16">
+          <h2 className="font-display text-xl text-bone">Турнирная сетка</h2>
+          <div className="rivet-line my-4" />
+          <BracketBoard matches={bracket.data} />
         </section>
       )}
 
       <section className={`mt-10 ${bracket.data && bracket.data.length > 0 ? '' : 'mb-16'}`}>
         <h2 className="font-display text-xl text-bone">
-          {isFinished ? 'Результаты' : isActive ? 'Ход турнира' : 'Результаты'}
+          {isFinished ? 'Результаты' : 'Результаты'}
         </h2>
         <div className="rivet-line my-4" />
         {results.isLoading && <LoadingState label="Загрузка результатов" />}
@@ -189,14 +215,6 @@ export function CompetitionDetail() {
           </div>
         ))}
       </section>
-
-      {bracket.data && bracket.data.length > 0 && (
-        <section className="mt-10 mb-16">
-          <h2 className="font-display text-xl text-bone">Турнирная сетка</h2>
-          <div className="rivet-line my-4" />
-          <BracketBoard matches={bracket.data} />
-        </section>
-      )}
     </div>
   )
 }

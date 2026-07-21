@@ -108,6 +108,15 @@ export interface CategoryOut {
   hand: Hand
 }
 
+export interface ParticipantOut {
+  athlete_id: number
+  athlete_name: string
+  category_name: string
+  hand: Hand
+  weight_at_event: number | null
+  club_at_event: string | null
+}
+
 export interface CompetitionDetail {
   id: number
   name: string

@@ -81,6 +81,7 @@ export const api = {
     results: (id: number) => request<ResultOut[]>(`/public/competitions/${id}/results`),
     bracket: (id: number) => request<BracketMatchOut[]>(`/public/competitions/${id}/bracket`),
     queue: (id: number) => request<TableQueueOut[]>(`/public/competitions/${id}/queue`),
+    participants: (id: number) => request<import('@/types/api').ParticipantOut[]>(`/public/competitions/${id}/participants`),
     photos: (id: number) => request<import('@/types/api').GalleryPhoto[]>(`/public/competitions/${id}/photos`),
   },
   news: {

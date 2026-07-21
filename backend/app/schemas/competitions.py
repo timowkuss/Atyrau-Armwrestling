@@ -71,6 +71,15 @@ class TableQueueOut(BaseModel):
     next: list[QueuePairOut]
 
 
+class ParticipantOut(BaseModel):
+    athlete_id: int
+    athlete_name: str
+    category_name: str
+    hand: str
+    weight_at_event: float | None
+    club_at_event: str | None
+
+
 class CompetitionAdminUpdate(BaseModel):
     """Только информационная часть соревнования — сознательно НЕ содержит
     полей сетки/результатов/участников/очков. Их физически нельзя передать

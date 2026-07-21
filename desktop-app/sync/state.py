@@ -99,6 +99,15 @@ class SyncState:
             )
             self.conn.commit()
 
+    def map_delete(self, entity_type: str, local_id: int) -> None:
+        """Удаляет связку из id_map (например, если матч был удалён на сервере)."""
+        with self._lock:
+            self.conn.execute(
+                "DELETE FROM id_map WHERE entity_type=? AND local_id=?",
+                (entity_type, local_id),
+            )
+            self.conn.commit()
+
     # ── снимок данных турнира для самолечения ────────────────
     def save_competition_source(self, tid: int, name: str, date: str, location: str | None,
                                  weight_tolerance: float | None = None,
@@ -172,6 +181,23 @@ class SyncState:
             for row in rows:
                 payload = json.loads(row["payload"])
                 if payload.get(id_key) == id_value:
+                    self.conn.execute("DELETE FROM pending_queue WHERE id=?", (row["id"],))
+                    removed += 1
+            if removed:
+                self.conn.commit()
+            return removed
+
+    def purge_pending_by_operation(self, operation: str, filter_fn=None) -> int:
+        """Удаляет из очереди операции по operation и опциональному фильтру.
+        filter_fn(payload) -> bool: если True — удаляем."""
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT id, payload FROM pending_queue WHERE operation=?", (operation,)
+            ).fetchall()
+            removed = 0
+            for row in rows:
+                payload = json.loads(row["payload"])
+                if filter_fn is None or filter_fn(payload):
                     self.conn.execute("DELETE FROM pending_queue WHERE id=?", (row["id"],))
                     removed += 1
             if removed:

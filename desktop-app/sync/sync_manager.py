@@ -33,6 +33,35 @@ class SyncManager:
         # flush_pending() — так матчи всё равно долетают до сайта, просто
         # без блокировки интерфейса.
         self.force_queue = False
+        self._last_flush_attempt = 0
+        self._flush_in_progress = False
+
+    def is_online(self) -> bool:
+        """Быстрая проверка доступности сервера через ping."""
+        try:
+            self.api.ping()
+            return True
+        except Exception:
+            return False
+
+    def try_auto_flush(self) -> tuple[int, int] | None:
+        """Вызывается из таймера UI. Если есть очередь и прошло достаточно
+        времени с последней попытки — пробует отправить. Возвращает
+        (succeeded, remaining) или None если пытаться не стоит."""
+        import time as _time
+        now = _time.time()
+        if self._flush_in_progress:
+            return None
+        if self.state.pending_count() == 0:
+            return None
+        if now - self._last_flush_attempt < 15:
+            return None
+        self._last_flush_attempt = now
+        self._flush_in_progress = True
+        try:
+            return self.flush_pending()
+        finally:
+            self._flush_in_progress = False
 
     # ── внутренний хелпер: попытка + запись в очередь при неудаче ──
     def _try(self, operation: str, retry_payload: dict, fn):
@@ -636,15 +665,22 @@ class SyncManager:
                 if remote_athlete_id is None:
                     print(f"[sync] DEBUG: update_athlete ждёт create_athlete aid={payload['aid']}")
                     return None
-                self.api.update_athlete(
-                    remote_athlete_id,
-                    full_name=f"{payload['first_name']} {payload['last_name']}".strip(),
-                    club_name=payload.get("club") or None,
-                    birth_date=payload.get("birth_date"),
-                    gender=payload.get("gender"),
-                    rank=payload.get("rank") or None,
-                    photo_path=payload.get("photo_path") or None,
-                )
+                try:
+                    self.api.update_athlete(
+                        remote_athlete_id,
+                        full_name=f"{payload['first_name']} {payload['last_name']}".strip(),
+                        club_name=payload.get("club") or None,
+                        birth_date=payload.get("birth_date"),
+                        gender=payload.get("gender"),
+                        rank=payload.get("rank") or None,
+                        photo_path=payload.get("photo_path") or None,
+                    )
+                except ApiClientError as e:
+                    if e.status_code == 404:
+                        self.state.map_delete("athlete", payload["aid"])
+                        print(f"[sync] update_athlete aid={payload['aid']}: 404 — удалён на сервере")
+                        return True
+                    raise
                 return True
 
             if operation == "create_participant":
@@ -691,15 +727,25 @@ class SyncManager:
                     self.state.map_get("participant", payload["winner_id"])
                     if payload.get("winner_id") else None
                 )
-                remote = self.api.create_match(
-                    category_id=remote_category_id, hand=payload.get("hand", "Правая"),
-                    round_name=payload.get("round_name"), bracket=payload.get("bracket", "winners"),
-                    match_order=payload.get("match_order", 0), stage=payload.get("stage", 0),
-                    p1_id=remote_p1, p2_id=remote_p2, winner_id=remote_winner,
-                    p1_losses=payload.get("p1_losses", 0), p2_losses=payload.get("p2_losses", 0),
-                    is_bye=bool(payload.get("is_bye", 0)), status=payload.get("status", "pending"),
-                    table_number=payload.get("table_number"),
-                )
+                try:
+                    remote = self.api.create_match(
+                        category_id=remote_category_id, hand=payload.get("hand", "Правая"),
+                        round_name=payload.get("round_name"), bracket=payload.get("bracket", "winners"),
+                        match_order=payload.get("match_order", 0), stage=payload.get("stage", 0),
+                        p1_id=remote_p1, p2_id=remote_p2, winner_id=remote_winner,
+                        p1_losses=payload.get("p1_losses", 0), p2_losses=payload.get("p2_losses", 0),
+                        is_bye=bool(payload.get("is_bye", 0)), status=payload.get("status", "pending"),
+                        table_number=payload.get("table_number"),
+                    )
+                except ApiClientError as e:
+                    if e.status_code == 404:
+                        # Категория/соревнование удалены на сервере —
+                        # гасим create_match и связанный update_match
+                        self.state.map_delete("match", payload["mid"])
+                        self.state.purge_pending("update_match", "mid", payload["mid"])
+                        print(f"[sync] create_match mid={payload['mid']}: 404 — категория удалена на сервере")
+                        return True
+                    raise
                 self.state.map_set("match", payload["mid"], remote["id"])
                 return True
 
@@ -715,11 +761,19 @@ class SyncManager:
                     self.state.map_get("participant", payload["winner_id"])
                     if payload.get("winner_id") else None
                 )
-                self.api.update_match(
-                    remote_match_id, winner_id=remote_winner,
-                    p1_losses=payload.get("p1_losses"), p2_losses=payload.get("p2_losses"),
-                    status=payload.get("status"), table_number=payload.get("table_number"),
-                )
+                try:
+                    self.api.update_match(
+                        remote_match_id, winner_id=remote_winner,
+                        p1_losses=payload.get("p1_losses"), p2_losses=payload.get("p2_losses"),
+                        status=payload.get("status"), table_number=payload.get("table_number"),
+                    )
+                except ApiClientError as e:
+                    if e.status_code == 404:
+                        # Матч удалён на сервере — чистим id_map и очередь
+                        self.state.map_delete("match", payload["mid"])
+                        print(f"[sync] update_match mid={payload['mid']}: 404 — матч удалён на сервере, пропускаем")
+                        return True
+                    raise
                 return True
 
         except ApiClientError as e:
