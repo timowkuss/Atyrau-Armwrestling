@@ -1,11 +1,12 @@
-import { useParams } from 'react-router-dom'
+import { useMemo } from 'react'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { useCompetition, useCompetitionQueue } from '@/features/competitions/useCompetitions'
 import type { TableQueueOut, QueuePairOut } from '@/types/api'
 
 function PairBlock({ pair, label }: { pair: QueuePairOut; label?: string }) {
   return (
     <div className="flex flex-col items-center gap-1">
-      <p className="font-mono text-xs text-steel">{pair.category_name}{pair.round_name ? ` · ${pair.round_name}` : ''}</p>
+      <p className="font-mono text-xs text-steel">{pair.category_name} · {pair.hand}{pair.round_name ? ` · ${pair.round_name}` : ''}</p>
       <p className="font-display text-3xl font-bold leading-tight text-bone sm:text-4xl">
         {pair.p1_name}
         <span className="mx-2 text-steel">vs</span>
@@ -44,14 +45,102 @@ function QueueBlock({ table }: { table: TableQueueOut }) {
   )
 }
 
+// Табло по умолчанию показывает столы со всеми категориями турнира сразу.
+// Если нужно вывести на конкретный экран/проектор только часть категорий —
+// отметьте их в списке ниже. Выбор сохраняется в ссылке (?categories=...),
+// поэтому можно открыть /board с разным набором категорий на разных
+// экранах одновременно и просто сохранить/расшарить готовую ссылку.
+function CategoryFilter({
+  categories,
+  selected,
+  onToggle,
+  onClear,
+}: {
+  categories: { id: number; name: string }[]
+  selected: Set<string>
+  onToggle: (name: string) => void
+  onClear: () => void
+}) {
+  if (categories.length === 0) return null
+
+  return (
+    <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+      {categories.map((c) => {
+        const active = selected.has(c.name)
+        return (
+          <button
+            key={c.id}
+            onClick={() => onToggle(c.name)}
+            className={`rounded-full border px-3 py-1 font-mono text-xs transition-colors ${
+              active
+                ? 'border-emerald-400 bg-emerald-400/10 text-emerald-400'
+                : 'border-steel-dim/40 text-steel-dim hover:text-steel'
+            }`}
+          >
+            {c.name}
+          </button>
+        )
+      })}
+      {selected.size > 0 && (
+        <button
+          onClick={onClear}
+          className="rounded-full border border-steel-dim/40 px-3 py-1 font-mono text-xs text-steel-dim hover:text-steel"
+        >
+          Сбросить (показать все)
+        </button>
+      )}
+    </div>
+  )
+}
+
 export function CompetitionBoard() {
   const { id } = useParams<{ id: string }>()
   const competitionId = Number(id)
 
   const competition = useCompetition(competitionId)
   const queue = useCompetitionQueue(competitionId)
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const tables = queue.data ?? []
+  const selectedNames = useMemo(() => {
+    const raw = searchParams.get('categories')
+    if (!raw) return new Set<string>()
+    return new Set(raw.split(',').map((s) => decodeURIComponent(s)).filter(Boolean))
+  }, [searchParams])
+
+  const toggleCategory = (name: string) => {
+    const next = new Set(selectedNames)
+    if (next.has(name)) next.delete(name)
+    else next.add(name)
+
+    const params = new URLSearchParams(searchParams)
+    if (next.size === 0) params.delete('categories')
+    else params.set('categories', [...next].map(encodeURIComponent).join(','))
+    setSearchParams(params, { replace: true })
+  }
+
+  const clearFilter = () => {
+    const params = new URLSearchParams(searchParams)
+    params.delete('categories')
+    setSearchParams(params, { replace: true })
+  }
+
+  const allTables = queue.data ?? []
+
+  // Ничего не выбрано — показываем всё как есть, без фильтрации.
+  const tables = useMemo(() => {
+    if (selectedNames.size === 0) return allTables
+
+    return allTables
+      .map((table) => {
+        const pairs = [table.current, ...table.next].filter(
+          (p): p is QueuePairOut => p !== null && selectedNames.has(p.category_name),
+        )
+        if (pairs.length === 0) return null
+        return { table_number: table.table_number, current: pairs[0], next: pairs.slice(1) }
+      })
+      .filter((t): t is TableQueueOut => t !== null)
+  }, [allTables, selectedNames])
+
   const cols = tables.length > 1 ? 'sm:grid-cols-2' : ''
 
   return (
@@ -60,6 +149,13 @@ export function CompetitionBoard() {
         <p className="text-eyebrow text-center text-rust">
           {competition.data?.name ?? 'Табло'}
         </p>
+
+        <CategoryFilter
+          categories={competition.data?.categories ?? []}
+          selected={selectedNames}
+          onToggle={toggleCategory}
+          onClear={clearFilter}
+        />
 
         {queue.isLoading && (
           <p className="mt-16 text-center text-2xl text-steel-dim">Загрузка...</p>
@@ -74,7 +170,9 @@ export function CompetitionBoard() {
         )}
 
         {tables.length === 0 && !queue.isLoading && (
-          <p className="mt-16 text-center text-2xl text-steel-dim">Нет данных</p>
+          <p className="mt-16 text-center text-2xl text-steel-dim">
+            {selectedNames.size > 0 ? 'Нет активных столов по выбранным категориям' : 'Нет данных'}
+          </p>
         )}
       </div>
     </div>

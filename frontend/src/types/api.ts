@@ -108,15 +108,6 @@ export interface CategoryOut {
   hand: Hand
 }
 
-export interface ParticipantOut {
-  athlete_id: number
-  athlete_name: string
-  category_name: string
-  hand: Hand
-  weight_at_event: number | null
-  club_at_event: string | null
-}
-
 export interface CompetitionDetail {
   id: number
   name: string
@@ -146,6 +137,7 @@ export interface ResultOut {
 export interface BracketMatchOut {
   id: number
   category_name: string
+  hand: string
   bracket: string
   round_name: string | null
   match_order: number
@@ -158,6 +150,7 @@ export interface BracketMatchOut {
 export interface QueuePairOut {
   match_id: number
   category_name: string
+  hand: string
   round_name: string | null
   p1_name: string
   p2_name: string

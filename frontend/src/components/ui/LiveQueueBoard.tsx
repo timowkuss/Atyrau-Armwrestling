@@ -20,7 +20,7 @@ function TableCard({ table }: { table: TableQueueOut }) {
             {table.current.p1_name} <span className="text-steel">vs</span> {table.current.p2_name}
           </p>
           <p className="mt-1 font-mono text-xs text-steel">
-            {table.current.category_name}
+            {table.current.category_name} · {table.current.hand}
             {table.current.round_name ? ` · ${table.current.round_name}` : ''}
           </p>
         </div>

@@ -140,20 +140,38 @@ export function BracketBoard({ matches }: { matches: BracketMatchOut[] }) {
   return (
     <div className="space-y-12">
       {Object.entries(byCategory).map(([category, categoryMatches]) => {
-        const byBracket = groupBy(categoryMatches, (m) => m.bracket)
+        const byHand = groupBy(categoryMatches, (m) => m.hand)
+        const hands = Object.keys(byHand)
+        const showHandLabel = hands.length > 1
+
         return (
           <div key={category}>
             <h3 className="font-display text-lg text-bone border-b border-steel-dim/20 pb-2">
               {category}
             </h3>
-            <div className="mt-5 grid gap-8 sm:grid-cols-2 xl:grid-cols-3">
-              {Object.entries(byBracket).map(([bracket, bracketMatches]) => (
-                <BracketGrid
-                  key={bracket}
-                  matches={bracketMatches}
-                  label={BRACKET_LABEL[bracket] ?? bracket}
-                />
-              ))}
+            <div className={showHandLabel ? 'mt-5 space-y-10' : 'mt-5'}>
+              {hands.map((hand) => {
+                const handMatches = byHand[hand]
+                const byBracket = groupBy(handMatches, (m) => m.bracket)
+                return (
+                  <div key={hand}>
+                    {showHandLabel && (
+                      <p className="mb-3 font-mono text-xs uppercase tracking-wider text-emerald-400">
+                        {hand} рука
+                      </p>
+                    )}
+                    <div className="grid gap-8 sm:grid-cols-2 xl:grid-cols-3">
+                      {Object.entries(byBracket).map(([bracket, bracketMatches]) => (
+                        <BracketGrid
+                          key={bracket}
+                          matches={bracketMatches}
+                          label={BRACKET_LABEL[bracket] ?? bracket}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
         )

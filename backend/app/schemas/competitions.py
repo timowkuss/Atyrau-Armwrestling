@@ -48,6 +48,7 @@ class ResultOut(BaseModel):
 class BracketMatchOut(BaseModel):
     id: int
     category_name: str
+    hand: str
     bracket: str
     round_name: str | None
     match_order: int
@@ -60,6 +61,7 @@ class BracketMatchOut(BaseModel):
 class QueuePairOut(BaseModel):
     match_id: int
     category_name: str
+    hand: str
     round_name: str | None
     p1_name: str
     p2_name: str
@@ -69,15 +71,6 @@ class TableQueueOut(BaseModel):
     table_number: int
     current: QueuePairOut | None
     next: list[QueuePairOut]
-
-
-class ParticipantOut(BaseModel):
-    athlete_id: int
-    athlete_name: str
-    category_name: str
-    hand: str
-    weight_at_event: float | None
-    club_at_event: str | None
 
 
 class CompetitionAdminUpdate(BaseModel):
