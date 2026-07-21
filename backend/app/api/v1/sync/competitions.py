@@ -53,6 +53,9 @@ def create_competition(
         location_city_id=city_id,
         status=phase,
         published_at=datetime.now(timezone.utc),
+        weight_tolerance=payload.weight_tolerance,
+        bracket_system=payload.bracket_system,
+        format_type=payload.format_type,
     )
     db.add(competition)
     db.commit()

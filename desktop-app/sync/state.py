@@ -67,10 +67,19 @@ class SyncState:
                     local_id INTEGER PRIMARY KEY,
                     name TEXT NOT NULL,
                     date TEXT NOT NULL,
-                    location TEXT
+                    location TEXT,
+                    weight_tolerance REAL,
+                    bracket_system TEXT,
+                    format_type TEXT
                 );
                 """
             )
+            self.conn.commit()
+            cs_cols = [r[1] for r in self.conn.execute("PRAGMA table_info(competition_source)").fetchall()]
+            for col in ("weight_tolerance", "bracket_system", "format_type"):
+                if col not in cs_cols:
+                    ddl = "REAL" if col == "weight_tolerance" else "TEXT"
+                    self.conn.execute(f"ALTER TABLE competition_source ADD COLUMN {col} {ddl}")
             self.conn.commit()
 
     # ── карта id ──────────────────────────────────────────────
@@ -91,12 +100,16 @@ class SyncState:
             self.conn.commit()
 
     # ── снимок данных турнира для самолечения ────────────────
-    def save_competition_source(self, tid: int, name: str, date: str, location: str | None) -> None:
+    def save_competition_source(self, tid: int, name: str, date: str, location: str | None,
+                                 weight_tolerance: float | None = None,
+                                 bracket_system: str | None = None,
+                                 format_type: str | None = None) -> None:
         with self._lock:
             self.conn.execute(
-                "INSERT OR REPLACE INTO competition_source (local_id, name, date, location) "
-                "VALUES (?,?,?,?)",
-                (tid, name, date, location),
+                "INSERT OR REPLACE INTO competition_source "
+                "(local_id, name, date, location, weight_tolerance, bracket_system, format_type) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (tid, name, date, location, weight_tolerance, bracket_system, format_type),
             )
             self.conn.commit()
 

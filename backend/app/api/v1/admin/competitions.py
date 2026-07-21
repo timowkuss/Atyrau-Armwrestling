@@ -40,6 +40,9 @@ def list_competitions_admin(
                 regulations_doc_path=c.regulations_doc_path,
                 status=c.status,
                 participants_count=len(c.participants),
+                weight_tolerance=c.weight_tolerance,
+                bracket_system=c.bracket_system,
+                format_type=c.format_type,
                 categories=[CategoryOut(id=cat.id, name=cat.name, hand=cat.hand) for cat in c.categories],
             )
         )

@@ -27,6 +27,7 @@ import random
 from collections import OrderedDict
 from flask import Flask
 from threading import Thread
+import webbrowser
 
 try:
     from PIL import Image, ImageTk, ImageDraw, ImageFont, ImageOps
@@ -535,7 +536,8 @@ def _synced_create_tournament(self, name, date, location="", weight_tolerance=0,
     tid = _original_create_tournament(self, name, date, location, weight_tolerance,
                                       bracket_system, format_type)
     try:
-        sync_manager.on_tournament_created(tid, name, date, location)
+        sync_manager.on_tournament_created(tid, name, date, location,
+                                           weight_tolerance, bracket_system, format_type)
     except Exception as e:  # синк не должен ронять программу организатора
         print(f"[sync] create_tournament: {e}")
     return tid
@@ -3547,6 +3549,12 @@ class App(ctk.CTk):
                     command=self._toggle_finish_tournament)
         self.finish_btn.pack(side="right", padx=20, pady=13)
 
+        self.display_btn = ctk.CTkButton(self.header, text="📺 Табло",
+                    width=110, height=34,
+                    fg_color="#1a2535", hover_color="#253545",
+                    command=self._open_display_board)
+        self.display_btn.pack(side="right", padx=(0, 8), pady=13)
+
         self.notebook = ctk.CTkTabview(self.main, fg_color="#0d1117")
         self.notebook.pack(fill="both", expand=True, padx=8, pady=8)
         self.notebook.add("⚖️ Категории")
@@ -4505,6 +4513,34 @@ class App(ctk.CTk):
                     command=save).pack(side="right")
 
         dlg.bind("<Return>", lambda e: save())
+
+    def _open_display_board(self):
+        """Открывает табло очереди поединков (страница self.display_server,
+        см. класс DisplayServer) в браузере по умолчанию. Также показывает
+        LAN-адрес, чтобы можно было открыть табло на другом экране/проекторе
+        в той же сети (WiFi зала)."""
+        import socket
+        lan_ip = "localhost"
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                s.connect(("8.8.8.8", 80))
+                lan_ip = s.getsockname()[0]
+            finally:
+                s.close()
+        except OSError:
+            pass
+
+        local_url = "http://localhost:5000"
+        webbrowser.open(local_url)
+
+        if lan_ip != "localhost":
+            messagebox.showinfo(
+                "Табло",
+                f"Табло открыто в браузере.\n\n"
+                f"Чтобы показать его на другом устройстве (проектор, экран, "
+                f"телефон) в этой же WiFi-сети, откройте:\nhttp://{lan_ip}:5000",
+            )
 
     def _delete_tournament(self):
         if not self.current_tournament_id:

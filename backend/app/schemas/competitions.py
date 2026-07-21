@@ -30,6 +30,9 @@ class CompetitionDetailOut(BaseModel):
     regulations_doc_path: str | None
     status: str
     participants_count: int
+    weight_tolerance: float | None = None
+    bracket_system: str | None = None
+    format_type: str | None = None
     categories: list[CategoryOut]
 
 

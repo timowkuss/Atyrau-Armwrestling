@@ -38,6 +38,9 @@ class CompetitionSyncCreate(BaseModel):
     date: str
     location_name: str | None = None  # текстом из десктопа; сервер best-effort
     # сопоставляет с cities.name, иначе оставляет location_city_id пустым.
+    weight_tolerance: float | None = None
+    bracket_system: str | None = None  # 'double' | 'single'
+    format_type: str | None = None  # 'combined' (двоеборье) | 'separate'
 
 
 class CategorySyncCreate(BaseModel):

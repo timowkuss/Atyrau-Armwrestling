@@ -12,6 +12,24 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' })
 }
 
+function formatLabel(c: {
+  format_type: 'combined' | 'separate' | null
+  bracket_system: 'double' | 'single' | null
+  weight_tolerance: number | null
+}) {
+  const parts: string[] = []
+  if (c.format_type) {
+    parts.push(c.format_type === 'combined' ? 'Двоеборье' : 'По одной руке')
+  }
+  if (c.bracket_system) {
+    parts.push(c.bracket_system === 'single' ? 'До одного поражения' : 'До двух поражений')
+  }
+  if (c.weight_tolerance != null) {
+    parts.push(`Допуск по весу ${c.weight_tolerance} кг`)
+  }
+  return parts
+}
+
 function statusBadge(status: CompetitionStatus) {
   const map: Record<CompetitionStatus, { label: string; cls: string }> = {
     draft:        { label: 'черновик',  cls: 'bg-steel-dim/30 text-steel-dim' },
@@ -76,10 +94,16 @@ export function CompetitionDetail() {
         </div>
         <h1 className="mt-2 font-display text-2xl text-bone sm:text-3xl">{c.name}</h1>
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-sm text-steel">
-          {c.location_city_name && <span>{c.location_city_name}</span>}
-          <span>{c.organizer ?? 'Федерация армрестлинга Атырау'}</span>
           <span>{c.participants_count} участников</span>
+          <span>{c.categories.length} категорий</span>
         </div>
+        {formatLabel(c).length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-steel-dim">
+            {formatLabel(c).map((label) => (
+              <span key={label}>{label}</span>
+            ))}
+          </div>
+        )}
         {c.description && <p className="mt-4 max-w-2xl text-sm text-steel">{c.description}</p>}
         {c.categories.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-2">
@@ -115,15 +139,7 @@ export function CompetitionDetail() {
         </section>
       )}
 
-      {bracket.data && bracket.data.length > 0 && (
-        <section className="mt-10 mb-16">
-          <h2 className="font-display text-xl text-bone">Турнирная сетка</h2>
-          <div className="rivet-line my-4" />
-          <BracketBoard matches={bracket.data} />
-        </section>
-      )}
-
-      <section className="mt-10 mb-16">
+      <section className={`mt-10 ${bracket.data && bracket.data.length > 0 ? '' : 'mb-16'}`}>
         <h2 className="font-display text-xl text-bone">
           {isFinished ? 'Результаты' : isActive ? 'Ход турнира' : 'Результаты'}
         </h2>
@@ -161,6 +177,14 @@ export function CompetitionDetail() {
           </div>
         ))}
       </section>
+
+      {bracket.data && bracket.data.length > 0 && (
+        <section className="mt-10 mb-16">
+          <h2 className="font-display text-xl text-bone">Турнирная сетка</h2>
+          <div className="rivet-line my-4" />
+          <BracketBoard matches={bracket.data} />
+        </section>
+      )}
     </div>
   )
 }

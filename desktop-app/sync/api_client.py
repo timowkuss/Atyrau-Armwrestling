@@ -72,9 +72,13 @@ class SyncApiClient:
         return self._request("PATCH", f"/athletes/{remote_athlete_id}", json_body=body)
 
     # ── соревнования ─────────────────────────────────────────
-    def create_competition(self, name, date, location_name=None):
+    def create_competition(self, name, date, location_name=None,
+                            weight_tolerance=None, bracket_system=None, format_type=None):
         return self._request("POST", "/competitions", json_body={
             "name": name, "date": date, "location_name": location_name,
+            "weight_tolerance": weight_tolerance,
+            "bracket_system": bracket_system,
+            "format_type": format_type,
         })
 
     def create_category(self, remote_competition_id, name, max_weight=None, hand="Обе"):

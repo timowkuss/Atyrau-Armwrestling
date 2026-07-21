@@ -106,6 +106,9 @@ def get_competition(competition_id: int, db: Session = Depends(get_db)):
         regulations_doc_path=competition.regulations_doc_path,
         status=competition.status,
         participants_count=participants_count,
+        weight_tolerance=competition.weight_tolerance,
+        bracket_system=competition.bracket_system,
+        format_type=competition.format_type,
         categories=categories,
     )
 

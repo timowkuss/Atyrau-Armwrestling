@@ -125,20 +125,29 @@ class SyncManager:
             return None
 
     # ── турнир ───────────────────────────────────────────────────
-    def on_tournament_created(self, tid, name, date, location):
+    def on_tournament_created(self, tid, name, date, location,
+                               weight_tolerance=None, bracket_system=None, format_type=None):
         # Сохраняем снимок ДО попытки отправки — нужен, если позже
         # соревнование "протухнет" на сервере (например, база была
         # пересоздана) и его придётся пересоздавать автоматически.
-        self.state.save_competition_source(tid, name, date, location)
+        self.state.save_competition_source(
+            tid, name, date, location, weight_tolerance, bracket_system, format_type
+        )
 
         def go():
-            remote = self.api.create_competition(name, date, location)
+            remote = self.api.create_competition(
+                name, date, location, weight_tolerance, bracket_system, format_type
+            )
             self.state.map_set("competition", tid, remote["id"])
             return remote["id"]
 
         return self._try(
             "create_competition",
-            {"tid": tid, "name": name, "date": date, "location": location},
+            {
+                "tid": tid, "name": name, "date": date, "location": location,
+                "weight_tolerance": weight_tolerance, "bracket_system": bracket_system,
+                "format_type": format_type,
+            },
             go,
         )
 
@@ -153,13 +162,17 @@ class SyncManager:
         conn.row_factory = sqlite3.Row
         try:
             row = conn.execute(
-                "SELECT name, date, location FROM tournaments WHERE id=?", (tid,)
+                "SELECT name, date, location, weight_tolerance, bracket_system, format_type "
+                "FROM tournaments WHERE id=?", (tid,)
             ).fetchone()
         finally:
             conn.close()
         if row is None:
             return
-        self.state.save_competition_source(tid, row["name"], row["date"], row["location"])
+        self.state.save_competition_source(
+            tid, row["name"], row["date"], row["location"],
+            row["weight_tolerance"], row["bracket_system"], row["format_type"],
+        )
         print(f"[sync] снимок competition_source для tid={tid} восстановлен из armwrestling.db")
 
     def _recreate_competition(self, tid) -> int | None:
@@ -180,7 +193,10 @@ class SyncManager:
                 "был удалён локально)"
             )
             return None
-        remote = self.api.create_competition(source["name"], source["date"], source["location"])
+        remote = self.api.create_competition(
+            source["name"], source["date"], source["location"],
+            source["weight_tolerance"], source["bracket_system"], source["format_type"],
+        )
         self.state.map_set("competition", tid, remote["id"])
         print(f"[sync] соревнование tid={tid} пересоздано на сервере, новый remote_id={remote['id']}")
         return remote["id"]
@@ -570,7 +586,11 @@ class SyncManager:
                 return True
 
             if operation == "create_competition":
-                remote = self.api.create_competition(payload["name"], payload["date"], payload["location"])
+                remote = self.api.create_competition(
+                    payload["name"], payload["date"], payload["location"],
+                    payload.get("weight_tolerance"), payload.get("bracket_system"),
+                    payload.get("format_type"),
+                )
                 self.state.map_set("competition", payload["tid"], remote["id"])
                 return True
 

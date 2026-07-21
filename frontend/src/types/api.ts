@@ -119,6 +119,9 @@ export interface CompetitionDetail {
   regulations_doc_path: string | null
   status: CompetitionStatus
   participants_count: number
+  weight_tolerance: number | null
+  bracket_system: 'double' | 'single' | null
+  format_type: 'combined' | 'separate' | null
   categories: CategoryOut[]
 }
 
