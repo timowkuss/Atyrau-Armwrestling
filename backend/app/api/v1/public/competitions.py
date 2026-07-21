@@ -199,7 +199,7 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
             Match.p2_id.isnot(None),
             Match.table_number.isnot(None),
         )
-        .order_by(Match.table_number, Match.stage, Match.match_order, Match.id)
+        .order_by(Match.table_number, Match.stage, Match.id)
         .all()
     )
 
@@ -230,7 +230,7 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
             return base + (int(digits) if digits else 0)
         return base
 
-    def _compute_eliminated(category_id: int, hand: str) -> list:
+    def _compute_standings(category_id: int, hand: str) -> list:
         all_matches = (
             db.query(Match)
             .filter(
@@ -262,16 +262,19 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
                         if rs > stats[loser]["elim_round_score"]:
                             stats[loser]["elim_round_score"] = rs
                             stats[loser]["eliminated"] = True
-        eliminated = [s for s in stats.values() if s["eliminated"]]
-        eliminated.sort(key=lambda s: s["elim_round_score"])
+
+        ordered = sorted(
+            stats.values(),
+            key=lambda s: (-s["wins"], s["losses"], s["elim_round_score"]),
+        )
         result = []
-        total = len(stats)
-        for i, s in enumerate(eliminated):
+        total = len(ordered)
+        for i, s in enumerate(ordered):
             cp = db.get(CompetitionParticipant, s["pid"])
             name = cp.athlete.full_name if cp and cp.athlete else "—"
             result.append(EliminatedOut(
                 athlete_name=name,
-                place=total - len(eliminated) + i + 1,
+                place=i + 1,
                 wins=s["wins"],
                 losses=s["losses"],
             ))
@@ -282,7 +285,7 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
             table_number=tnum,
             current=pairs[0],
             next=pairs[1:4],
-            eliminated=_compute_eliminated(*table_cat_hand[tnum])
+            eliminated=_compute_standings(*table_cat_hand[tnum])
             if tnum in table_cat_hand else [],
         )
         for tnum, pairs in sorted(tables.items())

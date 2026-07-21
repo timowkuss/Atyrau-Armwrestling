@@ -44,9 +44,9 @@ function QueueBlock({ table }: { table: TableQueueOut }) {
 
       {table.eliminated.length > 0 && (
         <div className="mt-6 border-t border-steel-dim/20 pt-5">
-          <p className="text-eyebrow text-center text-sm text-rust mb-3">Выбывшие</p>
+          <p className="text-eyebrow text-center text-sm text-rust mb-3">Таблица</p>
           <div className="space-y-1.5">
-            {[...table.eliminated].reverse().map((e) => (
+            {table.eliminated.map((e) => (
               <p key={e.athlete_name} className="text-center font-mono text-sm text-steel-dim">
                 {e.place}. {e.athlete_name}
                 <span className="ml-2 text-steel-dim/60">

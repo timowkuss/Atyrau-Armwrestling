@@ -48,7 +48,7 @@ export function useCompetitionQueue(id: number) {
     queryKey: ['competition', id, 'queue'],
     queryFn: () => api.competitions.queue(id),
     enabled: Number.isFinite(id),
-    refetchInterval: 5000,
+    refetchInterval: 2000,
     refetchIntervalInBackground: false,
   })
 }
