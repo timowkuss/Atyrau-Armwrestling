@@ -1,8 +1,8 @@
 import { useParams } from 'react-router-dom'
-import { useCompetition, useCompetitionQueue } from '@/features/competitions/useCompetitions'
-import type { TableQueueOut } from '@/types/api'
+import { useCompetition, useCompetitionBracket, useCompetitionQueue } from '@/features/competitions/useCompetitions'
+import { BracketBoard } from '@/components/ui/BracketBoard'
 
-function TableBlock({ table }: { table: TableQueueOut }) {
+function TableBlock({ table }: { table: { table_number: number; current: { p1_name: string; p2_name: string; category_name: string; round_name: string | null } | null; next: { p1_name: string; p2_name: string }[] } }) {
   return (
     <div className="flex flex-col items-center justify-center gap-4 rounded-[var(--radius-rivet)] border border-steel-dim/40 bg-black/30 px-8 py-10 text-center">
       <p className="text-eyebrow text-2xl tracking-[0.3em] text-emerald-400">
@@ -43,6 +43,7 @@ export function CompetitionBoard() {
 
   const competition = useCompetition(competitionId)
   const queue = useCompetitionQueue(competitionId)
+  const bracket = useCompetitionBracket(competitionId)
 
   const tables = queue.data ?? []
   const cols = tables.length > 1 ? 'sm:grid-cols-2' : ''
@@ -54,14 +55,22 @@ export function CompetitionBoard() {
           {competition.data?.name ?? 'Табло'}
         </p>
 
-        {tables.length > 0 ? (
+        {tables.length > 0 && (
           <div className={`mt-8 grid grid-cols-1 gap-6 ${cols}`}>
             {tables.map((table) => (
               <TableBlock key={table.table_number} table={table} />
             ))}
           </div>
-        ) : (
-          <p className="mt-16 text-center text-2xl text-steel-dim">Нет активных столов</p>
+        )}
+
+        {bracket.data && bracket.data.length > 0 && (
+          <section className="mt-12">
+            <BracketBoard matches={bracket.data} />
+          </section>
+        )}
+
+        {tables.length === 0 && (!bracket.data || bracket.data.length === 0) && (
+          <p className="mt-16 text-center text-2xl text-steel-dim">Нет данных</p>
         )}
       </div>
     </div>

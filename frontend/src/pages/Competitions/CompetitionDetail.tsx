@@ -67,9 +67,6 @@ function ParticipantList({ participants }: { participants: ParticipantOut[] }) {
                 <Link to={`/athletes/${m.athlete_id}`} className="truncate text-bone hover:text-brass">
                   {m.athlete_name}
                 </Link>
-                {m.weight_at_event != null && (
-                  <span className="shrink-0 font-mono text-xs text-steel">{m.weight_at_event} кг</span>
-                )}
               </li>
             ))}
           </ol>
@@ -109,6 +106,7 @@ export function CompetitionDetail() {
 
   const c = competition.data
   const isFinished = c.status === 'completed'
+  const isLive = c.status === 'in_progress'
   const resultsByCategory = (results.data ?? []).reduce<Record<string, typeof results.data>>((acc, r) => {
     ;(acc[r.category_name] ??= []).push(r)
     return acc
@@ -123,7 +121,19 @@ export function CompetitionDetail() {
       <div className="plate mt-4 rounded-[var(--radius-rivet)] p-6">
         <div className="flex items-center justify-between">
           <p className="text-eyebrow text-rust">{formatDate(c.date)}</p>
-          {statusBadge(c.status)}
+          <div className="flex items-center gap-3">
+            {statusBadge(c.status)}
+            {isLive && (
+              <a
+                href={`/competitions/${competitionId}/board`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-eyebrow rounded-[var(--radius-rivet)] border border-brass/40 bg-brass/10 px-3 py-1.5 text-brass hover:bg-brass/20"
+              >
+                📺 Табло
+              </a>
+            )}
+          </div>
         </div>
         <h1 className="mt-2 font-display text-2xl text-bone sm:text-3xl">{c.name}</h1>
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-sm text-steel">
@@ -169,7 +179,7 @@ export function CompetitionDetail() {
         </section>
       )}
 
-      {bracket.data && bracket.data.length > 0 && (
+      {isFinished && bracket.data && bracket.data.length > 0 && (
         <section className="mt-10 mb-16">
           <h2 className="font-display text-xl text-bone">Турнирная сетка</h2>
           <div className="rivet-line my-4" />
@@ -177,10 +187,8 @@ export function CompetitionDetail() {
         </section>
       )}
 
-      <section className={`mt-10 ${bracket.data && bracket.data.length > 0 ? '' : 'mb-16'}`}>
-        <h2 className="font-display text-xl text-bone">
-          {isFinished ? 'Результаты' : 'Результаты'}
-        </h2>
+      <section className={`mt-10 ${isFinished && bracket.data && bracket.data.length > 0 ? '' : 'mb-16'}`}>
+        <h2 className="font-display text-xl text-bone">Результаты</h2>
         <div className="rivet-line my-4" />
         {results.isLoading && <LoadingState label="Загрузка результатов" />}
         {results.isError && (
