@@ -2462,13 +2462,20 @@ class BracketWindow(ctk.CTkToplevel):
         локально (чтобы выбор организатора пережил переоткрытие окна и
         пересоздание сетки) и на сайте, чтобы там можно было собрать живую
         очередь пар по столам (см. sync_manager.on_matches_table_assigned).
-        table_number=None корректно снимает трансляцию с обеих сторон."""
+        table_number=None корректно снимает трансляцию с обеих сторон.
+
+        Также повторно синхронизирует p1_id/p2_id/winner/status всех матчей,
+        чтобы серверные записи были актуальны (ранее update_match не отправлял
+        p1/p2, из-за чего следующие пары не попадали в очередь табло)."""
         self.db.set_bracket_table_number(self.category["id"], self.hand, self.table_number)
         try:
             matches = self.db.get_matches(self.category["id"], self.hand)
             mids = [m["id"] for m in matches]
             if mids:
                 sync_manager.on_matches_table_assigned(mids, self.table_number)
+                for m in matches:
+                    if m["status"] in ("done", "bye", "pending", "waiting"):
+                        self._sync_match(m["id"])
         except Exception as e:
             print(f"[sync] assign_table: {e}")
 
