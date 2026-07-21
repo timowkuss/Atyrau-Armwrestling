@@ -473,6 +473,15 @@ class SyncManager:
             self.state.enqueue("update_match", payload)
             return None
 
+        # "table_number" здесь обычно вообще отсутствует в match (обычные
+        # обновления счёта/победителя его не трогают) — если слепо взять
+        # match.get("table_number"), отсутствующий ключ неотличим от явного
+        # null, и update_match (после починки сентинелом) молча снял бы
+        # трансляцию сетки с табло при каждом сканировании победителя.
+        table_number_kwargs = (
+            {"table_number": match["table_number"]} if "table_number" in match else {}
+        )
+
         def go():
             self.api.update_match(
                 remote_match_id,
@@ -480,7 +489,7 @@ class SyncManager:
                 p1_losses=match.get("p1_losses"),
                 p2_losses=match.get("p2_losses"),
                 status=match.get("status"),
-                table_number=match.get("table_number"),
+                **table_number_kwargs,
             )
             return remote_match_id
 
@@ -761,11 +770,22 @@ class SyncManager:
                     self.state.map_get("participant", payload["winner_id"])
                     if payload.get("winner_id") else None
                 )
+                # "table_number" в payload присутствует ТОЛЬКО когда операция
+                # родом из on_matches_table_assigned (назначение/снятие стола)
+                # — обычные обновления счёта/победителя (on_match_updated)
+                # этот ключ не кладут вовсе. Поэтому используем .get(...) с
+                # проверкой "in", а не голый .get("table_number") — иначе
+                # отсутствующий ключ и явный null (снятие трансляции)
+                # выглядели бы одинаково и update_match не смог бы их отличить.
+                table_number_kwargs = (
+                    {"table_number": payload["table_number"]}
+                    if "table_number" in payload else {}
+                )
                 try:
                     self.api.update_match(
                         remote_match_id, winner_id=remote_winner,
                         p1_losses=payload.get("p1_losses"), p2_losses=payload.get("p2_losses"),
-                        status=payload.get("status"), table_number=payload.get("table_number"),
+                        status=payload.get("status"), **table_number_kwargs,
                     )
                 except ApiClientError as e:
                     if e.status_code == 404:

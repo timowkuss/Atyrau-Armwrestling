@@ -286,7 +286,14 @@ class Database:
         cols = [r[1] for r in self.conn.execute("PRAGMA table_info(matches)").fetchall()]
         for col, defval in [("win_next_id", "NULL"), ("win_next_slot", "1"),
                     ("lose_next_id", "NULL"), ("lose_next_slot", "1"),
-                    ("stage", "0")]:          # ← добавили
+                    ("stage", "0"),
+                    # Номер стола/трансляция на табло сайта — раньше жил только
+                    # как временный атрибут открытого окна сетки (self.table_number)
+                    # и назначался автоматически (1 или 2) по числу открытых окон.
+                    # Теперь это осознанный выбор организатора в самом окне сетки,
+                    # и он должен переживать закрытие/переоткрытие окна — поэтому
+                    # храним его локально так же, как на сервере.
+                    ("table_number", "NULL")]:
             if col not in cols:
                 self.conn.execute(f"ALTER TABLE matches ADD COLUMN {col} INTEGER DEFAULT {defval}")
         p_cols = [r[1] for r in self.conn.execute("PRAGMA table_info(participants)").fetchall()]
@@ -493,6 +500,24 @@ class Database:
 
     def clear_matches(self, category_id, hand):
         self.conn.execute("DELETE FROM matches WHERE category_id=? AND hand=?", (category_id, hand))
+        self.conn.commit()
+
+    def get_bracket_table_number(self, category_id, hand):
+        """Ранее сохранённый организатором номер стола для этой сетки
+        (категория+рука), или None, если трансляция на табло не включена."""
+        row = self.conn.execute(
+            "SELECT table_number FROM matches WHERE category_id=? AND hand=? "
+            "AND table_number IS NOT NULL LIMIT 1",
+            (category_id, hand)).fetchone()
+        return row["table_number"] if row else None
+
+    def set_bracket_table_number(self, category_id, hand, table_number):
+        """Проставляет (или, если table_number=None, снимает) номер стола
+        всем матчам данной сетки локально. Синхронизацию с сайтом делает
+        вызывающий код (см. BracketWindow._apply_broadcast_settings)."""
+        self.conn.execute(
+            "UPDATE matches SET table_number=? WHERE category_id=? AND hand=?",
+            (table_number, category_id, hand))
         self.conn.commit()
 
     def get_participant(self, pid):
@@ -2074,18 +2099,19 @@ class BracketWindow(ctk.CTkToplevel):
         bracket_system = tournament["bracket_system"] if tournament and "bracket_system" in tournament.keys() else "double"
         self.engine = SingleEliminationEngine(db) if bracket_system == "single" else DoubleEliminationEngine(db)
 
-        # Назначаем номер стола в зависимости от того, сколько окон сетки уже открыто
         if not hasattr(master, "_open_bracket_windows"):
             master._open_bracket_windows = []
-        used = {w.table_number for w in master._open_bracket_windows if w.winfo_exists()}
-        self.table_number = 1
-        for t in [1, 2]:
-            if t not in used:
-                self.table_number = t
-                break
         master._open_bracket_windows.append(self)
 
-        self.title(f"Сетка — {category['name']} — {hand} | Стол {self.table_number}")
+        # Номер стола / трансляция на табло сайта — раньше назначались
+        # автоматически (жёстко только "1" или "2" по числу открытых окон),
+        # из-за чего нельзя было ни выбрать конкретный стол, ни выключить
+        # трансляцию конкретной категории. Теперь это ручной выбор
+        # организатора (см. _build_broadcast_bar / _apply_broadcast_settings),
+        # который сохраняется локально и переживает закрытие окна.
+        self.table_number = db.get_bracket_table_number(category["id"], hand)
+
+        self.title(f"Сетка — {category['name']} — {hand}")
         self.geometry("1200x800")
         self.configure(fg_color="#0d1117")
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -2093,7 +2119,7 @@ class BracketWindow(ctk.CTkToplevel):
 
     def _on_close(self):
         app = self.master
-        if hasattr(app, "display_server"):
+        if hasattr(app, "display_server") and self.table_number is not None:
             app.display_server.remove_table(self.table_number)
         if hasattr(app, "_open_bracket_windows"):
             try:
@@ -2157,6 +2183,8 @@ class BracketWindow(ctk.CTkToplevel):
             font=ctk.CTkFont(size=12),
             text_color="#aabbcc", anchor="w")
         self.lbl_next.pack(side="left", padx=30, pady=10)
+
+        self._build_broadcast_bar()
 
         # ════
         #  ПАНЕЛЬ СКАНЕРА ШТРИХКОДОВ
@@ -2330,7 +2358,7 @@ class BracketWindow(ctk.CTkToplevel):
             self.lbl_next.configure(text="⏭  Следующий: —", text_color="#445566")
 
         app = self.master
-        if hasattr(app, "display_server"):
+        if hasattr(app, "display_server") and self.table_number is not None:
             app.display_server.update_table(
                 self.table_number,
                 self.category["name"],
@@ -2368,15 +2396,21 @@ class BracketWindow(ctk.CTkToplevel):
             return
         import random
         ids = [p["id"] for p in participants]
-        random.shuffle(ids)
+        # Сид зависит только от турнира и категории (БЕЗ hand), чтобы левая
+        # и правая рука одной категории получали ОДИНАКОВЫЙ порядок пар.
+        rng = random.Random(f"{self.tournament_id}-{self.category['id']}")
+        rng.shuffle(ids)
         self.engine.generate_bracket(self.tournament_id, self.category["id"], self.hand, ids)
         self._load_bracket()
         self._assign_table_number()
 
     def _assign_table_number(self):
-        """Проставляет self.table_number всем матчам этой категории/руки на
-        сайте — чтобы там можно было собрать живую очередь пар по столам
-        (см. sync_manager.on_matches_table_assigned)."""
+        """Проставляет self.table_number всем матчам этой категории/руки —
+        локально (чтобы выбор организатора пережил переоткрытие окна и
+        пересоздание сетки) и на сайте, чтобы там можно было собрать живую
+        очередь пар по столам (см. sync_manager.on_matches_table_assigned).
+        table_number=None корректно снимает трансляцию с обеих сторон."""
+        self.db.set_bracket_table_number(self.category["id"], self.hand, self.table_number)
         try:
             matches = self.db.get_matches(self.category["id"], self.hand)
             mids = [m["id"] for m in matches]
@@ -2384,6 +2418,117 @@ class BracketWindow(ctk.CTkToplevel):
                 sync_manager.on_matches_table_assigned(mids, self.table_number)
         except Exception as e:
             print(f"[sync] assign_table: {e}")
+
+    def _suggest_table_number(self):
+        """Первый свободный номер стола среди остальных открытых сеток,
+        которые сейчас транслируются на табло."""
+        used = {
+            w.table_number for w in getattr(self.master, "_open_bracket_windows", [])
+            if w is not self and w.winfo_exists() and w.table_number is not None
+        }
+        n = 1
+        while n in used:
+            n += 1
+        return n
+
+    def _find_broadcast_conflict(self, table_number):
+        """Название другой открытой сетки, уже транслирующей этот номер
+        стола (или None). Два РАЗНЫХ поединка на одном номере стола
+        перемешаются в одну очередь на публичном табло (см. /queue —
+        группировка идёт по table_number), поэтому перед подтверждением
+        стоит предупредить организатора."""
+        for w in getattr(self.master, "_open_bracket_windows", []):
+            if w is self or not w.winfo_exists():
+                continue
+            if w.table_number == table_number:
+                return f"{w.category['name']} — {w.hand}"
+        return None
+
+    def _refresh_broadcast_status_label(self):
+        if not hasattr(self, "broadcast_status_label"):
+            return
+        if self.table_number is None:
+            self.broadcast_status_label.configure(text="не транслируется на сайте")
+        else:
+            self.broadcast_status_label.configure(
+                text=f"транслируется на /board — стол {self.table_number}")
+
+    def _apply_broadcast_settings(self, table_number):
+        self.table_number = table_number
+        self._assign_table_number()
+        self._refresh_broadcast_status_label()
+
+    def _build_broadcast_bar(self):
+        """Переключатель \"выводить эту сетку на публичное табло сайта /
+        какой стол\" — раньше это решалось само (первые два открытых окна
+        автоматически получали стол 1/2 и всегда транслировались), теперь
+        организатор выбирает явно и выбор сохраняется локально."""
+        bar = ctk.CTkFrame(self, fg_color="#141a10", height=44)
+        bar.pack(fill="x", padx=0, pady=0)
+        bar.pack_propagate(False)
+
+        self.broadcast_var = ctk.BooleanVar(value=self.table_number is not None)
+
+        def on_toggle():
+            if self.broadcast_var.get():
+                table_num = self.table_number or self._suggest_table_number()
+                conflict = self._find_broadcast_conflict(table_num)
+                if conflict and not messagebox.askyesno(
+                        "Стол уже занят",
+                        f"Стол {table_num} уже транслирует «{conflict}». "
+                        "Продолжить с тем же номером? (пары перемешаются на табло)"):
+                    table_num = self._suggest_table_number()
+                self.table_entry.configure(state="normal")
+                self.table_entry.delete(0, "end")
+                self.table_entry.insert(0, str(table_num))
+                self._apply_broadcast_settings(table_num)
+            else:
+                self.table_entry.configure(state="disabled")
+                self._apply_broadcast_settings(None)
+
+        ctk.CTkCheckBox(
+            bar, text="📡 Транслировать на табло сайта", variable=self.broadcast_var,
+            command=on_toggle, font=ctk.CTkFont(size=12, weight="bold")
+        ).pack(side="left", padx=(20, 10), pady=8)
+
+        ctk.CTkLabel(bar, text="Стол №", font=ctk.CTkFont(size=12)).pack(side="left", padx=(10, 4))
+        self.table_entry = ctk.CTkEntry(bar, width=50, height=28)
+        self.table_entry.pack(side="left", padx=(0, 10))
+        if self.table_number is not None:
+            self.table_entry.insert(0, str(self.table_number))
+        else:
+            self.table_entry.configure(state="disabled")
+
+        def on_table_changed(event=None):
+            if not self.broadcast_var.get():
+                return
+            raw = self.table_entry.get().strip()
+            if not raw.isdigit() or int(raw) < 1:
+                messagebox.showwarning("Некорректный номер", "Номер стола — положительное целое число.")
+                self.table_entry.delete(0, "end")
+                self.table_entry.insert(0, str(self.table_number or 1))
+                return
+            new_num = int(raw)
+            if new_num == self.table_number:
+                return
+            conflict = self._find_broadcast_conflict(new_num)
+            if conflict and not messagebox.askyesno(
+                    "Стол уже занят",
+                    f"Стол {new_num} уже транслирует «{conflict}». "
+                    "Одновременная трансляция двух категорий на одном столе "
+                    "перемешает пары на публичном табло. Всё равно продолжить?"):
+                self.table_entry.delete(0, "end")
+                self.table_entry.insert(0, str(self.table_number or 1))
+                return
+            self._apply_broadcast_settings(new_num)
+
+        self.table_entry.bind("<FocusOut>", on_table_changed)
+        self.table_entry.bind("<Return>", on_table_changed)
+
+        self.broadcast_status_label = ctk.CTkLabel(
+            bar, text="", font=ctk.CTkFont(size=11), text_color="#77aa88")
+        self.broadcast_status_label.pack(side="left", padx=10)
+        self._refresh_broadcast_status_label()
 
     def _reset_bracket(self):
         if self._tournament_locked():

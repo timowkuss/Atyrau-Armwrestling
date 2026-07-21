@@ -75,6 +75,8 @@ class MatchSyncCreate(BaseModel):
 
 
 class MatchSyncUpdate(BaseModel):
+    p1_id: int | None = None
+    p2_id: int | None = None
     winner_id: int | None = None
     p1_losses: int | None = None
     p2_losses: int | None = None

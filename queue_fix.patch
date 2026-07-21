@@ -1,0 +1,183 @@
+diff --git a/backend/app/schemas/sync.py b/backend/app/schemas/sync.py
+index 34707c3..2bd588f 100644
+--- a/backend/app/schemas/sync.py
++++ b/backend/app/schemas/sync.py
+@@ -75,6 +75,8 @@ class MatchSyncCreate(BaseModel):
+ 
+ 
+ class MatchSyncUpdate(BaseModel):
++    p1_id: int | None = None
++    p2_id: int | None = None
+     winner_id: int | None = None
+     p1_losses: int | None = None
+     p2_losses: int | None = None
+diff --git a/desktop-app/armwrestling_tournament.py b/desktop-app/armwrestling_tournament.py
+index 902beac..542493e 100644
+--- a/desktop-app/armwrestling_tournament.py
++++ b/desktop-app/armwrestling_tournament.py
+@@ -1216,6 +1216,18 @@ class DoubleEliminationEngine:
+     def _get_match(self, match_id):
+         return self.db.conn.execute("SELECT * FROM matches WHERE id=?", (match_id,)).fetchone()
+ 
++    def _sync_match(self, match_id):
++        """Двигатель сетки пишет в matches напрямую через SQL (в обход
++        Database.save_match), поэтому обёртка _synced_save_match не видит
++        эти изменения и на сайт ничего не летит — очередь/табло замирают.
++        Дёргаем sync_manager вручную после каждого изменения матча."""
++        try:
++            m = self._get_match(match_id)
++            if m:
++                sync_manager.on_match_updated(match_id, dict(m))
++        except Exception as e:
++            print(f"[sync] _sync_match({match_id}): {e}")
++
+     def _place_player(self, match_id, slot, player_id):
+         if player_id is None:
+             return
+@@ -1237,6 +1249,7 @@ class DoubleEliminationEngine:
+         elif (m["p1_id"] or m["p2_id"]) and m["bracket"] != "final":
+             pass
+         self._resolve_if_bye(match_id)
++        self._sync_match(match_id)
+ 
+     def _resolve_if_bye(self, match_id):
+         m = self._get_match(match_id)
+@@ -1251,6 +1264,7 @@ class DoubleEliminationEngine:
+                     "UPDATE matches SET status='bye', winner_id=? WHERE id=?",
+                     (winner, match_id))
+                 self.db.conn.commit()
++                self._sync_match(match_id)
+                 self._propagate(match_id, winner, loser_id=None, is_bye=True)
+ 
+     def _propagate(self, match_id, winner_id, loser_id, is_bye=False):
+@@ -1304,6 +1318,7 @@ class DoubleEliminationEngine:
+             "UPDATE matches SET winner_id=?, status='done' WHERE id=?",
+             (winner_id, match_id))
+         self.db.conn.commit()
++        self._sync_match(match_id)
+ 
+         if m["bracket"] == "final" and m["round_name"] == "Гранд-финал":
+             # Определяем у кого 0 поражений до этого матча (пришёл из верхней сетки)
+@@ -1340,6 +1355,7 @@ class DoubleEliminationEngine:
+                         "round_name='Супер-финал (переигровка)' WHERE id=?",
+                         (undefeated, defeated_once, gf2["id"]))
+                     self.db.conn.commit()
++                    self._sync_match(gf2["id"])
+             else:
+                 # Непобеждённый выиграл — турнир завершён, переигровка не нужна
+                 gf2 = self._get_match(m["win_next_id"])
+@@ -1347,6 +1363,7 @@ class DoubleEliminationEngine:
+                     self.db.conn.execute(
+                         "UPDATE matches SET status='bye' WHERE id=?", (gf2["id"],))
+                     self.db.conn.commit()
++                    self._sync_match(gf2["id"])
+             return
+ 
+         if m["bracket"] == "final" and "переигровка" in m["round_name"]:
+@@ -1850,6 +1867,17 @@ class SingleEliminationEngine:
+     def _get_match(self, match_id):
+         return self.db.conn.execute("SELECT * FROM matches WHERE id=?", (match_id,)).fetchone()
+ 
++    def _sync_match(self, match_id):
++        """См. одноимённый метод в DoubleEliminationEngine: движок пишет
++        матчи в обход Database.save_match, так что без ручного вызова
++        синка изменения (в т.ч. результат поединка) на сайт не долетают."""
++        try:
++            m = self._get_match(match_id)
++            if m:
++                sync_manager.on_match_updated(match_id, dict(m))
++        except Exception as e:
++            print(f"[sync] _sync_match({match_id}): {e}")
++
+     def _place_player(self, match_id, slot, player_id):
+         if player_id is None:
+             return
+@@ -1869,6 +1897,7 @@ class SingleEliminationEngine:
+             self.db.conn.execute("UPDATE matches SET status='pending' WHERE id=?", (match_id,))
+             self.db.conn.commit()
+         self._resolve_if_bye(match_id)
++        self._sync_match(match_id)
+ 
+     def _resolve_if_bye(self, match_id):
+         m = self._get_match(match_id)
+@@ -1881,6 +1910,7 @@ class SingleEliminationEngine:
+                     "UPDATE matches SET status='bye', winner_id=? WHERE id=?",
+                     (winner, match_id))
+                 self.db.conn.commit()
++                self._sync_match(match_id)
+                 if m["win_next_id"]:
+                     self._place_player(m["win_next_id"], m["win_next_slot"], winner)
+ 
+@@ -1907,6 +1937,7 @@ class SingleEliminationEngine:
+             "UPDATE matches SET winner_id=?, status='done' WHERE id=?",
+             (winner_id, match_id))
+         self.db.conn.commit()
++        self._sync_match(match_id)
+ 
+         if m["win_next_id"]:
+             self._place_player(m["win_next_id"], m["win_next_slot"], winner_id)
+diff --git a/desktop-app/sync/api_client.py b/desktop-app/sync/api_client.py
+index 4aff747..5fb8424 100644
+--- a/desktop-app/sync/api_client.py
++++ b/desktop-app/sync/api_client.py
+@@ -131,9 +131,13 @@ class SyncApiClient:
+             "is_bye": is_bye, "status": status, "table_number": table_number,
+         })
+ 
+-    def update_match(self, remote_match_id, winner_id=None, p1_losses=None,
+-                      p2_losses=None, status=None, table_number=None):
++    def update_match(self, remote_match_id, p1_id=None, p2_id=None, winner_id=None,
++                      p1_losses=None, p2_losses=None, status=None, table_number=None):
+         body = {}
++        if p1_id is not None:
++            body["p1_id"] = p1_id
++        if p2_id is not None:
++            body["p2_id"] = p2_id
+         if winner_id is not None:
+             body["winner_id"] = winner_id
+         if p1_losses is not None:
+diff --git a/desktop-app/sync/sync_manager.py b/desktop-app/sync/sync_manager.py
+index 2a0fe8f..de5eda7 100644
+--- a/desktop-app/sync/sync_manager.py
++++ b/desktop-app/sync/sync_manager.py
+@@ -464,6 +464,8 @@ class SyncManager:
+ 
+     def on_match_updated(self, mid, match: dict):
+         remote_match_id = self.state.map_get("match", mid)
++        remote_p1 = self.state.map_get("participant", match["p1_id"]) if match.get("p1_id") else None
++        remote_p2 = self.state.map_get("participant", match["p2_id"]) if match.get("p2_id") else None
+         remote_winner = (
+             self.state.map_get("participant", match["winner_id"]) if match.get("winner_id") else None
+         )
+@@ -476,6 +478,8 @@ class SyncManager:
+         def go():
+             self.api.update_match(
+                 remote_match_id,
++                p1_id=remote_p1,
++                p2_id=remote_p2,
+                 winner_id=remote_winner,
+                 p1_losses=match.get("p1_losses"),
+                 p2_losses=match.get("p2_losses"),
+@@ -757,13 +761,21 @@ class SyncManager:
+                     # пропустит эту строку и вернётся к ней позже.
+                     print(f"[sync] DEBUG: update_match ждёт create_match mid={payload['mid']}")
+                     return None
++                remote_p1 = (
++                    self.state.map_get("participant", payload["p1_id"])
++                    if payload.get("p1_id") else None
++                )
++                remote_p2 = (
++                    self.state.map_get("participant", payload["p2_id"])
++                    if payload.get("p2_id") else None
++                )
+                 remote_winner = (
+                     self.state.map_get("participant", payload["winner_id"])
+                     if payload.get("winner_id") else None
+                 )
+                 try:
+                     self.api.update_match(
+-                        remote_match_id, winner_id=remote_winner,
++                        remote_match_id, p1_id=remote_p1, p2_id=remote_p2, winner_id=remote_winner,
+                         p1_losses=payload.get("p1_losses"), p2_losses=payload.get("p2_losses"),
+                         status=payload.get("status"), table_number=payload.get("table_number"),
+                     )

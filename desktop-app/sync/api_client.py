@@ -6,6 +6,13 @@ import requests
 
 from . import config
 
+# Сентинел для PATCH-полей: отличает "поле не передано, не трогать"
+# от "поле явно передано как null" (например, снять table_number,
+# чтобы прекратить трансляцию сетки на табло сайта). default=None для
+# этого не подходит — тогда "снять номер стола" и "не менять номер
+# стола" выглядели бы одинаково, и снять номер стало бы невозможно.
+UNSET = object()
+
 
 class ApiClientError(Exception):
     def __init__(self, message: str, status_code: int | None = None):
@@ -132,7 +139,7 @@ class SyncApiClient:
         })
 
     def update_match(self, remote_match_id, winner_id=None, p1_losses=None,
-                      p2_losses=None, status=None, table_number=None):
+                      p2_losses=None, status=None, table_number=UNSET):
         body = {}
         if winner_id is not None:
             body["winner_id"] = winner_id
@@ -142,7 +149,9 @@ class SyncApiClient:
             body["p2_losses"] = p2_losses
         if status is not None:
             body["status"] = status
-        if table_number is not None:
+        if table_number is not UNSET:
+            # table_number может быть None — это осознанный сброс (снять
+            # категорию/руку с трансляции на табло), а не "поле не менялось".
             body["table_number"] = table_number
         return self._request("PATCH", f"/matches/{remote_match_id}", json_body=body)
 
