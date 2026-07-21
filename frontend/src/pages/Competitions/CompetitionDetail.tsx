@@ -129,7 +129,19 @@ export function CompetitionDetail() {
 
       {(isActive || queue.data?.some(t => t.current || t.next.length > 0)) && (
         <section className="mt-10">
-          <h2 className="font-display text-xl text-bone">Очередь схваток</h2>
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="font-display text-xl text-bone">Очередь схваток</h2>
+            {isActive && (
+              <a
+                href={`/competitions/${competitionId}/board`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-eyebrow rounded-[var(--radius-rivet)] border border-steel-dim px-3 py-1.5 text-steel hover:border-brass hover:text-brass"
+              >
+                📺 Открыть табло
+              </a>
+            )}
+          </div>
           <div className="rivet-line my-4" />
           {queue.data && queue.data.length > 0 ? (
             <LiveQueueBoard tables={queue.data} />

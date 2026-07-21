@@ -5,6 +5,7 @@ import { Athletes } from '@/pages/Athletes/Athletes'
 import { AthleteProfile } from '@/pages/AthleteProfile/AthleteProfile'
 import { Competitions } from '@/pages/Competitions/Competitions'
 import { CompetitionDetail } from '@/pages/Competitions/CompetitionDetail'
+import { CompetitionBoard } from '@/pages/Competitions/CompetitionBoard'
 import { News } from '@/pages/News/News'
 import { NewsDetail } from '@/pages/News/NewsDetail'
 import { Rankings } from '@/pages/Rankings/Rankings'
@@ -37,6 +38,7 @@ export const router = createBrowserRouter([
       { path: '*', element: <NotFound /> },
     ],
   },
+  { path: '/competitions/:id/board', element: <CompetitionBoard /> },
   { path: '/admin/login', element: <AdminLogin /> },
   {
     path: '/admin',
