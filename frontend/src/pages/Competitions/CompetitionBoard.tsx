@@ -3,18 +3,25 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { useCompetition, useCompetitionQueue } from '@/features/competitions/useCompetitions'
 import type { TableQueueOut, QueuePairOut } from '@/types/api'
 
-function autoFontSize(text: string): string {
+function autoFontSize(text: string, single = false): string {
   const len = text.length
-  if (len <= 12) return 'text-4xl sm:text-5xl'
-  if (len <= 18) return 'text-3xl sm:text-4xl'
-  if (len <= 24) return 'text-2xl sm:text-3xl'
-  if (len <= 32) return 'text-xl sm:text-2xl'
-  return 'text-lg sm:text-xl'
+  if (single) {
+    if (len <= 14) return 'text-6xl sm:text-7xl md:text-8xl'
+    if (len <= 20) return 'text-5xl sm:text-6xl md:text-7xl'
+    if (len <= 28) return 'text-4xl sm:text-5xl md:text-6xl'
+    if (len <= 36) return 'text-3xl sm:text-4xl md:text-5xl'
+    return 'text-2xl sm:text-3xl md:text-4xl'
+  }
+  if (len <= 12) return 'text-3xl sm:text-4xl'
+  if (len <= 18) return 'text-2xl sm:text-3xl'
+  if (len <= 24) return 'text-xl sm:text-2xl'
+  if (len <= 32) return 'text-lg sm:text-xl'
+  return 'text-base sm:text-lg'
 }
 
-function PairBlock({ pair, label }: { pair: QueuePairOut; label?: string }) {
-  const p1Size = autoFontSize(pair.p1_name)
-  const p2Size = autoFontSize(pair.p2_name)
+function PairBlock({ pair, label, single }: { pair: QueuePairOut; label?: string; single?: boolean }) {
+  const p1Size = autoFontSize(pair.p1_name, single)
+  const p2Size = autoFontSize(pair.p2_name, single)
   const roundLine = pair.round_name
     ? `${pair.hand === 'left' ? 'Л' : 'Правая'} · ${pair.round_name}`
     : pair.hand === 'left' ? 'Левая' : 'Правая'
@@ -41,44 +48,47 @@ function CompletedBlock() {
   )
 }
 
-function QueueBlock({ table }: { table: TableQueueOut }) {
+function QueueBlock({ table, single }: { table: TableQueueOut; single?: boolean }) {
   const hasMatch = !!table.current
   const hasStandings = table.eliminated.length > 0
 
   return (
-    <div className="flex flex-col border border-steel-dim/20 bg-black/20 p-3 sm:p-4">
-      <div className="text-center mb-2">
-        <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-emerald-400">
+    <div className={`flex flex-col border border-steel-dim/20 bg-black/20 ${single ? 'p-6 sm:p-10' : 'p-3 sm:p-4'}`}>
+      <div className="text-center mb-3">
+        <p className={`font-mono uppercase tracking-[0.25em] text-emerald-400 ${single ? 'text-sm' : 'text-[10px]'}`}>
           Стол {table.table_number}
+        </p>
+        <p className={`font-mono text-steel-dim mt-1 ${single ? 'text-xs' : 'text-[10px]'}`}>
+          {table.category_name} · {table.hand === 'left' ? 'Левая' : 'Правая'} рука
         </p>
       </div>
 
       {hasMatch ? (
-        <div className="py-3 border-b border-steel-dim/10">
-          <PairBlock pair={table.current!} label="сейчас" />
+        <div className={`border-b border-steel-dim/10 ${single ? 'py-8' : 'py-3'}`}>
+          <PairBlock pair={table.current!} label="сейчас" single={single} />
         </div>
       ) : hasStandings ? (
-        <div className="py-3 border-b border-steel-dim/10">
+        <div className={`border-b border-steel-dim/10 ${single ? 'py-8' : 'py-3'}`}>
           <CompletedBlock />
         </div>
       ) : (
-        <div className="py-3 border-b border-steel-dim/10">
+        <div className={`border-b border-steel-dim/10 ${single ? 'py-8' : 'py-3'}`}>
           <p className="text-center text-sm text-steel-dim">Ожидание</p>
         </div>
       )}
 
       {table.next.length > 0 && (
-        <div className="py-2 border-b border-steel-dim/10 space-y-3">
+        <div className={`border-b border-steel-dim/10 space-y-3 ${single ? 'py-5' : 'py-2'}`}>
           {table.next.map((pair, i) => (
-            <PairBlock key={pair.match_id} pair={pair} label={i === 0 ? 'далее' : undefined} />
+            <PairBlock key={pair.match_id} pair={pair} label={i === 0 ? 'далее' : undefined} single={single} />
           ))}
         </div>
       )}
 
       {hasStandings && (
-        <div className="pt-2 space-y-0.5">
+        <div className={`space-y-0.5 ${single ? 'pt-4' : 'pt-2'}`}>
           {table.eliminated.map((e) => (
-            <p key={e.athlete_name} className="text-center font-mono text-[11px] text-steel-dim">
+            <p key={e.athlete_name} className={`text-center font-mono text-steel-dim ${single ? 'text-sm' : 'text-[11px]'}`}>
               {e.place}. <span className="text-bone">{e.athlete_name}</span>
               {e.wins > 0 || e.losses > 0 ? (
                 <span className="ml-1 text-steel-dim/50">
@@ -174,6 +184,14 @@ export function CompetitionBoard() {
     return allTables.filter((table) => selectedNames.has(table.category_name))
   }, [allTables, selectedNames])
 
+  const gridClass = tables.length <= 1
+    ? 'grid-cols-1'
+    : tables.length === 2
+      ? 'grid-cols-1 sm:grid-cols-2'
+      : tables.length <= 4
+        ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2'
+        : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+
   return (
     <div className="min-h-screen bg-ink px-3 py-4 text-bone">
       <div className="mx-auto max-w-7xl">
@@ -193,9 +211,9 @@ export function CompetitionBoard() {
         )}
 
         {tables.length > 0 && (
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          <div className={`mt-4 grid ${gridClass} gap-3`}>
             {tables.map((table) => (
-              <QueueBlock key={`${table.category_name}-${table.hand}`} table={table} />
+              <QueueBlock key={`${table.category_name}-${table.hand}`} table={table} single={tables.length === 1} />
             ))}
           </div>
         )}
