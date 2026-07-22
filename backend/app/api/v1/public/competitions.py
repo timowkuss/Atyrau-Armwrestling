@@ -329,6 +329,48 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
             next=pairs[1:4],
             eliminated=_compute_standings(cat_id, hand),
         ))
+
+    # Also include category+hand groups that have completed matches but
+    # no pending ones (tournament finished) — show last match + standings.
+    all_cat_hands = (
+        db.query(Match.category_id, Match.hand, Match.table_number, Category.name)
+        .join(Category, Match.category_id == Category.id)
+        .filter(
+            Match.competition_id == competition_id,
+            Match.table_number.isnot(None),
+        )
+        .distinct()
+        .all()
+    )
+    for cat_id, hand, tbl_num, cat_name in all_cat_hands:
+        key = (cat_id, hand)
+        if key in groups:
+            continue
+        last_match = (
+            db.query(Match)
+            .filter(
+                Match.competition_id == competition_id,
+                Match.category_id == cat_id,
+                Match.hand == hand,
+                Match.status.in_(["done", "bye"]),
+            )
+            .order_by(Match.id.desc())
+            .first()
+        )
+        if not last_match:
+            continue
+        standings = _compute_standings(cat_id, hand)
+        if not standings:
+            continue
+        result.append(TableQueueOut(
+            table_number=tbl_num or 1,
+            category_name=cat_name,
+            hand=hand,
+            current=None,
+            next=[],
+            eliminated=standings,
+        ))
+
     return result
 
 
