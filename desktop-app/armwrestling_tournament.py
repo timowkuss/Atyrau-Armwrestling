@@ -614,7 +614,9 @@ def _synced_save_match(self, match: dict):
     mid = _original_save_match(self, match)
     try:
         if is_update:
-            sync_manager.on_match_updated(mid, snapshot)
+            # Неблокирующая отправка — ручное редактирование матча (счёт,
+            # стол и т.п.) не должно подвешивать диалог на HTTP-запрос.
+            sync_manager.dispatch_match_update_async(mid, snapshot)
         else:
             sync_manager.on_match_created(mid, match)
     except Exception as e:
@@ -1261,7 +1263,10 @@ class DoubleEliminationEngine:
         try:
             m = self._get_match(match_id)
             if m:
-                sync_manager.on_match_updated(match_id, dict(m))
+                # Неблокирующая отправка: сама сетевая синхронизация уходит
+                # в фоновый воркер sync_manager'а, клик по победителю не
+                # ждёт HTTP-ответа (см. SyncManager.dispatch_match_update_async).
+                sync_manager.dispatch_match_update_async(match_id, dict(m))
         except Exception as e:
             print(f"[sync] _sync_match({match_id}): {e}")
 
@@ -1275,7 +1280,6 @@ class DoubleEliminationEngine:
         self.db.conn.execute(f"UPDATE matches SET {col}=? WHERE id=?", (player_id, match_id))
         self.db.conn.commit()
         self._update_status_after_fill(match_id)
-        self._sync_match(match_id)
 
     def _update_status_after_fill(self, match_id):
         m = self._get_match(match_id)
@@ -1922,7 +1926,10 @@ class SingleEliminationEngine:
         try:
             m = self._get_match(match_id)
             if m:
-                sync_manager.on_match_updated(match_id, dict(m))
+                # Неблокирующая отправка: сама сетевая синхронизация уходит
+                # в фоновый воркер sync_manager'а, клик по победителю не
+                # ждёт HTTP-ответа (см. SyncManager.dispatch_match_update_async).
+                sync_manager.dispatch_match_update_async(match_id, dict(m))
         except Exception as e:
             print(f"[sync] _sync_match({match_id}): {e}")
 
@@ -1936,7 +1943,6 @@ class SingleEliminationEngine:
         self.db.conn.execute(f"UPDATE matches SET {col}=? WHERE id=?", (player_id, match_id))
         self.db.conn.commit()
         self._update_status_after_fill(match_id)
-        self._sync_match(match_id)
 
     def _update_status_after_fill(self, match_id):
         m = self._get_match(match_id)
@@ -2464,20 +2470,21 @@ class BracketWindow(ctk.CTkToplevel):
         локально (чтобы выбор организатора пережил переоткрытие окна и
         пересоздание сетки) и на сайте, чтобы там можно было собрать живую
         очередь пар по столам (см. sync_manager.on_matches_table_assigned).
-        table_number=None корректно снимает трансляцию с обеих сторон.
-
-        Также повторно синхронизирует p1_id/p2_id/winner/status всех матчей,
-        чтобы серверные записи были актуальны (ранее update_match не отправлял
-        p1/p2, из-за чего следующие пары не попадали в очередь табло)."""
+        table_number=None корректно снимает трансляцию с обеих сторон."""
         self.db.set_bracket_table_number(self.category["id"], self.hand, self.table_number)
         try:
             matches = self.db.get_matches(self.category["id"], self.hand)
             mids = [m["id"] for m in matches]
             if mids:
-                sync_manager.on_matches_table_assigned(mids, self.table_number)
-                for m in matches:
-                    if m["status"] in ("done", "bye", "pending", "waiting"):
-                        self._sync_match(m["id"])
+                # Неблокирующе: раньше это была последовательность из N
+                # блокирующих PATCH-запросов (по одному на матч) прямо на
+                # UI-потоке — открытие окна сетки/смена стола подвисали на
+                # секунды при живой сети. Теперь весь цикл уезжает одной
+                # задачей в фоновый воркер sync_manager'а.
+                table_number = self.table_number
+                sync_manager.dispatch_async(
+                    lambda mids=mids, tn=table_number: sync_manager.on_matches_table_assigned(mids, tn)
+                )
         except Exception as e:
             print(f"[sync] assign_table: {e}")
 

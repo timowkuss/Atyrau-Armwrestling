@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.db.models.athletes import Athlete
 from app.db.models.categories import Category
@@ -16,7 +16,6 @@ from app.schemas.competitions import (
     CategoryOut,
     CompetitionDetailOut,
     CompetitionListOut,
-    EliminatedOut,
     QueuePairOut,
     ResultOut,
     TableQueueOut,
@@ -158,11 +157,31 @@ def get_competition_bracket(competition_id: int, db: Session = Depends(get_db)):
         .all()
     )
 
+    # Раньше здесь на каждый матч уходило до 3 отдельных db.get(...) плюс
+    # ленивая подгрузка match.athlete под капотом каждого — на сетку из
+    # ~14 матчей это ~80+ запросов к БД на один открытие страницы. Берём
+    # разом всех нужных участников одним запросом с joinedload(athlete).
+    participant_ids: set[int] = set()
+    for match, _ in matches:
+        for pid in (match.p1_id, match.p2_id, match.winner_id):
+            if pid:
+                participant_ids.add(pid)
+
+    participants_by_id: dict[int, CompetitionParticipant] = {}
+    if participant_ids:
+        rows = (
+            db.query(CompetitionParticipant)
+            .options(joinedload(CompetitionParticipant.athlete))
+            .filter(CompetitionParticipant.id.in_(participant_ids))
+            .all()
+        )
+        participants_by_id = {p.id: p for p in rows}
+
     items = []
     for match, category in matches:
-        p1 = db.get(CompetitionParticipant, match.p1_id) if match.p1_id else None
-        p2 = db.get(CompetitionParticipant, match.p2_id) if match.p2_id else None
-        winner = db.get(CompetitionParticipant, match.winner_id) if match.winner_id else None
+        p1 = participants_by_id.get(match.p1_id) if match.p1_id else None
+        p2 = participants_by_id.get(match.p2_id) if match.p2_id else None
+        winner = participants_by_id.get(match.winner_id) if match.winner_id else None
         items.append(
             BracketMatchOut(
                 id=match.id,
@@ -182,50 +201,49 @@ def get_competition_bracket(competition_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{competition_id}/queue", response_model=list[TableQueueOut])
 def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
-    """Живая очередь пар по категориям: текущий поединок + следующий + таблица.
+    """Живая очередь пар по столам: текущий поединок + до 3 следующих.
 
-    Если у pending-матча p1_id/p2_id ещё не заполнены (десктоп не успел
-    осинкать), пробуем вычислить игроков из предыдущих матчей через
-    win_next_id. Каждая категория+рука — отдельный блок на табло.
+    Пара считается определившейся, только когда у матча заполнены оба
+    p1_id/p2_id (см. get_current_and_next_match в десктопе — та же логика).
+    Столы без table_number (старые записи, ещё не досинкан десктоп) в
+    выдачу не попадают.
     """
-    pending = (
+    matches = (
         db.query(Match, Category)
         .join(Category, Match.category_id == Category.id)
         .filter(
             Match.competition_id == competition_id,
             Match.status == "pending",
+            Match.p1_id.isnot(None),
+            Match.p2_id.isnot(None),
             Match.table_number.isnot(None),
         )
-        .order_by(Match.category_id, Match.hand, Match.stage, Match.match_order)
+        .order_by(Match.table_number, Match.stage, Match.id)
         .all()
     )
 
-    def _resolve_players(match: Match) -> tuple[int | None, int | None]:
-        p1, p2 = match.p1_id, match.p2_id
-        if p1 and p2:
-            return p1, p2
-        predecessors = (
-            db.query(Match)
-            .filter(
-                Match.win_next_id == match.id,
-                Match.status.in_(["done", "bye"]),
-                Match.winner_id.isnot(None),
-            )
-            .order_by(Match.id)
+    # Это табло — самый часто опрашиваемый публичный эндпоинт (обновляется
+    # раз в несколько секунд на экране зала). N+1 здесь бьёт больнее всего:
+    # батчим участников одним запросом вместо db.get() на каждую пару.
+    participant_ids: set[int] = set()
+    for match, _ in matches:
+        participant_ids.add(match.p1_id)
+        participant_ids.add(match.p2_id)
+
+    participants_by_id: dict[int, CompetitionParticipant] = {}
+    if participant_ids:
+        rows = (
+            db.query(CompetitionParticipant)
+            .options(joinedload(CompetitionParticipant.athlete))
+            .filter(CompetitionParticipant.id.in_(participant_ids))
             .all()
         )
-        winners = [p.winner_id for p in predecessors if p.winner_id]
-        if len(winners) >= 2:
-            return winners[0], winners[1]
-        return p1, p2
+        participants_by_id = {p.id: p for p in rows}
 
-    groups: dict[tuple[int, str], dict] = {}
-    for match, category in pending:
-        p1_id, p2_id = _resolve_players(match)
-        if not p1_id or not p2_id:
-            continue
-        p1 = db.get(CompetitionParticipant, p1_id)
-        p2 = db.get(CompetitionParticipant, p2_id)
+    tables: dict[int, list[QueuePairOut]] = {}
+    for match, category in matches:
+        p1 = participants_by_id.get(match.p1_id)
+        p2 = participants_by_id.get(match.p2_id)
         if p1 is None or p2 is None:
             continue
         pair = QueuePairOut(
@@ -236,142 +254,12 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
             p1_name=p1.athlete.full_name,
             p2_name=p2.athlete.full_name,
         )
-        key = (match.category_id, match.hand)
-        if key not in groups:
-            groups[key] = {
-                "table_number": match.table_number or 1,
-                "category_name": category.name,
-                "hand": match.hand,
-                "pairs": [],
-            }
-        groups[key]["pairs"].append(pair)
+        tables.setdefault(match.table_number, []).append(pair)
 
-    def _round_score(bracket: str, round_name: str | None) -> int:
-        weights = {"winners": 0, "losers": 100, "final": 200}
-        base = weights.get(bracket, 0)
-        if round_name:
-            digits = "".join(ch for ch in round_name if ch.isdigit())
-            return base + (int(digits) if digits else 0)
-        return base
-
-    def _compute_standings(category_id: int, hand: str) -> list:
-        all_matches = (
-            db.query(Match)
-            .filter(
-                Match.competition_id == competition_id,
-                Match.category_id == category_id,
-                Match.hand == hand,
-            )
-            .all()
-        )
-
-        bracket_system = "double"
-        cat = db.get(Category, category_id)
-        if cat and cat.competition:
-            bracket_system = cat.competition.bracket_system or "double"
-        losses_needed = 2 if bracket_system == "double" else 1
-
-        stats: dict[int, dict] = {}
-        def ensure(pid: int | None):
-            if pid is None or pid in stats:
-                return
-            stats[pid] = {"pid": pid, "wins": 0, "losses": 0,
-                          "eliminated": False, "elim_round_score": -1}
-        for m in all_matches:
-            ensure(m.p1_id)
-            ensure(m.p2_id)
-            if m.status in ("done", "bye") and m.winner_id:
-                winner = m.winner_id
-                loser = m.p2_id if winner == m.p1_id else m.p1_id
-                if m.status == "done":
-                    ensure(winner)
-                    stats[winner]["wins"] += 1
-                    if loser:
-                        ensure(loser)
-                        stats[loser]["losses"] += 1
-                        rs = _round_score(m.bracket, m.round_name)
-                        if rs > stats[loser]["elim_round_score"]:
-                            stats[loser]["elim_round_score"] = rs
-                        if stats[loser]["losses"] >= losses_needed:
-                            stats[loser]["eliminated"] = True
-
-        is_complete = all(
-            m.status in ("done", "bye") for m in all_matches
-        ) and len(all_matches) > 0
-
-        ordered = sorted(
-            stats.values(),
-            key=lambda s: (-s["wins"], s["losses"], -s["elim_round_score"]),
-        )
-
-        result = []
-        for i, s in enumerate(ordered):
-            if not is_complete and not s["eliminated"]:
-                continue
-            cp = db.get(CompetitionParticipant, s["pid"])
-            name = cp.athlete.full_name if cp and cp.athlete else "—"
-            result.append(EliminatedOut(
-                athlete_name=name,
-                place=i + 1,
-                wins=s["wins"],
-                losses=s["losses"],
-            ))
-        return result
-
-    result = []
-    for (cat_id, hand), g in sorted(groups.items()):
-        pairs = g["pairs"]
-        result.append(TableQueueOut(
-            table_number=g["table_number"],
-            category_name=g["category_name"],
-            hand=g["hand"],
-            current=pairs[0],
-            next=pairs[1:4],
-            eliminated=_compute_standings(cat_id, hand),
-        ))
-
-    # Also include category+hand groups that have completed matches but
-    # no pending ones (tournament finished) — show last match + standings.
-    all_cat_hands = (
-        db.query(Match.category_id, Match.hand, Match.table_number, Category.name)
-        .join(Category, Match.category_id == Category.id)
-        .filter(
-            Match.competition_id == competition_id,
-            Match.table_number.isnot(None),
-        )
-        .distinct()
-        .all()
-    )
-    for cat_id, hand, tbl_num, cat_name in all_cat_hands:
-        key = (cat_id, hand)
-        if key in groups:
-            continue
-        last_match = (
-            db.query(Match)
-            .filter(
-                Match.competition_id == competition_id,
-                Match.category_id == cat_id,
-                Match.hand == hand,
-                Match.status.in_(["done", "bye"]),
-            )
-            .order_by(Match.id.desc())
-            .first()
-        )
-        if not last_match:
-            continue
-        standings = _compute_standings(cat_id, hand)
-        if not standings:
-            continue
-        result.append(TableQueueOut(
-            table_number=tbl_num or 1,
-            category_name=cat_name,
-            hand=hand,
-            current=None,
-            next=[],
-            eliminated=standings,
-        ))
-
-    return result
+    return [
+        TableQueueOut(table_number=tnum, current=pairs[0], next=pairs[1:4])
+        for tnum, pairs in sorted(tables.items())
+    ]
 
 
 @router.get("/{competition_id}/participants")

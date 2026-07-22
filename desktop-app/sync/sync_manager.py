@@ -5,6 +5,7 @@
 любая сетевая ошибка уходит в офлайн-очередь и повторяется позже.
 """
 
+import queue
 import sqlite3
 import threading
 from pathlib import Path
@@ -44,6 +45,53 @@ class SyncManager:
         # того, как первый пометит их выполненными, что даёт дубли на
         # сервере (см. flush_pending).
         self._flush_lock = threading.Lock()
+
+        # ── асинхронный воркер для on_match_updated ──────────────────
+        # Раньше движок сетки (advance_winner → _propagate → _place_player
+        # → _sync_match) вызывал sync_manager.on_match_updated(...) НАПРЯМУЮ
+        # на UI-потоке. on_match_updated при живой сети делает блокирующий
+        # HTTP PATCH (до REQUEST_TIMEOUT_SECONDS сек), а при продвижении
+        # победителя таких вызовов подряд несколько (сам матч + следующий
+        # матч в winners/losers + возможные авто-резолвы BYE) — от этого
+        # клик "Победил X" реально подвисал на пару секунд, пока клавиатурный
+        # ввод/канвас не могли отрисоваться. Теперь _sync_match кладёт джобу
+        # в очередь и сразу возвращает управление; один долгоживущий воркер
+        # разбирает очередь строго по порядку (FIFO — важно, чтобы апдейт
+        # текущего матча не мог обогнать апдейт следующего) в отдельном
+        # потоке, не трогая UI.
+        self._sync_queue: "queue.Queue" = queue.Queue()
+        self._sync_worker = threading.Thread(
+            target=self._sync_worker_loop, daemon=True, name="sync-match-worker"
+        )
+        self._sync_worker.start()
+
+    def _sync_worker_loop(self):
+        while True:
+            mid, payload = self._sync_queue.get()
+            try:
+                if mid == "__call__":
+                    payload()
+                else:
+                    self.on_match_updated(mid, payload)
+            except Exception as e:
+                print(f"[sync] async job ({mid}): {e}")
+            finally:
+                self._sync_queue.task_done()
+
+    def dispatch_match_update_async(self, mid, match: dict):
+        """Неблокирующая версия on_match_updated — вызывается из UI-потока
+        движком сетки. Сам match-словарь читается из локальной SQLite
+        синхронно (это быстро, там нет сети), в очередь уходит уже готовый
+        dict, чтобы не держать курсор/соединение между потоками."""
+        self._sync_queue.put((mid, dict(match)))
+
+    def dispatch_async(self, fn):
+        """Общий неблокирующий диспетчер: кладёт произвольный вызов без
+        аргументов в тот же FIFO-воркер, что и dispatch_match_update_async
+        (тот же порядок исполнения, тот же поток). Используется там, где
+        раньше save_match/on_match_created дёргались напрямую с UI-потока
+        (ручное редактирование матча) и подвешивали интерфейс на HTTP."""
+        self._sync_queue.put(("__call__", fn))
 
     def is_online(self) -> bool:
         """Быстрая проверка доступности сервера через ping."""
