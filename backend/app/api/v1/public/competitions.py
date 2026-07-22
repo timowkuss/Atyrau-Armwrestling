@@ -295,17 +295,18 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
                         if stats[loser]["losses"] >= losses_needed:
                             stats[loser]["eliminated"] = True
 
-        eliminated = [s for s in stats.values() if s["eliminated"]]
-        eliminated.sort(key=lambda s: s["elim_round_score"])
-
-        total = len(stats)
+        ordered = sorted(
+            stats.values(),
+            key=lambda s: (-s["wins"], s["losses"], -s["elim_round_score"]),
+        )
         result = []
-        for i, s in enumerate(eliminated):
+        total = len(ordered)
+        for i, s in enumerate(ordered):
             cp = db.get(CompetitionParticipant, s["pid"])
             name = cp.athlete.full_name if cp and cp.athlete else "—"
             result.append(EliminatedOut(
                 athlete_name=name,
-                place=total - i,
+                place=i + 1,
                 wins=s["wins"],
                 losses=s["losses"],
             ))
