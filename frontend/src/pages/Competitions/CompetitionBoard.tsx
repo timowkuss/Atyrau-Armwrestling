@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo } from 'react' // eliminated tablo
 import { useParams, useSearchParams } from 'react-router-dom'
 import { useCompetition, useCompetitionQueue } from '@/features/competitions/useCompetitions'
 import type { TableQueueOut, QueuePairOut } from '@/types/api'
