@@ -6,28 +6,24 @@ import type { TableQueueOut, QueuePairOut } from '@/types/api'
 function autoFontSize(text: string, single = false): string {
   const len = text.length
   if (single) {
-    if (len <= 14) return 'text-6xl sm:text-7xl md:text-8xl'
-    if (len <= 20) return 'text-5xl sm:text-6xl md:text-7xl'
-    if (len <= 28) return 'text-4xl sm:text-5xl md:text-6xl'
-    if (len <= 36) return 'text-3xl sm:text-4xl md:text-5xl'
-    return 'text-2xl sm:text-3xl md:text-4xl'
+    if (len <= 14) return 'text-5xl sm:text-6xl md:text-7xl'
+    if (len <= 20) return 'text-4xl sm:text-5xl md:text-6xl'
+    if (len <= 28) return 'text-3xl sm:text-4xl md:text-5xl'
+    if (len <= 36) return 'text-2xl sm:text-3xl md:text-4xl'
+    return 'text-xl sm:text-2xl md:text-3xl'
   }
-  if (len <= 12) return 'text-3xl sm:text-4xl'
-  if (len <= 18) return 'text-2xl sm:text-3xl'
-  if (len <= 24) return 'text-xl sm:text-2xl'
-  if (len <= 32) return 'text-lg sm:text-xl'
-  return 'text-base sm:text-lg'
+  if (len <= 12) return 'text-2xl sm:text-3xl'
+  if (len <= 18) return 'text-xl sm:text-2xl'
+  if (len <= 24) return 'text-lg sm:text-xl'
+  if (len <= 32) return 'text-base sm:text-lg'
+  return 'text-sm sm:text-base'
 }
 
 function PairBlock({ pair, label, single }: { pair: QueuePairOut; label?: string; single?: boolean }) {
   const p1Size = autoFontSize(pair.p1_name, single)
   const p2Size = autoFontSize(pair.p2_name, single)
-  const roundLine = pair.round_name
-    ? `${pair.hand === 'left' ? 'Л' : 'Правая'} · ${pair.round_name}`
-    : pair.hand === 'left' ? 'Левая' : 'Правая'
   return (
     <div className="flex flex-col items-center gap-0.5">
-      <p className="font-mono text-[10px] uppercase tracking-wider text-steel-dim">{roundLine}</p>
       <p className={`font-display font-bold leading-tight text-bone ${p1Size}`}>
         {pair.p1_name}
       </p>
@@ -51,15 +47,17 @@ function CompletedBlock() {
 function QueueBlock({ table, single }: { table: TableQueueOut; single?: boolean }) {
   const hasMatch = !!table.current
   const hasStandings = table.eliminated.length > 0
+  const categoryLabel = table.category_name.replace(/\s*Both\s*/i, '').trim()
+  const handLabel = table.hand === 'left' ? 'Левая' : 'Правая'
 
   return (
     <div className={`flex flex-col border border-steel-dim/20 bg-black/20 ${single ? 'p-6 sm:p-10' : 'p-3 sm:p-4'}`}>
       <div className="text-center mb-3">
-        <p className={`font-mono uppercase tracking-[0.25em] text-emerald-400 ${single ? 'text-sm' : 'text-[10px]'}`}>
+        <p className={`font-display font-bold uppercase tracking-[0.25em] text-emerald-400 ${single ? 'text-2xl sm:text-3xl' : 'text-lg sm:text-xl'}`}>
           Стол {table.table_number}
         </p>
-        <p className={`font-mono text-steel-dim mt-1 ${single ? 'text-xs' : 'text-[10px]'}`}>
-          {table.category_name} · {table.hand === 'left' ? 'Левая' : 'Правая'} рука
+        <p className={`font-mono text-steel-dim mt-0.5 ${single ? 'text-xs' : 'text-[10px]'}`}>
+          {categoryLabel} | {handLabel} рука
         </p>
       </div>
 
