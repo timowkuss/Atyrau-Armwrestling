@@ -3,95 +3,79 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { useCompetition, useCompetitionQueue } from '@/features/competitions/useCompetitions'
 import type { TableQueueOut, QueuePairOut } from '@/types/api'
 
-function autoFontSize(text: string, single = false): string {
-  const len = text.length
-  if (single) {
-    if (len <= 14) return 'text-5xl sm:text-6xl md:text-7xl'
-    if (len <= 20) return 'text-4xl sm:text-5xl md:text-6xl'
-    if (len <= 28) return 'text-3xl sm:text-4xl md:text-5xl'
-    if (len <= 36) return 'text-2xl sm:text-3xl md:text-4xl'
-    return 'text-xl sm:text-2xl md:text-3xl'
-  }
-  if (len <= 12) return 'text-2xl sm:text-3xl'
-  if (len <= 18) return 'text-xl sm:text-2xl'
-  if (len <= 24) return 'text-lg sm:text-xl'
-  if (len <= 32) return 'text-base sm:text-lg'
-  return 'text-sm sm:text-base'
+function pairFontSize(totalLen: number, tableCount: number): string {
+  const w = tableCount <= 1 ? totalLen : totalLen * (tableCount <= 2 ? 1.7 : tableCount <= 3 ? 2.2 : 2.8)
+  if (w <= 14) return 'text-4xl sm:text-5xl md:text-6xl'
+  if (w <= 20) return 'text-3xl sm:text-4xl md:text-5xl'
+  if (w <= 28) return 'text-2xl sm:text-3xl md:text-4xl'
+  if (w <= 36) return 'text-xl sm:text-2xl md:text-3xl'
+  if (w <= 48) return 'text-base sm:text-lg md:text-xl'
+  if (w <= 60) return 'text-sm sm:text-base md:text-lg'
+  return 'text-xs sm:text-sm md:text-base'
 }
 
-function PairBlock({ pair, label, single }: { pair: QueuePairOut; label?: string; single?: boolean }) {
-  const p1Size = autoFontSize(pair.p1_name, single)
-  const p2Size = autoFontSize(pair.p2_name, single)
+function PairBlock({ pair, label, tableCount }: { pair: QueuePairOut; label?: string; tableCount: number }) {
+  const totalLen = pair.p1_name.length + pair.p2_name.length
+  const size = pairFontSize(totalLen, tableCount)
   return (
     <div className="flex flex-col items-center gap-0.5">
-      <p className={`font-display font-bold leading-tight text-bone ${p1Size}`}>
+      {label && <p className="text-[10px] uppercase tracking-widest text-emerald-400">{label}</p>}
+      <p className={`font-display font-bold leading-tight text-bone whitespace-nowrap ${size}`}>
         {pair.p1_name}
-      </p>
-      <p className="font-mono text-xs text-steel">vs</p>
-      <p className={`font-display font-bold leading-tight text-bone ${p2Size}`}>
+        <span className="mx-1.5 font-mono text-steel font-normal">vs</span>
         {pair.p2_name}
       </p>
-      {label && <p className="text-[10px] uppercase tracking-widest text-emerald-400 mt-0.5">{label}</p>}
     </div>
   )
 }
 
-function CompletedBlock() {
-  return (
-    <div className="flex flex-col items-center gap-0.5">
-      <p className="font-mono text-[10px] uppercase tracking-wider text-steel-dim">Турнир завершён</p>
-    </div>
-  )
-}
-
-function QueueBlock({ table, single }: { table: TableQueueOut; single?: boolean }) {
+function QueueBlock({ table, tableCount }: { table: TableQueueOut; tableCount: number }) {
   const hasMatch = !!table.current
   const hasStandings = table.eliminated.length > 0
   const categoryLabel = table.category_name.replace(/\s*Both\s*/i, '').trim()
   const handLabel = table.hand === 'left' ? 'Левая' : 'Правая'
+  const isSingle = tableCount === 1
 
   return (
-    <div className={`flex flex-col border border-steel-dim/20 bg-black/20 ${single ? 'p-6 sm:p-10' : 'p-3 sm:p-4'}`}>
-      <div className="text-center mb-3">
-        <p className={`font-display font-bold uppercase tracking-[0.25em] text-emerald-400 ${single ? 'text-2xl sm:text-3xl' : 'text-lg sm:text-xl'}`}>
+    <div className={`flex flex-col border border-steel-dim/20 bg-black/20 ${isSingle ? 'p-6 sm:p-10' : 'p-3 sm:p-4'}`}>
+      <div className="text-center mb-2">
+        <p className={`font-display font-bold uppercase tracking-[0.25em] text-emerald-400 ${isSingle ? 'text-2xl sm:text-3xl' : 'text-lg sm:text-xl'}`}>
           Стол {table.table_number}
         </p>
-        <p className={`font-mono text-steel-dim mt-0.5 ${single ? 'text-xs' : 'text-[10px]'}`}>
+        <p className="font-mono text-[10px] text-steel-dim mt-0.5">
           {categoryLabel} | {handLabel} рука
         </p>
       </div>
 
       {hasMatch ? (
-        <div className={`border-b border-steel-dim/10 ${single ? 'py-8' : 'py-3'}`}>
-          <PairBlock pair={table.current!} label="сейчас" single={single} />
+        <div className={`border-b border-steel-dim/10 ${isSingle ? 'py-6' : 'py-2'}`}>
+          <PairBlock pair={table.current!} label="сейчас" tableCount={tableCount} />
         </div>
       ) : hasStandings ? (
-        <div className={`border-b border-steel-dim/10 ${single ? 'py-8' : 'py-3'}`}>
-          <CompletedBlock />
+        <div className={`border-b border-steel-dim/10 ${isSingle ? 'py-6' : 'py-2'}`}>
+          <p className="text-center font-mono text-[10px] uppercase tracking-wider text-steel-dim">Турнир завершён</p>
         </div>
       ) : (
-        <div className={`border-b border-steel-dim/10 ${single ? 'py-8' : 'py-3'}`}>
+        <div className={`border-b border-steel-dim/10 ${isSingle ? 'py-6' : 'py-2'}`}>
           <p className="text-center text-sm text-steel-dim">Ожидание</p>
         </div>
       )}
 
       {table.next.length > 0 && (
-        <div className={`border-b border-steel-dim/10 space-y-3 ${single ? 'py-5' : 'py-2'}`}>
+        <div className={`border-b border-steel-dim/10 ${isSingle ? 'py-4 space-y-4' : 'py-2 space-y-2'}`}>
           {table.next.map((pair, i) => (
-            <PairBlock key={pair.match_id} pair={pair} label={i === 0 ? 'далее' : undefined} single={single} />
+            <PairBlock key={pair.match_id} pair={pair} label={i === 0 ? 'далее' : undefined} tableCount={tableCount} />
           ))}
         </div>
       )}
 
       {hasStandings && (
-        <div className={`space-y-0.5 ${single ? 'pt-4' : 'pt-2'}`}>
+        <div className={`${isSingle ? 'pt-3 space-y-1' : 'pt-1.5 space-y-0.5'}`}>
           {table.eliminated.map((e) => (
-            <p key={e.athlete_name} className={`text-center font-mono text-steel-dim ${single ? 'text-sm' : 'text-[11px]'}`}>
+            <p key={e.athlete_name} className={`text-center font-mono text-steel-dim ${isSingle ? 'text-sm' : 'text-[11px]'}`}>
               {e.place}. <span className="text-bone">{e.athlete_name}</span>
               {e.wins > 0 || e.losses > 0 ? (
-                <span className="ml-1 text-steel-dim/50">
-                  {e.wins}-{e.losses}
-                </span>
+                <span className="ml-1 text-steel-dim/50">{e.wins}-{e.losses}</span>
               ) : null}
             </p>
           ))}
@@ -211,7 +195,7 @@ export function CompetitionBoard() {
         {tables.length > 0 && (
           <div className={`mt-4 grid ${gridClass} gap-3`}>
             {tables.map((table) => (
-              <QueueBlock key={`${table.category_name}-${table.hand}`} table={table} single={tables.length === 1} />
+              <QueueBlock key={`${table.category_name}-${table.hand}`} table={table} tableCount={tables.length} />
             ))}
           </div>
         )}
