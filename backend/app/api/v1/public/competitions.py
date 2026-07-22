@@ -184,9 +184,9 @@ def get_competition_bracket(competition_id: int, db: Session = Depends(get_db)):
 def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
     """Живая очередь пар по категориям: текущий поединок + следующий + таблица.
 
-    Пара считается определившейся, только когда у матча заполнены оба
-    p1_id/p2_id (см. get_current_and_next_match в десктопе — та же логика).
-    Каждая категория+рука — отдельный блок на табло.
+    Если у pending-матча p1_id/p2_id ещё не заполнены (десктоп не успел
+    осинкать), пробуем вычислить игроков из предыдущих матчей через
+    win_next_id. Каждая категория+рука — отдельный блок на табло.
     """
     pending = (
         db.query(Match, Category)
@@ -194,18 +194,38 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
         .filter(
             Match.competition_id == competition_id,
             Match.status == "pending",
-            Match.p1_id.isnot(None),
-            Match.p2_id.isnot(None),
             Match.table_number.isnot(None),
         )
         .order_by(Match.category_id, Match.hand, Match.stage, Match.match_order)
         .all()
     )
 
+    def _resolve_players(match: Match) -> tuple[int | None, int | None]:
+        p1, p2 = match.p1_id, match.p2_id
+        if p1 and p2:
+            return p1, p2
+        predecessors = (
+            db.query(Match)
+            .filter(
+                Match.win_next_id == match.id,
+                Match.status.in_(["done", "bye"]),
+                Match.winner_id.isnot(None),
+            )
+            .order_by(Match.id)
+            .all()
+        )
+        winners = [p.winner_id for p in predecessors if p.winner_id]
+        if len(winners) >= 2:
+            return winners[0], winners[1]
+        return p1, p2
+
     groups: dict[tuple[int, str], dict] = {}
     for match, category in pending:
-        p1 = db.get(CompetitionParticipant, match.p1_id)
-        p2 = db.get(CompetitionParticipant, match.p2_id)
+        p1_id, p2_id = _resolve_players(match)
+        if not p1_id or not p2_id:
+            continue
+        p1 = db.get(CompetitionParticipant, p1_id)
+        p2 = db.get(CompetitionParticipant, p2_id)
         if p1 is None or p2 is None:
             continue
         pair = QueuePairOut(

@@ -1275,6 +1275,7 @@ class DoubleEliminationEngine:
         self.db.conn.execute(f"UPDATE matches SET {col}=? WHERE id=?", (player_id, match_id))
         self.db.conn.commit()
         self._update_status_after_fill(match_id)
+        self._sync_match(match_id)
 
     def _update_status_after_fill(self, match_id):
         m = self._get_match(match_id)
@@ -1935,6 +1936,7 @@ class SingleEliminationEngine:
         self.db.conn.execute(f"UPDATE matches SET {col}=? WHERE id=?", (player_id, match_id))
         self.db.conn.commit()
         self._update_status_after_fill(match_id)
+        self._sync_match(match_id)
 
     def _update_status_after_fill(self, match_id):
         m = self._get_match(match_id)
