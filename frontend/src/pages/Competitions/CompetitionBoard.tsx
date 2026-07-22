@@ -18,10 +18,14 @@ function PairBlock({ pair, label }: { pair: QueuePairOut; label?: string }) {
 }
 
 function QueueBlock({ table }: { table: TableQueueOut }) {
+  const handLabel = table.hand === 'left' ? 'Левая' : table.hand === 'right' ? 'Правая' : table.hand
   return (
     <div className="flex flex-col rounded-[var(--radius-rivet)] border border-steel-dim/40 bg-black/30 p-8">
       <p className="text-center text-eyebrow text-2xl tracking-[0.3em] text-emerald-400">
         СТОЛ {table.table_number}
+      </p>
+      <p className="text-center font-mono text-sm text-steel mt-1">
+        {table.category_name} · {handLabel} рука
       </p>
 
       {table.current ? (
@@ -146,15 +150,7 @@ export function CompetitionBoard() {
   const tables = useMemo(() => {
     if (selectedNames.size === 0) return allTables
 
-    return allTables
-      .map((table) => {
-        const pairs = [table.current, ...table.next].filter(
-          (p): p is QueuePairOut => p !== null && selectedNames.has(p.category_name),
-        )
-        if (pairs.length === 0) return null
-        return { table_number: table.table_number, current: pairs[0], next: pairs.slice(1), eliminated: table.eliminated }
-      })
-      .filter((t): t is TableQueueOut => t !== null)
+    return allTables.filter((table) => selectedNames.has(table.category_name))
   }, [allTables, selectedNames])
 
   const cols = tables.length > 1 ? 'sm:grid-cols-2' : ''
@@ -180,7 +176,7 @@ export function CompetitionBoard() {
         {tables.length > 0 && (
           <div className={`mt-8 grid grid-cols-1 gap-6 ${cols}`}>
             {tables.map((table) => (
-              <QueueBlock key={table.table_number} table={table} />
+              <QueueBlock key={`${table.category_name}-${table.hand}`} table={table} />
             ))}
           </div>
         )}

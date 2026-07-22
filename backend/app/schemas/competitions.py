@@ -76,6 +76,8 @@ class EliminatedOut(BaseModel):
 
 class TableQueueOut(BaseModel):
     table_number: int
+    category_name: str
+    hand: str
     current: QueuePairOut | None
     next: list[QueuePairOut]
     eliminated: list[EliminatedOut]

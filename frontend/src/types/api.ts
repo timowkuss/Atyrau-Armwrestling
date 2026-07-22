@@ -165,6 +165,8 @@ export interface EliminatedOut {
 
 export interface TableQueueOut {
   table_number: number
+  category_name: string
+  hand: string
   current: QueuePairOut | null
   next: QueuePairOut[]
   eliminated: EliminatedOut[]

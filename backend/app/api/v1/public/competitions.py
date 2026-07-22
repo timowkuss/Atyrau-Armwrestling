@@ -182,12 +182,11 @@ def get_competition_bracket(competition_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{competition_id}/queue", response_model=list[TableQueueOut])
 def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
-    """Живая очередь пар по столам: текущий поединок + до 3 следующих + выбывшие.
+    """Живая очередь пар по категориям: текущий поединок + следующий + таблица.
 
     Пара считается определившейся, только когда у матча заполнены оба
     p1_id/p2_id (см. get_current_and_next_match в десктопе — та же логика).
-    Столы без table_number (старые записи, ещё не досинкан десктоп) в
-    выдачу не попадают.
+    Каждая категория+рука — отдельный блок на табло.
     """
     pending = (
         db.query(Match, Category)
@@ -199,12 +198,11 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
             Match.p2_id.isnot(None),
             Match.table_number.isnot(None),
         )
-        .order_by(Match.table_number, Match.stage, Match.match_order)
+        .order_by(Match.category_id, Match.hand, Match.stage, Match.match_order)
         .all()
     )
 
-    tables: dict[int, list[QueuePairOut]] = {}
-    table_cat_hand: dict[int, tuple[int, str]] = {}
+    groups: dict[tuple[int, str], dict] = {}
     for match, category in pending:
         p1 = db.get(CompetitionParticipant, match.p1_id)
         p2 = db.get(CompetitionParticipant, match.p2_id)
@@ -218,9 +216,15 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
             p1_name=p1.athlete.full_name,
             p2_name=p2.athlete.full_name,
         )
-        tables.setdefault(match.table_number, []).append(pair)
-        if match.table_number not in table_cat_hand:
-            table_cat_hand[match.table_number] = (match.category_id, match.hand)
+        key = (match.category_id, match.hand)
+        if key not in groups:
+            groups[key] = {
+                "table_number": match.table_number or 1,
+                "category_name": category.name,
+                "hand": match.hand,
+                "pairs": [],
+            }
+        groups[key]["pairs"].append(pair)
 
     def _round_score(bracket: str, round_name: str | None) -> int:
         weights = {"winners": 0, "losers": 100, "final": 200}
@@ -280,16 +284,18 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
             ))
         return result
 
-    return [
-        TableQueueOut(
-            table_number=tnum,
+    result = []
+    for (cat_id, hand), g in sorted(groups.items()):
+        pairs = g["pairs"]
+        result.append(TableQueueOut(
+            table_number=g["table_number"],
+            category_name=g["category_name"],
+            hand=g["hand"],
             current=pairs[0],
             next=pairs[1:4],
-            eliminated=_compute_standings(*table_cat_hand[tnum])
-            if tnum in table_cat_hand else [],
-        )
-        for tnum, pairs in sorted(tables.items())
-    ]
+            eliminated=_compute_standings(cat_id, hand),
+        ))
+    return result
 
 
 @router.get("/{competition_id}/participants")
