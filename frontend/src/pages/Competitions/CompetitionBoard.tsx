@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { useCompetition, useCompetitionQueue } from '@/features/competitions/useCompetitions'
 import type { TableQueueOut, QueuePairOut } from '@/types/api'
@@ -94,82 +94,6 @@ function QueueBlock({ table, tableCount }: { table: TableQueueOut; tableCount: n
   )
 }
 
-function TableFilter({
-  allTables,
-  selectedNumbers,
-  onSelect,
-  onClear,
-}: {
-  allTables: TableQueueOut[]
-  selectedNumbers: Set<number>
-  onSelect: (n: number) => void
-  onClear: () => void
-}) {
-  const numbers = useMemo(() => {
-    const s = new Set(allTables.map((t) => t.table_number))
-    return Array.from(s).sort((a, b) => a - b)
-  }, [allTables])
-
-  const [customInput, setCustomInput] = useState('')
-
-  if (numbers.length === 0) return null
-
-  const handleCustom = () => {
-    const n = parseInt(customInput, 10)
-    if (n > 0) {
-      onSelect(n)
-      setCustomInput('')
-    }
-  }
-
-  return (
-    <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
-      <span className="font-mono text-[10px] text-steel-dim mr-1">Стол:</span>
-      {numbers.map((n) => {
-        const active = selectedNumbers.has(n)
-        return (
-          <button
-            key={n}
-            onClick={() => onSelect(n)}
-            className={`rounded-full border px-2.5 py-0.5 font-mono text-[10px] transition-colors ${
-              active
-                ? 'border-emerald-400 bg-emerald-400/10 text-emerald-400'
-                : 'border-steel-dim/30 text-steel-dim hover:text-steel'
-            }`}
-          >
-            {n}
-          </button>
-        )
-      })}
-      <div className="flex items-center gap-1 ml-1">
-        <input
-          type="number"
-          min={1}
-          value={customInput}
-          onChange={(e) => setCustomInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleCustom()}
-          placeholder="свой"
-          className="w-12 rounded border border-steel-dim/30 bg-transparent px-1.5 py-0.5 font-mono text-[10px] text-steel-dim text-center focus:border-emerald-400 focus:outline-none"
-        />
-        <button
-          onClick={handleCustom}
-          className="rounded-full border border-steel-dim/30 px-2 py-0.5 font-mono text-[10px] text-steel-dim hover:text-steel"
-        >
-          ok
-        </button>
-      </div>
-      {selectedNumbers.size > 0 && (
-        <button
-          onClick={onClear}
-          className="rounded-full border border-steel-dim/30 px-2.5 py-0.5 font-mono text-[10px] text-steel-dim hover:text-steel"
-        >
-          все
-        </button>
-      )}
-    </div>
-  )
-}
-
 function CategoryFilter({
   categories,
   selected,
@@ -227,17 +151,10 @@ export function CompetitionBoard() {
     return new Set(raw.split(',').map((s) => decodeURIComponent(s)).filter(Boolean))
   }, [searchParams])
 
-  const selectedTables = useMemo(() => {
-    const raw = searchParams.get('tables')
-    if (!raw) return new Set<number>()
-    return new Set(raw.split(',').map(Number).filter((n) => n > 0))
-  }, [searchParams])
-
   const toggleCategory = (name: string) => {
     const next = new Set(selectedNames)
     if (next.has(name)) next.delete(name)
     else next.add(name)
-
     const params = new URLSearchParams(searchParams)
     if (next.size === 0) params.delete('categories')
     else params.set('categories', [...next].map(encodeURIComponent).join(','))
@@ -250,35 +167,12 @@ export function CompetitionBoard() {
     setSearchParams(params, { replace: true })
   }
 
-  const toggleTable = (n: number) => {
-    const next = new Set(selectedTables)
-    if (next.has(n)) next.delete(n)
-    else next.add(n)
-
-    const params = new URLSearchParams(searchParams)
-    if (next.size === 0) params.delete('tables')
-    else params.set('tables', [...next].join(','))
-    setSearchParams(params, { replace: true })
-  }
-
-  const clearTables = () => {
-    const params = new URLSearchParams(searchParams)
-    params.delete('tables')
-    setSearchParams(params, { replace: true })
-  }
-
   const allTables = queue.data ?? []
 
   const tables = useMemo(() => {
-    let result = allTables
-    if (selectedNames.size > 0) {
-      result = result.filter((table) => selectedNames.has(table.category_name))
-    }
-    if (selectedTables.size > 0) {
-      result = result.filter((table) => selectedTables.has(table.table_number))
-    }
-    return result
-  }, [allTables, selectedNames, selectedTables])
+    if (selectedNames.size === 0) return allTables
+    return allTables.filter((table) => selectedNames.has(table.category_name))
+  }, [allTables, selectedNames])
 
   const gridClass = tables.length <= 1
     ? 'grid-cols-1'
@@ -302,13 +196,6 @@ export function CompetitionBoard() {
           onClear={clearCategories}
         />
 
-        <TableFilter
-          allTables={allTables}
-          selectedNumbers={selectedTables}
-          onSelect={toggleTable}
-          onClear={clearTables}
-        />
-
         {queue.isLoading && (
           <p className="mt-16 text-center text-lg text-steel-dim">Загрузка...</p>
         )}
@@ -323,7 +210,7 @@ export function CompetitionBoard() {
 
         {tables.length === 0 && !queue.isLoading && (
           <p className="mt-16 text-center text-lg text-steel-dim">
-            {selectedNames.size > 0 || selectedTables.size > 0 ? 'Нет столов' : 'Нет данных'}
+            {selectedNames.size > 0 ? 'Нет столов' : 'Нет данных'}
           </p>
         )}
       </div>
