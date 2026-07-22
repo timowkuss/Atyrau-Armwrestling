@@ -825,6 +825,23 @@ class SyncManager:
                     # пропустит эту строку и вернётся к ней позже.
                     print(f"[sync] DEBUG: update_match ждёт create_match mid={payload['mid']}")
                     return None
+                # ВАЖНО: p1_id/p2_id обязательно резолвим и шлём и здесь тоже.
+                # Раньше их слали только из "быстрого" пути on_match_updated.go(),
+                # а сюда, в _replay (когда update_match идёт через офлайн-очередь —
+                # что происходит практически всегда при продвижении победителя в
+                # следующий матч, т.к. на момент _place_player тот матч ещё не
+                # создан на сервере), их не передавали вовсе. В итоге статус и
+                # winner_id долетали, а САМА новая пара в следующем раунде на
+                # сайте не появлялась — "победитель прошёл, а на сайте ничего
+                # не меняется".
+                remote_p1 = (
+                    self.state.map_get("participant", payload["p1_id"])
+                    if payload.get("p1_id") else None
+                )
+                remote_p2 = (
+                    self.state.map_get("participant", payload["p2_id"])
+                    if payload.get("p2_id") else None
+                )
                 remote_winner = (
                     self.state.map_get("participant", payload["winner_id"])
                     if payload.get("winner_id") else None
@@ -840,13 +857,9 @@ class SyncManager:
                     {"table_number": payload["table_number"]}
                     if "table_number" in payload else {}
                 )
-                remote_p1 = self.state.map_get("participant", payload["p1_id"]) if payload.get("p1_id") else None
-                remote_p2 = self.state.map_get("participant", payload["p2_id"]) if payload.get("p2_id") else None
                 try:
                     self.api.update_match(
-                        remote_match_id,
-                        p1_id=remote_p1, p2_id=remote_p2,
-                        winner_id=remote_winner,
+                        remote_match_id, p1_id=remote_p1, p2_id=remote_p2, winner_id=remote_winner,
                         p1_losses=payload.get("p1_losses"), p2_losses=payload.get("p2_losses"),
                         status=payload.get("status"), **table_number_kwargs,
                     )
