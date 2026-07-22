@@ -264,6 +264,13 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
             )
             .all()
         )
+
+        bracket_system = "double"
+        cat = db.get(Category, category_id)
+        if cat and cat.competition:
+            bracket_system = cat.competition.bracket_system or "double"
+        losses_needed = 2 if bracket_system == "double" else 1
+
         stats: dict[int, dict] = {}
         def ensure(pid: int | None):
             if pid is None or pid in stats:
@@ -285,20 +292,20 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
                         rs = _round_score(m.bracket, m.round_name)
                         if rs > stats[loser]["elim_round_score"]:
                             stats[loser]["elim_round_score"] = rs
+                        if stats[loser]["losses"] >= losses_needed:
                             stats[loser]["eliminated"] = True
 
-        ordered = sorted(
-            stats.values(),
-            key=lambda s: (-s["wins"], s["losses"], s["elim_round_score"]),
-        )
+        eliminated = [s for s in stats.values() if s["eliminated"]]
+        eliminated.sort(key=lambda s: s["elim_round_score"])
+
+        total = len(stats)
         result = []
-        total = len(ordered)
-        for i, s in enumerate(ordered):
+        for i, s in enumerate(eliminated):
             cp = db.get(CompetitionParticipant, s["pid"])
             name = cp.athlete.full_name if cp and cp.athlete else "—"
             result.append(EliminatedOut(
                 athlete_name=name,
-                place=i + 1,
+                place=total - i,
                 wins=s["wins"],
                 losses=s["losses"],
             ))
