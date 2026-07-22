@@ -172,6 +172,12 @@ export interface TableQueueOut {
   eliminated: EliminatedOut[]
 }
 
+export interface ParticipantOut {
+  athlete_id: number
+  athlete_name: string
+  category_name: string
+}
+
 export interface CompetitionListParams {
   year?: number
   status?: CompetitionStatus

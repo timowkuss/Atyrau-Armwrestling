@@ -52,3 +52,11 @@ export function useCompetitionQueue(id: number) {
     refetchIntervalInBackground: false,
   })
 }
+
+export function useCompetitionParticipants(id: number) {
+  return useQuery({
+    queryKey: ['competition', id, 'participants'],
+    queryFn: () => api.competitions.participants(id),
+    enabled: Number.isFinite(id),
+  })
+}
