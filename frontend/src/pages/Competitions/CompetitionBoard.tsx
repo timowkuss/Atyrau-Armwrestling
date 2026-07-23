@@ -18,6 +18,7 @@ function pairFontSize(totalLen: number, tableCount: number, compact: boolean = f
 
 function tabloRoundName(roundName: string | null): string | null {
   if (!roundName) return null
+  if (roundName === 'Суперфинал (переигровка)' || roundName === 'Финал' || roundName === 'Полуфинал') return roundName
   if (roundName.includes('переигровка')) return 'Суперфинал (переигровка)'
   if (roundName.includes('Гранд-финал') || roundName.includes('Финал')) return 'Финал'
   if (roundName.includes('1/2') || roundName.includes('Раунд')) return 'Полуфинал'
