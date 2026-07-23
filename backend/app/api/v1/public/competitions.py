@@ -258,7 +258,14 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
         tables.setdefault(match.table_number, []).append(pair)
 
     return [
-        TableQueueOut(table_number=tnum, current=pairs[0], next=pairs[1:4])
+        TableQueueOut(
+            table_number=tnum,
+            category_name=pairs[0].category_name,
+            hand=pairs[0].hand,
+            current=pairs[0],
+            next=pairs[1:4],
+            eliminated=[],
+        )
         for tnum, pairs in sorted(tables.items())
     ]
 
