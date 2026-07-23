@@ -268,18 +268,22 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
         )
         participants_by_id = {p.id: p for p in rows}
 
-    # Группируем пары по столам
+    # Группируем пары по столам (пропускаем где оба — "Неизвестно")
     tables: dict[int, list[QueuePairOut]] = {}
     for match, category in pending_matches:
         p1 = participants_by_id.get(match.p1_id) if match.p1_id is not None else None
         p2 = participants_by_id.get(match.p2_id) if match.p2_id is not None else None
+        p1_name = p1.athlete.full_name if p1 else UNKNOWN
+        p2_name = p2.athlete.full_name if p2 else UNKNOWN
+        if p1_name == UNKNOWN and p2_name == UNKNOWN:
+            continue
         pair = QueuePairOut(
             match_id=match.id,
             category_name=category.name,
             hand=match.hand,
             round_name=match.round_name,
-            p1_name=p1.athlete.full_name if p1 else UNKNOWN,
-            p2_name=p2.athlete.full_name if p2 else UNKNOWN,
+            p1_name=p1_name,
+            p2_name=p2_name,
         )
         tables.setdefault(match.table_number, []).append(pair)
 
