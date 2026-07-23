@@ -189,7 +189,7 @@ def get_competition_bracket(competition_id: int, db: Session = Depends(get_db)):
                 category_name=category.name,
                 hand=match.hand,
                 bracket=match.bracket,
-                round_name=match.round_name,
+            round_name=_tablo_round_name(match.round_name),
                 match_order=match.match_order,
                 stage=match.stage,
                 p1_name=p1.athlete.full_name if p1 else None,
@@ -199,6 +199,21 @@ def get_competition_bracket(competition_id: int, db: Session = Depends(get_db)):
             )
         )
     return items
+
+
+def _tablo_round_name(round_name: str | None) -> str | None:
+    """Упрощает названия раундов для табло: только Полуфинал / Финал / Суперфинал."""
+    if not round_name:
+        return None
+    if "переигровка" in round_name:
+        return "Суперфинал (переигровка)"
+    if "Гранд-финал" in round_name:
+        return "Финал"
+    if "Финал" in round_name:
+        return "Финал"
+    if "1/2" in round_name or "Раунд" in round_name:
+        return "Полуфинал"
+    return None
 
 
 @router.get("/{competition_id}/queue", response_model=list[TableQueueOut])
