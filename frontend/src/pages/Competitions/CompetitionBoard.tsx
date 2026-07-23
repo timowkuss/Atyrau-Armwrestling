@@ -3,23 +3,28 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { useCompetition, useCompetitionQueue } from '@/features/competitions/useCompetitions'
 import type { TableQueueOut, QueuePairOut } from '@/types/api'
 
-function pairFontSize(totalLen: number, tableCount: number): string {
+function pairFontSize(totalLen: number, tableCount: number, compact: boolean = false): string {
   const w = tableCount <= 1 ? totalLen : totalLen * (tableCount <= 2 ? 1.7 : tableCount <= 3 ? 2.2 : 2.8)
-  if (w <= 14) return 'text-4xl sm:text-5xl md:text-6xl'
-  if (w <= 20) return 'text-3xl sm:text-4xl md:text-5xl'
-  if (w <= 28) return 'text-2xl sm:text-3xl md:text-4xl'
-  if (w <= 36) return 'text-xl sm:text-2xl md:text-3xl'
-  if (w <= 48) return 'text-base sm:text-lg md:text-xl'
-  if (w <= 60) return 'text-sm sm:text-base md:text-lg'
+  const offset = compact ? 20 : 0
+  const v = w + offset
+  if (v <= 14) return 'text-4xl sm:text-5xl md:text-6xl'
+  if (v <= 20) return 'text-3xl sm:text-4xl md:text-5xl'
+  if (v <= 28) return 'text-2xl sm:text-3xl md:text-4xl'
+  if (v <= 36) return 'text-xl sm:text-2xl md:text-3xl'
+  if (v <= 48) return 'text-base sm:text-lg md:text-xl'
+  if (v <= 60) return 'text-sm sm:text-base md:text-lg'
   return 'text-xs sm:text-sm md:text-base'
 }
 
-function PairBlock({ pair, label, tableCount }: { pair: QueuePairOut; label?: string; tableCount: number }) {
+function PairBlock({ pair, label, tableCount, compact }: { pair: QueuePairOut; label?: string; tableCount: number; compact?: boolean }) {
   const totalLen = pair.p1_name.length + pair.p2_name.length
-  const size = pairFontSize(totalLen, tableCount)
+  const size = pairFontSize(totalLen, tableCount, compact)
   return (
     <div className="flex flex-col items-center gap-0.5">
       {label && <p className="text-[10px] uppercase tracking-widest text-emerald-400">{label}</p>}
+      {pair.round_name && (
+        <p className="font-mono text-[9px] uppercase tracking-wider text-brass">{pair.round_name}</p>
+      )}
       <p className={`font-display font-bold leading-tight text-bone whitespace-nowrap ${size}`}>
         {pair.p1_name}
         <span className="mx-1.5 font-mono text-steel font-normal">vs</span>
@@ -71,9 +76,9 @@ function QueueBlock({ table, tableCount }: { table: TableQueueOut; tableCount: n
       )}
 
       {table.next.length > 0 ? (
-        <div className={`border-b border-steel-dim/10 ${isSingle ? 'py-4 space-y-4' : 'py-2 space-y-2'}`}>
+        <div className={`border-b border-steel-dim/10 ${isSingle ? 'py-4 space-y-3' : 'py-2 space-y-2'}`}>
           {table.next.map((pair, i) => (
-            <PairBlock key={pair.match_id} pair={pair} label={i === 0 ? 'далее' : undefined} tableCount={tableCount} />
+            <PairBlock key={pair.match_id} pair={pair} label={i === 0 ? 'далее' : undefined} tableCount={tableCount} compact />
           ))}
         </div>
       ) : hasMatch ? (
@@ -84,15 +89,23 @@ function QueueBlock({ table, tableCount }: { table: TableQueueOut; tableCount: n
 
       {hasStandings && (
         <div className={`${isSingle ? 'pt-3 space-y-1' : 'pt-1.5 space-y-0.5'}`}>
-          {table.eliminated.map((e) => (
-              <p key={e.athlete_name} className={`text-left font-mono text-steel-dim ${isSingle ? 'text-sm' : 'text-[11px]'}`}>
+          {table.eliminated.map((e) => {
+            const elimSize = isSingle
+              ? table.eliminated.length >= 12 ? 'text-[11px]'
+                : table.eliminated.length >= 8 ? 'text-xs'
+                : 'text-sm'
+              : table.eliminated.length >= 16 ? 'text-[9px]'
+                : 'text-[11px]'
+            return (
+              <p key={e.athlete_name} className={`text-left font-mono text-steel-dim ${elimSize}`}>
                 <span className="inline-block w-5 text-right">{e.place}.</span>{' '}
                 <span className="text-bone">{e.athlete_name}</span>
               {e.wins > 0 || e.losses > 0 ? (
                 <span className="ml-1 text-steel-dim/50">{e.wins}-{e.losses}</span>
               ) : null}
             </p>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
