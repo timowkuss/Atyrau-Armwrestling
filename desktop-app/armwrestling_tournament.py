@@ -985,7 +985,7 @@ class DoubleEliminationEngine:
                     "p2_losses": 0,
                     "is_bye": m["is_bye"],
                     "stage": wb_stage.get(r, r),
-                    "status": "pending" if not m["is_bye"] else "waiting",
+                    "status": "pending" if m["p1_id"] is not None and m["p2_id"] is not None else "waiting",
                 })
                 row_ids.append(mid)
             wb_ids.append(row_ids)
@@ -1873,7 +1873,7 @@ class SingleEliminationEngine:
                     "p2_losses": 0,
                     "is_bye": m["is_bye"],
                     "stage": r,
-                    "status": "pending" if not m["is_bye"] else "waiting",
+                    "status": "pending" if m["p1_id"] is not None and m["p2_id"] is not None else "waiting",
                 })
                 row_ids.append(mid)
             ids.append(row_ids)
