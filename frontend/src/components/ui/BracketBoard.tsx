@@ -248,48 +248,91 @@ function layoutBracket(matches: BracketMatchOut[]): Layout {
 //  Рендер
 // ════════════════════════════════════════════════════════════════════════
 
-function MatchBox({ match, x, y }: { match: BracketMatchOut; x: number; y: number }) {
-  const isDone = match.status === 'done' || match.status === 'bye'
-  const isBye = match.status === 'bye'
-  const p1Won = isDone && match.winner_name != null && match.winner_name === match.p1_name
-  const p2Won = isDone && match.winner_name != null && match.winner_name === match.p2_name
+// Пустой слот: "BYE" только если матч структурно является BYE (см.
+// _draw_match_box в десктопе — pname()), иначе слот просто ждёт
+// победителя предыдущего матча — пишем "— ожидание —", а не "TBD".
+function slotLabel(name: string | null, isByeMatch: boolean): string {
+  if (name) return name
+  return isByeMatch ? 'BYE' : '— ожидание —'
+}
+
+function MatchBox({
+  match,
+  x,
+  y,
+  isCurrent,
+  isNext,
+}: {
+  match: BracketMatchOut
+  x: number
+  y: number
+  isCurrent: boolean
+  isNext: boolean
+}) {
+  const isByeMatch = match.status === 'bye'
+  const hasWinner = match.winner_name != null
+  const p1Won = hasWinner && match.winner_name === match.p1_name
+  const p2Won = hasWinner && match.winner_name === match.p2_name
+
+  const boxClass = isCurrent
+    ? 'border-2 border-emerald-400 bg-emerald-950/40'
+    : isNext
+      ? 'border-2 border-amber-400/80 bg-black/20'
+      : hasWinner
+        ? 'border border-brass/30 bg-brass/5'
+        : 'border border-steel-dim/25 bg-black/20'
+
+  const rowClass = (won: boolean, lost: boolean, name: string | null) => {
+    if (won) return 'font-medium text-emerald-400'
+    if (lost) return 'text-red-400'
+    if (!name) return 'italic text-steel-dim'
+    return 'text-bone'
+  }
 
   return (
     <div
-      className={`absolute flex flex-col justify-center rounded-[var(--radius-rivet)] border px-3 py-1.5 ${
-        isDone ? 'border-brass/30 bg-brass/5' : 'border-steel-dim/25 bg-black/20'
-      }`}
-      style={{ left: x, top: y, width: BOX_W, height: BOX_H }}
+      className={`absolute flex flex-col justify-center rounded-[var(--radius-rivet)] px-3 py-1.5 ${boxClass}`}
+      style={{
+        left: x,
+        top: y,
+        width: BOX_W,
+        height: BOX_H,
+        boxShadow: isCurrent ? '0 0 0 4px rgba(52,211,153,0.15)' : undefined,
+      }}
     >
-      <div className="flex items-center gap-2">
-        <div className={`h-1.5 w-1.5 shrink-0 rounded-full ${isDone ? 'bg-brass' : 'bg-steel-dim/40'}`} />
-        <p
-          className={`truncate text-xs leading-tight ${
-            p1Won ? 'font-medium text-brass' : isBye ? 'italic text-steel-dim' : 'text-bone'
-          }`}
-        >
-          {match.p1_name ?? 'TBD'}
+      <div className="flex items-center justify-between gap-2">
+        <p className={`truncate text-xs leading-tight ${rowClass(p1Won, hasWinner && p2Won, match.p1_name)}`}>
+          {slotLabel(match.p1_name, isByeMatch)}
         </p>
-        {p1Won && <span className="ml-auto shrink-0 text-[9px] text-brass/70">★</span>}
+        {isCurrent && <span className="shrink-0 text-[9px] uppercase tracking-wider text-emerald-400">сейчас</span>}
+        {isNext && <span className="shrink-0 text-[9px] uppercase tracking-wider text-amber-400">далее</span>}
       </div>
       <div className="my-0.5 h-px bg-steel-dim/15" />
-      <div className="flex items-center gap-2">
-        <div className={`h-1.5 w-1.5 shrink-0 rounded-full ${isDone && !isBye ? 'bg-brass' : 'bg-steel-dim/40'}`} />
-        <p
-          className={`truncate text-xs leading-tight ${
-            p2Won ? 'font-medium text-brass' : isBye ? 'italic text-steel-dim' : 'text-bone'
-          }`}
-        >
-          {match.p2_name ?? 'TBD'}
-        </p>
-        {p2Won && <span className="ml-auto shrink-0 text-[9px] text-brass/70">★</span>}
-      </div>
+      <p className={`truncate text-xs leading-tight ${rowClass(p2Won, hasWinner && p1Won, match.p2_name)}`}>
+        {slotLabel(match.p2_name, isByeMatch)}
+      </p>
     </div>
   )
 }
 
+// Текущий/следующий матч категории+руки — тот же принцип, что и
+// get_current_and_next_match в десктопе: среди pending-матчей с обоими
+// известными участниками берём первый по (stage, id) как текущий, второй
+// как следующий. Считается один раз на весь список матчей руки (across
+// winners/losers/final), а не отдельно на секцию.
+function getCurrentAndNext(matches: BracketMatchOut[]): { currentId: number | null; nextId: number | null } {
+  const ready = matches
+    .filter((m) => m.status === 'pending' && m.p1_name && m.p2_name)
+    .sort((a, b) => a.stage - b.stage || a.id - b.id)
+  return { currentId: ready[0]?.id ?? null, nextId: ready[1]?.id ?? null }
+}
+
 function BracketTree({ matches }: { matches: BracketMatchOut[] }) {
   const layout = useMemo(() => layoutBracket(matches), [matches])
+  // Считаем на полном списке матчей руки (все секции сразу) — как в
+  // десктопе, где current/next общие для категории+руки, а не свои
+  // для каждой секции сетки.
+  const { currentId, nextId } = useMemo(() => getCurrentAndNext(matches), [matches])
   if (layout.positioned.length === 0) return null
 
   return (
@@ -309,7 +352,14 @@ function BracketTree({ matches }: { matches: BracketMatchOut[] }) {
           </p>
         )}
         {layout.positioned.map(({ match, x, y }) => (
-          <MatchBox key={match.id} match={match} x={x} y={y} />
+          <MatchBox
+            key={match.id}
+            match={match}
+            x={x}
+            y={y}
+            isCurrent={match.id === currentId}
+            isNext={match.id === nextId}
+          />
         ))}
       </div>
     </div>

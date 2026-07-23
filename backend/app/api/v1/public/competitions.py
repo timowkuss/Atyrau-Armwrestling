@@ -219,7 +219,7 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
             Match.p2_id.isnot(None),
             Match.table_number.isnot(None),
         )
-        .order_by(Match.table_number, Match.stage, Match.match_order, Match.id)
+        .order_by(Match.table_number, Match.stage, Match.id)
         .all()
     )
 
