@@ -10,11 +10,16 @@ export function useCompetitions(params: CompetitionListParams) {
   })
 }
 
+// Опрашиваем статус турнира, а не только сетку/очередь — иначе после
+// «Завершить турнир» / «Возобновить турнир» в десктопе зритель видит
+// старое состояние страницы, пока не обновит вкладку руками.
 export function useCompetition(id: number) {
   return useQuery({
     queryKey: ['competition', id],
     queryFn: () => api.competitions.get(id),
     enabled: Number.isFinite(id),
+    refetchInterval: 15000,
+    refetchIntervalInBackground: false,
   })
 }
 

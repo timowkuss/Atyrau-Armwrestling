@@ -164,11 +164,21 @@ export function CompetitionDetail() {
         </section>
       )}
 
-       {(isFinished || isLive) && bracket.data && bracket.data.length > 0 && (
+      {c.categories.length > 0 && (
         <section className="mt-10 mb-16">
           <h2 className="font-display text-xl text-bone">Турнирная сетка</h2>
           <div className="rivet-line my-4" />
-          <BracketBoard matches={bracket.data} />
+          {isFinished ? (
+            bracket.isLoading ? (
+              <LoadingState label="Загрузка сетки" />
+            ) : bracket.data && bracket.data.length > 0 ? (
+              <BracketBoard matches={bracket.data} />
+            ) : (
+              <EmptyState title="Сетка не найдена" />
+            )
+          ) : (
+            <EmptyState title="Турнир ещё не завершён" />
+          )}
         </section>
       )}
 

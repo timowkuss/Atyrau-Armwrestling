@@ -153,7 +153,7 @@ def get_competition_bracket(competition_id: int, db: Session = Depends(get_db)):
         db.query(Match, Category)
         .join(Category, Match.category_id == Category.id)
         .filter(Match.competition_id == competition_id)
-        .order_by(Category.name, Match.bracket, Match.match_order)
+        .order_by(Category.name, Match.bracket, Match.stage, Match.match_order)
         .all()
     )
 
@@ -190,6 +190,7 @@ def get_competition_bracket(competition_id: int, db: Session = Depends(get_db)):
                 bracket=match.bracket,
                 round_name=match.round_name,
                 match_order=match.match_order,
+                stage=match.stage,
                 p1_name=p1.athlete.full_name if p1 else None,
                 p2_name=p2.athlete.full_name if p2 else None,
                 winner_name=winner.athlete.full_name if winner else None,

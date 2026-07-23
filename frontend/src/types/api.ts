@@ -141,6 +141,7 @@ export interface BracketMatchOut {
   bracket: string
   round_name: string | null
   match_order: number
+  stage: number
   p1_name: string | null
   p2_name: string | null
   winner_name: string | null

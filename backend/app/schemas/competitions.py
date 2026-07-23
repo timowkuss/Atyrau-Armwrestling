@@ -52,6 +52,7 @@ class BracketMatchOut(BaseModel):
     bracket: str
     round_name: str | None
     match_order: int
+    stage: int
     p1_name: str | None
     p2_name: str | None
     winner_name: str | None

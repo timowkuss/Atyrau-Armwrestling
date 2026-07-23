@@ -1,16 +1,17 @@
+import { useState } from 'react'
 import type { BracketMatchOut } from '@/types/api'
 
-const BRACKET_LABEL: Record<string, string> = {
-  winners: 'Верхняя сетка',
-  losers: 'Нижняя сетка',
-  final: 'Финал',
-}
+// Порядок и подписи секций — как в десктопном окне сетки: сначала финал,
+// затем нижняя сетка, затем верхняя (см. BracketWindow в
+// armwrestling_tournament.py). Секция рендерится, только если для неё
+// вообще есть матчи — например, при небольшом числе участников нижней
+// сетки может не быть.
+const BRACKET_ORDER: string[] = ['final', 'losers', 'winners']
 
-const ROUND_LABEL: Record<string, string> = {
-  '1/2 финала': '1/2',
-  '1/4 финала': '1/4',
-  'Финал': 'Финал',
-  'Утешительный финал': 'Утешит.',
+const BRACKET_LABEL: Record<string, string> = {
+  final: 'ФИНАЛ',
+  losers: 'НИЖНЯЯ СЕТКА',
+  winners: 'ВЕРХНЯЯ СЕТКА',
 }
 
 function groupBy<T, K extends string>(items: T[], key: (item: T) => K): Record<K, T[]> {
@@ -63,12 +64,11 @@ function MatchCard({ match, compact }: { match: BracketMatchOut; compact?: boole
   )
 }
 
-function BracketColumn({ roundName, matches, isLast }: {
+function RoundColumn({ roundName, matches, isLast }: {
   roundName: string
   matches: BracketMatchOut[]
   isLast?: boolean
 }) {
-  const label = ROUND_LABEL[roundName] ?? roundName
   const sorted = [...matches].sort((a, b) => a.match_order - b.match_order)
   const gap = matches.length <= 2 ? 'gap-6' : matches.length <= 4 ? 'gap-4' : 'gap-3'
 
@@ -76,9 +76,9 @@ function BracketColumn({ roundName, matches, isLast }: {
     <div className="flex items-stretch">
       <div className="flex flex-col items-center">
         <span className="mb-2 text-center font-mono text-[10px] uppercase tracking-wider text-steel-dim">
-          {label}
+          {roundName.toUpperCase()}
         </span>
-        <div className={`flex flex-1 flex-col justify-center ${gap}`}>
+        <div className={`flex w-44 flex-1 flex-col justify-center ${gap}`}>
           {sorted.map((m) => (
             <MatchCard key={m.id} match={m} compact={matches.length > 3} />
           ))}
@@ -93,34 +93,28 @@ function BracketColumn({ roundName, matches, isLast }: {
   )
 }
 
-function BracketGrid({ matches, label }: { matches: BracketMatchOut[]; label?: string }) {
+// Внутри секции (финал / нижняя / верхняя сетка) десктоп всегда рисует
+// раунды от самого позднего к самому раннему (слева направо), то есть
+// «Финал WB» левее «1/2 финала WB», а «Гранд-финал» левее переигровки.
+// Поле stage — это сквозной порядковый номер стадии турнира, который уже
+// расставляет движок генерации сетки на десктопе, поэтому сортируем по
+// нему, а не пытаемся парсить текст раунда.
+function BracketSection({ bracketKey, matches }: { bracketKey: string; matches: BracketMatchOut[] }) {
   const byRound = groupBy(matches, (m) => m.round_name ?? '—')
-  const roundNames = Object.keys(byRound).sort((a, b) => {
-    const order = ['Финал', 'Утешительный финал', '1/2 финала', '1/4 финала', '1/8 финала', '1/16 финала']
-    const ia = order.indexOf(a)
-    const ib = order.indexOf(b)
-    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
-  })
+  const roundNames = Object.keys(byRound)
 
-  if (roundNames.length === 1) {
-    return (
-      <div>
-        {label && <p className="mb-3 text-eyebrow text-steel">{label}</p>}
-        <div className="space-y-3">
-          {[...matches].sort((a, b) => a.match_order - b.match_order).map((m) => (
-            <MatchCard key={m.id} match={m} />
-          ))}
-        </div>
-      </div>
-    )
-  }
+  const stageOf = (rn: string) => Math.max(...byRound[rn].map((m) => m.stage))
+  const isFinal = bracketKey === 'final'
+  roundNames.sort((a, b) => (isFinal ? stageOf(a) - stageOf(b) : stageOf(b) - stageOf(a)))
+
+  const label = BRACKET_LABEL[bracketKey] ?? bracketKey
 
   return (
     <div>
-      {label && <p className="mb-4 text-eyebrow text-steel">{label}</p>}
-      <div className="flex items-stretch overflow-x-auto pb-2">
+      <p className="mb-4 font-mono text-xs uppercase tracking-wider text-steel">{label}</p>
+      <div className="flex items-stretch gap-0 overflow-x-auto pb-3">
         {roundNames.map((rn, i) => (
-          <BracketColumn
+          <RoundColumn
             key={rn}
             roundName={rn}
             matches={byRound[rn]}
@@ -132,6 +126,51 @@ function BracketGrid({ matches, label }: { matches: BracketMatchOut[]; label?: s
   )
 }
 
+function HandBracket({ matches }: { matches: BracketMatchOut[] }) {
+  const byBracket = groupBy(matches, (m) => m.bracket)
+  const sections = BRACKET_ORDER.filter((key) => byBracket[key]?.length)
+
+  return (
+    <div className="space-y-10">
+      {sections.map((key) => (
+        <BracketSection key={key} bracketKey={key} matches={byBracket[key]} />
+      ))}
+    </div>
+  )
+}
+
+function CategoryBracket({ matches }: { matches: BracketMatchOut[] }) {
+  const byHand = groupBy(matches, (m) => m.hand)
+  const hands = Object.keys(byHand)
+  const [active, setActive] = useState(hands[0])
+  const current = hands.includes(active) ? active : hands[0]
+
+  if (hands.length <= 1) {
+    return <HandBracket matches={matches} />
+  }
+
+  return (
+    <div>
+      <div className="mb-5 flex gap-2">
+        {hands.map((hand) => (
+          <button
+            key={hand}
+            onClick={() => setActive(hand)}
+            className={`text-eyebrow rounded-[var(--radius-rivet)] border px-3 py-1.5 transition-colors ${
+              hand === current
+                ? 'border-brass bg-brass/15 text-brass'
+                : 'border-steel-dim/40 text-steel hover:border-steel-dim hover:text-bone'
+            }`}
+          >
+            {hand}
+          </button>
+        ))}
+      </div>
+      <HandBracket matches={byHand[current]} />
+    </div>
+  )
+}
+
 export function BracketBoard({ matches }: { matches: BracketMatchOut[] }) {
   if (matches.length === 0) return null
 
@@ -139,43 +178,16 @@ export function BracketBoard({ matches }: { matches: BracketMatchOut[] }) {
 
   return (
     <div className="space-y-12">
-      {Object.entries(byCategory).map(([category, categoryMatches]) => {
-        const byHand = groupBy(categoryMatches, (m) => m.hand)
-        const hands = Object.keys(byHand)
-        const showHandLabel = hands.length > 1
-
-        return (
-          <div key={category}>
-            <h3 className="font-display text-lg text-bone border-b border-steel-dim/20 pb-2">
-              {category}
-            </h3>
-            <div className={showHandLabel ? 'mt-5 space-y-10' : 'mt-5'}>
-              {hands.map((hand) => {
-                const handMatches = byHand[hand]
-                const byBracket = groupBy(handMatches, (m) => m.bracket)
-                return (
-                  <div key={hand}>
-                    {showHandLabel && (
-                      <p className="mb-3 font-mono text-xs uppercase tracking-wider text-emerald-400">
-                        {hand} рука
-                      </p>
-                    )}
-                    <div className="grid gap-8 sm:grid-cols-2 xl:grid-cols-3">
-                      {Object.entries(byBracket).map(([bracket, bracketMatches]) => (
-                        <BracketGrid
-                          key={bracket}
-                          matches={bracketMatches}
-                          label={BRACKET_LABEL[bracket] ?? bracket}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+      {Object.entries(byCategory).map(([category, categoryMatches]) => (
+        <div key={category}>
+          <h3 className="font-display text-lg text-bone border-b border-steel-dim/20 pb-2">
+            {category}
+          </h3>
+          <div className="mt-5">
+            <CategoryBracket matches={categoryMatches} />
           </div>
-        )
-      })}
+        </div>
+      ))}
     </div>
   )
 }
