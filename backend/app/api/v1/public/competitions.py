@@ -370,8 +370,6 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
 
         eliminated = []
         for i, s in enumerate(ordered):
-            if champion and s["pid"] == champion:
-                continue
             is_eliminated = gf_done or s["losses"] >= max_losses
             if is_eliminated:
                 p = all_participants_by_id.get(s["pid"])
