@@ -1,5 +1,13 @@
 import type { QueuePairOut, TableQueueOut } from '@/types/api'
 
+function tabloRoundName(roundName: string | null): string | null {
+  if (!roundName) return null
+  if (roundName.includes('переигровка')) return 'Суперфинал (переигровка)'
+  if (roundName.includes('Гранд-финал') || roundName.includes('Финал')) return 'Финал'
+  if (roundName.includes('1/2') || roundName.includes('Раунд')) return 'Полуфинал'
+  return null
+}
+
 function PairLine({ pair }: { pair: QueuePairOut }) {
   return (
     <p className="truncate">
@@ -21,7 +29,7 @@ function TableCard({ table }: { table: TableQueueOut }) {
           </p>
           <p className="mt-1 font-mono text-xs text-steel">
             {table.current.category_name} · {table.current.hand}
-            {table.current.round_name ? ` · ${table.current.round_name}` : ''}
+            {tabloRoundName(table.current.round_name) ? ` · ${tabloRoundName(table.current.round_name)}` : ''}
           </p>
         </div>
       ) : (

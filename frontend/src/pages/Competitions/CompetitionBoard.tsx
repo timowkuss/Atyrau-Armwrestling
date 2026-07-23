@@ -16,14 +16,23 @@ function pairFontSize(totalLen: number, tableCount: number, compact: boolean = f
   return 'text-xs sm:text-sm md:text-base'
 }
 
+function tabloRoundName(roundName: string | null): string | null {
+  if (!roundName) return null
+  if (roundName.includes('переигровка')) return 'Суперфинал (переигровка)'
+  if (roundName.includes('Гранд-финал') || roundName.includes('Финал')) return 'Финал'
+  if (roundName.includes('1/2') || roundName.includes('Раунд')) return 'Полуфинал'
+  return null
+}
+
 function PairBlock({ pair, label, tableCount, compact }: { pair: QueuePairOut; label?: string; tableCount: number; compact?: boolean }) {
   const totalLen = pair.p1_name.length + pair.p2_name.length
   const size = pairFontSize(totalLen, tableCount, compact)
+  const displayRound = tabloRoundName(pair.round_name)
   return (
     <div className="flex flex-col items-center gap-0.5">
       {label && <p className="text-[10px] uppercase tracking-widest text-emerald-400">{label}</p>}
-      {pair.round_name && (
-        <p className="font-mono text-[9px] uppercase tracking-wider text-brass">{pair.round_name}</p>
+      {displayRound && (
+        <p className="font-mono text-[9px] uppercase tracking-wider text-brass">{displayRound}</p>
       )}
       <p className={`font-display font-bold leading-tight text-bone whitespace-nowrap ${size}`}>
         {pair.p1_name}
@@ -39,7 +48,7 @@ function QueueBlock({ table, tableCount }: { table: TableQueueOut; tableCount: n
   const hasStandings = table.eliminated.length > 0
   const isComplete = !hasMatch && hasStandings
   const categoryLabel = table.category_name.replace(/\s*Both\s*/i, '').trim()
-  const handLabel = table.hand === 'left' ? 'Левая' : 'Правая'
+  const handLabel = table.hand
   const isSingle = tableCount === 1
 
   return (
