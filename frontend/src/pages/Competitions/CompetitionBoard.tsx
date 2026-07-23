@@ -86,7 +86,8 @@ function QueueBlock({ table, tableCount }: { table: TableQueueOut; tableCount: n
         <div className={`${isSingle ? 'pt-3 space-y-1' : 'pt-1.5 space-y-0.5'}`}>
           {table.eliminated.map((e) => (
               <p key={e.athlete_name} className={`text-left font-mono text-steel-dim ${isSingle ? 'text-sm' : 'text-[11px]'}`}>
-              {e.place}. <span className="text-bone">{e.athlete_name}</span>
+                <span className="inline-block w-5 text-right">{e.place}.</span>{' '}
+                <span className="text-bone">{e.athlete_name}</span>
               {e.wins > 0 || e.losses > 0 ? (
                 <span className="ml-1 text-steel-dim/50">{e.wins}-{e.losses}</span>
               ) : null}
