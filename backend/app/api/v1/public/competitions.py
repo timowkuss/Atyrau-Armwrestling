@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models.athletes import Athlete
@@ -204,19 +204,26 @@ def get_competition_bracket(competition_id: int, db: Session = Depends(get_db)):
 def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
     """Живая очередь пар по столам: текущий поединок + до 3 следующих.
 
-    Пара считается определившейся, только когда у матча заполнены оба
-    p1_id/p2_id (см. get_current_and_next_match в десктопе — та же логика).
+    Матч попадает в выдачу, если у него проставлен table_number и он ещё
+    не сыгран (status pending/waiting) — даже если пока известен только
+    один участник (второй ещё не вышел из предыдущего раунда). Для
+    неизвестной стороны показываем "Неизвестно" вместо того, чтобы
+    полностью скрывать пару: зрителю полезно видеть, кто уже точно
+    попал в следующий бой, не дожидаясь, пока определится соперник.
+    Полностью пустые матчи (оба участника ещё не определены) в выдачу
+    не попадают — по ним просто нечего показать.
     Столы без table_number (старые записи, ещё не досинкан десктоп) в
     выдачу не попадают.
     """
+    UNKNOWN = "Неизвестно"
+
     matches = (
         db.query(Match, Category)
         .join(Category, Match.category_id == Category.id)
         .filter(
             Match.competition_id == competition_id,
-            Match.status == "pending",
-            Match.p1_id.isnot(None),
-            Match.p2_id.isnot(None),
+            Match.status.in_(["pending", "waiting"]),
+            or_(Match.p1_id.isnot(None), Match.p2_id.isnot(None)),
             Match.table_number.isnot(None),
         )
         .order_by(Match.table_number, Match.stage, Match.match_order, Match.id)
@@ -228,8 +235,10 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
     # батчим участников одним запросом вместо db.get() на каждую пару.
     participant_ids: set[int] = set()
     for match, _ in matches:
-        participant_ids.add(match.p1_id)
-        participant_ids.add(match.p2_id)
+        if match.p1_id is not None:
+            participant_ids.add(match.p1_id)
+        if match.p2_id is not None:
+            participant_ids.add(match.p2_id)
 
     participants_by_id: dict[int, CompetitionParticipant] = {}
     if participant_ids:
@@ -243,17 +252,15 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
 
     tables: dict[int, list[QueuePairOut]] = {}
     for match, category in matches:
-        p1 = participants_by_id.get(match.p1_id)
-        p2 = participants_by_id.get(match.p2_id)
-        if p1 is None or p2 is None:
-            continue
+        p1 = participants_by_id.get(match.p1_id) if match.p1_id is not None else None
+        p2 = participants_by_id.get(match.p2_id) if match.p2_id is not None else None
         pair = QueuePairOut(
             match_id=match.id,
             category_name=category.name,
             hand=match.hand,
             round_name=match.round_name,
-            p1_name=p1.athlete.full_name,
-            p2_name=p2.athlete.full_name,
+            p1_name=p1.athlete.full_name if p1 else UNKNOWN,
+            p2_name=p2.athlete.full_name if p2 else UNKNOWN,
         )
         tables.setdefault(match.table_number, []).append(pair)
 

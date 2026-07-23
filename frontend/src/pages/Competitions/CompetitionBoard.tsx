@@ -70,13 +70,17 @@ function QueueBlock({ table, tableCount }: { table: TableQueueOut; tableCount: n
         </div>
       )}
 
-      {table.next.length > 0 && (
+      {table.next.length > 0 ? (
         <div className={`border-b border-steel-dim/10 ${isSingle ? 'py-4 space-y-4' : 'py-2 space-y-2'}`}>
           {table.next.map((pair, i) => (
             <PairBlock key={pair.match_id} pair={pair} label={i === 0 ? 'далее' : undefined} tableCount={tableCount} />
           ))}
         </div>
-      )}
+      ) : hasMatch ? (
+        <div className={`border-b border-steel-dim/10 ${isSingle ? 'py-4' : 'py-2'}`}>
+          <p className="text-center text-sm text-steel-dim">Следующая пара не готова</p>
+        </div>
+      ) : null}
 
       {hasStandings && (
         <div className={`${isSingle ? 'pt-3 space-y-1' : 'pt-1.5 space-y-0.5'}`}>
