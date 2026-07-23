@@ -31,6 +31,14 @@ export function useCompetitionResults(id: number) {
   })
 }
 
+export function useCompetitionParticipants(id: number) {
+  return useQuery({
+    queryKey: ['competition', id, 'participants'],
+    queryFn: () => api.competitions.participants(id),
+    enabled: Number.isFinite(id),
+  })
+}
+
 // Сетка турнира: во время турнира пары/победители меняются по ходу
 // раундов, поэтому опрашиваем сервер так же, как и живую очередь по
 // столам — иначе зритель видит статичный снимок на момент открытия

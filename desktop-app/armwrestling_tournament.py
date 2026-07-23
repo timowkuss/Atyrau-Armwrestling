@@ -2290,8 +2290,7 @@ class BracketWindow(ctk.CTkToplevel):
 
         # Автофокус на поле сканера
         self.scan_entry.focus_set()
-        self.bind("<FocusIn>", lambda e: self.scan_entry.focus_set())
-
+        self.bind("<FocusIn>", lambda e: self.scan_entry.focus_set() if e.widget is self else None)
         self.tabs = ctk.CTkTabview(self, fg_color="#0d1117")
         self.tabs.pack(fill="both", expand=True, padx=5, pady=5)
         self.tabs.add("🏟 Сетка")
@@ -4508,8 +4507,7 @@ class App(ctk.CTk):
                         font=ctk.CTkFont(size=11), anchor="w"
                         ).pack(anchor="w", padx=14, pady=(0, 10))
                 ctk.CTkButton(hfr, text="🔍 Открыть сетку", height=32,
-                        command=lambda c=cat, h=hand: BracketWindow(
-                        self, self.db, self.current_tournament_id, c, h)
+                        command=lambda c=cat, h=hand: self._open_bracket_window(c, h)
                         ).pack(fill="x", padx=14, pady=(0, 14))
 
             # ── Двоеборье: сводный зачёт по обеим рукам для этой категории ──
@@ -4621,6 +4619,19 @@ class App(ctk.CTk):
             self._athletes_window.focus()
             return
         self._athletes_window = AthletesWindow(self, self.db)
+
+    def _open_bracket_window(self, category, hand):
+        """Не даёт открыть сетку одной и той же категории/руки дважды —
+        два окна над одними и теми же матчами расходятся по данным
+        (например, оба назначают номер стола) и путают трансляцию на
+        табло. Если окно уже открыто — просто поднимаем его наверх."""
+        for w in getattr(self, "_open_bracket_windows", []):
+            if w.winfo_exists() and w.category["id"] == category["id"] and w.hand == hand:
+                w.deiconify()
+                w.lift()
+                w.focus()
+                return
+        BracketWindow(self, self.db, self.current_tournament_id, category, hand)
 
     def _new_tournament(self):
         dlg = tk.Toplevel(self)
