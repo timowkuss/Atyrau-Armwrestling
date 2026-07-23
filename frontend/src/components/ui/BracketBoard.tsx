@@ -139,6 +139,18 @@ function HandBracket({ matches }: { matches: BracketMatchOut[] }) {
   )
 }
 
+const HAND_LABEL: Record<string, string> = {
+  left: 'Левая',
+  right: 'Правая',
+  Both: 'Обе',
+  Обе: 'Обе',
+}
+
+function extractWeight(name: string): number {
+  const m = name.match(/(\d+)\s*kg/i)
+  return m ? parseInt(m[1], 10) : 9999
+}
+
 function CategoryBracket({ matches }: { matches: BracketMatchOut[] }) {
   const byHand = groupBy(matches, (m) => m.hand)
   const hands = Object.keys(byHand)
@@ -162,7 +174,7 @@ function CategoryBracket({ matches }: { matches: BracketMatchOut[] }) {
                 : 'border-steel-dim/40 text-steel hover:border-steel-dim hover:text-bone'
             }`}
           >
-            {hand}
+            {HAND_LABEL[hand] ?? hand}
           </button>
         ))}
       </div>
@@ -175,13 +187,16 @@ export function BracketBoard({ matches }: { matches: BracketMatchOut[] }) {
   if (matches.length === 0) return null
 
   const byCategory = groupBy(matches, (m) => m.category_name)
+  const sortedCategories = Object.entries(byCategory).sort(
+    ([a], [b]) => extractWeight(a) - extractWeight(b)
+  )
 
   return (
     <div className="space-y-12">
-      {Object.entries(byCategory).map(([category, categoryMatches]) => (
+      {sortedCategories.map(([category, categoryMatches]) => (
         <div key={category}>
           <h3 className="font-display text-lg text-bone border-b border-steel-dim/20 pb-2">
-            {category}
+            {category.replace(/\s*Both\s*/i, '').trim()}
           </h3>
           <div className="mt-5">
             <CategoryBracket matches={categoryMatches} />
