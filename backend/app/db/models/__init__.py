@@ -14,3 +14,4 @@ from app.db.models.statistics import AthleteStatistic  # noqa: F401
 from app.db.models.rankings import AthleteRanking, ClubRanking  # noqa: F401
 from app.db.models.news import News  # noqa: F401
 from app.db.models.media import GalleryAlbum, Photo, Video, Document  # noqa: F401
+from app.db.models.sync_tombstone import SyncTombstone  # noqa: F401

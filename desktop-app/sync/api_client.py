@@ -47,6 +47,11 @@ class SyncApiClient:
         return resp.json() if resp.content else {}
 
     # ── спортсмены ────────────────────────────────────────────
+    # ── обратная синхронизация: что поменялось в админке сайта ─
+    def get_athlete_changes(self, since: str | None = None):
+        params = {"since": since} if since else None
+        return self._request("GET", "/athletes/changes", params=params)
+
     def search_athletes(self, name: str, club: str | None = None):
         params = {"q": name}
         if club:

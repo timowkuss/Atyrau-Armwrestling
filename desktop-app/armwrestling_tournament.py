@@ -3713,6 +3713,7 @@ class App(ctk.CTk):
         self._refresh_status_badge()
         self._refresh_tournament_list()
         self._start_auto_sync()
+        self._start_pull_sync()
 
     def _build_ui(self):
         self.sidebar = ctk.CTkFrame(self, width=240, corner_radius=0, fg_color="#161b22")
@@ -4795,6 +4796,24 @@ class App(ctk.CTk):
     def _start_auto_sync(self):
         """Запускает периодическую проверку подключения и авто-flush очереди."""
         self.after(10000, self._auto_sync_tick)
+
+    def _start_pull_sync(self):
+        """Обратная синхронизация: подтягивает в фоне карточки спортсменов,
+        изменённые через админку сайта (см. sync/pull_sync.py). В отличие
+        от _start_auto_sync (тикает на UI-потоке через self.after), сама
+        сетевая часть тут крутится в ОТДЕЛЬНОМ фоновом потоке — если сайт
+        недоступен/тормозит, интерфейс судьи это никак не подвесит.
+        on_changes_applied прилетает из того фонового потока, поэтому
+        обратно на UI-поток возвращаемся через self.after(0, ...) —
+        трогать виджеты Tkinter напрямую из чужого потока нельзя."""
+        from sync import pull_sync
+        pull_sync.configure(
+            db_path=str(DB_PATH),
+            poll_interval=10,
+            on_changes_applied=lambda: self.after(
+                0, lambda: self._show_sync_toast("Обновлены данные из админки сайта")
+            ),
+        )
 
     def _auto_sync_tick(self):
         from sync.sync_manager import sync_manager

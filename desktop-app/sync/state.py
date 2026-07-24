@@ -72,6 +72,16 @@ class SyncState:
                     bracket_system TEXT,
                     format_type TEXT
                 );
+
+                -- "Курсор" обратной синхронизации (сайт -> десктоп): последний
+                -- server_time, полученный от GET /sync/<entity>/changes, чтобы
+                -- в следующий раз спросить только то, что изменилось С ЭТОГО
+                -- момента, а не всю базу целиком. Ключ — имя набора изменений
+                -- (пока только "athletes"), значение — ISO-таймстамп сервера.
+                CREATE TABLE IF NOT EXISTS sync_cursors (
+                    name TEXT PRIMARY KEY,
+                    since_value TEXT NOT NULL
+                );
                 """
             )
             self.conn.commit()
@@ -90,6 +100,18 @@ class SyncState:
                 (entity_type, local_id),
             ).fetchone()
             return row["remote_id"] if row else None
+
+    def map_get_local(self, entity_type: str, remote_id: int) -> int | None:
+        """Обратный поиск: по центральному id найти локальный. Нужен для
+        обратной синхронизации (сайт -> десктоп, см. sync/pull_sync.py) —
+        десктоп получает список изменённых записей с их central id и должен
+        понять, это уже известная ему запись (обновить) или новая (создать)."""
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT local_id FROM id_map WHERE entity_type=? AND remote_id=?",
+                (entity_type, remote_id),
+            ).fetchone()
+            return row["local_id"] if row else None
 
     def map_set(self, entity_type: str, local_id: int, remote_id: int) -> None:
         with self._lock:
@@ -208,6 +230,22 @@ class SyncState:
         with self._lock:
             row = self.conn.execute("SELECT COUNT(*) as c FROM pending_queue").fetchone()
             return row["c"]
+
+    # ── курсор обратной синхронизации (сайт -> десктоп) ─────────
+    def get_cursor(self, name: str) -> str | None:
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT since_value FROM sync_cursors WHERE name=?", (name,)
+            ).fetchone()
+            return row["since_value"] if row else None
+
+    def set_cursor(self, name: str, since_value: str) -> None:
+        with self._lock:
+            self.conn.execute(
+                "INSERT OR REPLACE INTO sync_cursors (name, since_value) VALUES (?,?)",
+                (name, since_value),
+            )
+            self.conn.commit()
 
     def close(self):
         with self._lock:

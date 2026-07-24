@@ -82,3 +82,24 @@ class MatchSyncUpdate(BaseModel):
     p2_losses: int | None = None
     status: str | None = None
     table_number: int | None = None
+
+
+class AthleteChangeItem(BaseModel):
+    """Одна карточка спортсмена, изменённая через админку сайта, для
+    подтягивания в десктоп (см. GET /sync/athletes/changes)."""
+
+    id: int
+    full_name: str
+    club_name: str | None
+    gender: str | None
+    birth_date: str | None
+    rank: str | None
+    photo_path: str | None
+    is_hidden: bool
+    updated_at: str
+
+
+class AthleteChangesOut(BaseModel):
+    server_time: str  # десктоп сохраняет как курсор для следующего запроса
+    updated: list[AthleteChangeItem]
+    deleted: list[int]  # центральные id жёстко удалённых спортсменов

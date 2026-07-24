@@ -8,9 +8,16 @@ from app.db.models.athletes import Athlete
 from app.db.models.clubs import Club
 from app.db.models.competitions import CompetitionParticipant
 from app.db.models.statistics import AthleteStatistic
+from app.db.models.sync_tombstone import SyncTombstone
 from app.db.session import get_db
-from app.schemas.sync import AthleteSearchResultItem, AthleteSyncCreate, AthleteSyncUpdate
-from datetime import date, datetime
+from app.schemas.sync import (
+    AthleteChangeItem,
+    AthleteChangesOut,
+    AthleteSearchResultItem,
+    AthleteSyncCreate,
+    AthleteSyncUpdate,
+)
+from datetime import date, datetime, timezone
 
 router = APIRouter(prefix="/athletes", tags=["sync:athletes"])
 
@@ -97,6 +104,68 @@ def search_athletes(
         )
         for a, club_name in rows
     ]
+
+
+@router.get("/changes", response_model=AthleteChangesOut)
+def get_athlete_changes(
+    since: str | None = None,
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_desktop_sync),
+):
+    """Спрашивается десктопом периодически в фоне (см. sync/pull_sync.py):
+    "что изменилось в карточках спортсменов через админку с прошлого
+    раза". since — ISO-таймстамп из предыдущего ответа этого же
+    эндпоинта (поле server_time); при первом запросе не передаётся —
+    тогда отдаём вообще все карточки (десктоп сам решит, что из этого
+    уже есть локально, по своей id_map).
+
+    server_time берём с САМОГО СЕРВЕРА (а не время десктопа), чтобы не
+    зависеть от рассинхронизации часов клиента — десктоп просто
+    сохраняет то, что мы вернули, и присылает обратно в следующий раз.
+    """
+    since_dt = None
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Некорректный формат since (ожидается ISO 8601)")
+
+    server_time = datetime.now(timezone.utc)
+
+    query = db.query(Athlete, Club.name).outerjoin(Club, Athlete.club_id == Club.id)
+    if since_dt is not None:
+        query = query.filter(Athlete.updated_at > since_dt)
+    rows = query.all()
+
+    updated = [
+        AthleteChangeItem(
+            id=a.id,
+            full_name=a.full_name,
+            club_name=club_name,
+            gender=a.gender,
+            birth_date=a.birth_date.isoformat() if a.birth_date else None,
+            rank=a.rank,
+            photo_path=a.photo_path,
+            is_hidden=a.is_hidden,
+            updated_at=a.updated_at.isoformat(),
+        )
+        for a, club_name in rows
+    ]
+
+    deleted: list[int] = []
+    if since_dt is not None:
+        tomb_rows = (
+            db.query(SyncTombstone.entity_id)
+            .filter(SyncTombstone.entity_type == "athlete", SyncTombstone.deleted_at > since_dt)
+            .all()
+        )
+        deleted = [r[0] for r in tomb_rows]
+
+    return AthleteChangesOut(
+        server_time=server_time.isoformat(),
+        updated=updated,
+        deleted=deleted,
+    )
 
 
 @router.post("", status_code=201)
@@ -203,6 +272,7 @@ def delete_athlete(
         db.commit()
         return {"status": "hidden", "reason": "has_participations"}
 
+    db.add(SyncTombstone(entity_type="athlete", entity_id=athlete_id))
     db.delete(athlete)
     db.commit()
     return {"status": "deleted"}
