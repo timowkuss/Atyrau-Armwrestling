@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.deps import require_role
 from app.db.models.coaches import Coach
+from app.db.models.sync_tombstone import SyncTombstone
 from app.db.models.users import User
 from app.db.session import get_db
 from app.schemas.coaches import CoachCreate, CoachUpdate
@@ -50,6 +51,7 @@ def delete_coach(
     coach = db.query(Coach).filter(Coach.id == coach_id).first()
     if coach is None:
         raise HTTPException(status_code=404, detail="Тренер не найден")
+    db.add(SyncTombstone(entity_type="coach", entity_id=coach_id))
     db.delete(coach)
     db.commit()
     return {"status": "deleted"}

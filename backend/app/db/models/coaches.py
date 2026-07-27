@@ -21,6 +21,9 @@ class Coach(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     club: Mapped["Club"] = relationship(back_populates="coaches")
     athletes: Mapped[list["Athlete"]] = relationship(back_populates="coach")

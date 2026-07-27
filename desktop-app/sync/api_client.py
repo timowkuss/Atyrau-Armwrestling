@@ -59,15 +59,16 @@ class SyncApiClient:
         return self._request("GET", "/athletes/search", params=params)
 
     def create_athlete(self, full_name, club_name=None, gender=None, birth_date=None,
-                        rank=None, photo_path=None):
+                        rank=None, photo_path=None, coach_name=None):
         return self._request("POST", "/athletes", json_body={
             "full_name": full_name, "club_name": club_name,
             "gender": gender, "birth_date": birth_date, "rank": rank,
-            "photo_path": photo_path,
+            "photo_path": photo_path, "coach_name": coach_name,
         })
 
     def update_athlete(self, remote_athlete_id, full_name=None, club_name=None,
-                        gender=None, birth_date=None, rank=None, photo_path=None):
+                        gender=None, birth_date=None, rank=None, photo_path=None,
+                        coach_name=UNSET):
         body = {}
         if full_name is not None:
             body["full_name"] = full_name
@@ -81,7 +82,56 @@ class SyncApiClient:
             body["rank"] = rank
         if photo_path is not None:
             body["photo_path"] = photo_path
+        if coach_name is not UNSET:
+            # "" — явная отвязка тренера, отличается от "не передано вовсе"
+            # (та же логика сентинела, что у table_number в update_match).
+            body["coach_name"] = coach_name
         return self._request("PATCH", f"/athletes/{remote_athlete_id}", json_body=body)
+
+    # ── тренеры ──────────────────────────────────────────────
+    def search_coaches(self, name: str):
+        return self._request("GET", "/coaches/search", params={"q": name})
+
+    def get_coach_changes(self, since: str | None = None):
+        params = {"since": since} if since else None
+        return self._request("GET", "/coaches/changes", params=params)
+
+    def create_coach(self, full_name, club_name=None, photo_path=None, bio=None):
+        return self._request("POST", "/coaches", json_body={
+            "full_name": full_name, "club_name": club_name,
+            "photo_path": photo_path, "bio": bio,
+        })
+
+    def update_coach(self, remote_coach_id, full_name=None, club_name=None,
+                      photo_path=None, bio=None):
+        body = {}
+        if full_name is not None:
+            body["full_name"] = full_name
+        if club_name is not None:
+            body["club_name"] = club_name
+        if photo_path is not None:
+            body["photo_path"] = photo_path
+        if bio is not None:
+            body["bio"] = bio
+        return self._request("PATCH", f"/coaches/{remote_coach_id}", json_body=body)
+
+    def delete_coach(self, remote_id):
+        return self._request("DELETE", f"/coaches/{remote_id}")
+
+    def get_coach_rankings(self):
+        """Рейтинг 'лучший тренер года' — читает ПУБЛИЧНЫЙ (не /sync)
+        эндпоинт: это открытые данные сайта, X-Sync-Token не нужен.
+        base_url настроен на .../api/v1/sync — подменяем последний
+        сегмент на /public, отдельный конфиг ради одного GET заводить
+        не стали."""
+        public_base = self.base_url.rsplit("/sync", 1)[0] + "/public"
+        resp = requests.get(f"{public_base}/coaches/rankings", timeout=self.timeout)
+        if resp.status_code >= 400:
+            raise ApiClientError(
+                f"GET /coaches/rankings -> {resp.status_code}: {resp.text}",
+                status_code=resp.status_code,
+            )
+        return resp.json()
 
     # ── соревнования ─────────────────────────────────────────
     def create_competition(self, name, date, location_name=None,

@@ -11,7 +11,7 @@ import threading
 import time
 from pathlib import Path
 
-from .api_client import ApiClientError, SyncApiClient
+from .api_client import ApiClientError, SyncApiClient, UNSET
 from .state import SyncState
 from . import config
 
@@ -166,11 +166,11 @@ class SyncManager:
 
     # ── спортсмен: карточка из локальной таблицы athletes ───────
     def on_athlete_created(self, aid, first_name, last_name, birth_date,
-                           gender, club, rank, photo_path):
+                           gender, club, rank, photo_path, coach_name=None):
         payload = {
             "aid": aid, "first_name": first_name, "last_name": last_name,
             "birth_date": birth_date, "gender": gender, "club": club,
-            "rank": rank, "photo_path": photo_path,
+            "rank": rank, "photo_path": photo_path, "coach_name": coach_name,
         }
 
         def go():
@@ -181,6 +181,7 @@ class SyncManager:
                 gender=gender,
                 rank=rank or None,
                 photo_path=photo_path or None,
+                coach_name=coach_name or None,
             )
             self.state.map_set("athlete", aid, remote["id"])
             return remote["id"]
@@ -188,12 +189,12 @@ class SyncManager:
         return self._try("create_athlete", payload, go)
 
     def on_athlete_updated(self, aid, first_name, last_name, birth_date,
-                           gender, club, rank, photo_path):
+                           gender, club, rank, photo_path, coach_name=None):
         remote_athlete_id = self.state.map_get("athlete", aid)
         payload = {
             "aid": aid, "first_name": first_name, "last_name": last_name,
             "birth_date": birth_date, "gender": gender, "club": club,
-            "rank": rank, "photo_path": photo_path,
+            "rank": rank, "photo_path": photo_path, "coach_name": coach_name,
         }
         if remote_athlete_id is None:
             self.state.enqueue("update_athlete", payload)
@@ -208,10 +209,69 @@ class SyncManager:
                 gender=gender,
                 rank=rank or None,
                 photo_path=photo_path or None,
+                # "" тоже должно долететь до API (отвязка тренера) — только
+                # None ("поле не менялось") тут не подходит под UNSET-логику
+                # api_client.update_athlete, поэтому передаём coach_name как
+                # есть, без "or None" (в отличие от club/rank/photo_path выше).
+                coach_name=coach_name,
             )
             return remote_athlete_id
 
         return self._try("update_athlete", payload, go)
+
+    # ── тренер: карточка из локальной таблицы coaches ────────────
+    def on_coach_created(self, cid, full_name, club, photo_path, bio):
+        payload = {"cid": cid, "full_name": full_name, "club": club,
+                   "photo_path": photo_path, "bio": bio}
+
+        def go():
+            remote = self.api.create_coach(
+                full_name=full_name, club_name=club or None,
+                photo_path=photo_path or None, bio=bio or None,
+            )
+            self.state.map_set("coach", cid, remote["id"])
+            return remote["id"]
+
+        return self._try("create_coach", payload, go)
+
+    def on_coach_updated(self, cid, full_name, club, photo_path, bio):
+        remote_coach_id = self.state.map_get("coach", cid)
+        payload = {"cid": cid, "full_name": full_name, "club": club,
+                   "photo_path": photo_path, "bio": bio}
+        if remote_coach_id is None:
+            self.state.enqueue("update_coach", payload)
+            return None
+
+        def go():
+            self.api.update_coach(
+                remote_coach_id, full_name=full_name, club_name=club or None,
+                photo_path=photo_path or None, bio=bio or None,
+            )
+            return remote_coach_id
+
+        return self._try("update_coach", payload, go)
+
+    def on_coach_deleted(self, cid):
+        # Та же схема, что on_athlete_deleted: гасим ещё не отправленные
+        # create/update этого тренера в очереди, потом пробуем удалить и
+        # на сервере, если он уже туда улетел.
+        self.state.purge_pending("create_coach", "cid", cid)
+        self.state.purge_pending("update_coach", "cid", cid)
+
+        remote_id = self.state.map_get("coach", cid)
+        if remote_id is None:
+            return
+
+        delete_fn = getattr(self.api, "delete_coach", None)
+        if delete_fn is None:
+            print("[sync] delete_coach: в api_client нет метода удаления — "
+                "запись останется на сайте, удали вручную или добавь метод в API")
+            return
+        try:
+            delete_fn(remote_id)
+        except ApiClientError as e:
+            self.state.enqueue("delete_coach", {"cid": cid, "remote_id": remote_id})
+            print(f"[sync] delete_coach -> в офлайн-очередь: {e}")
 
     # ── спортсмен-участник: поиск или создание на сервере ───────
     # local_athlete_id — id из ЛОКАЛЬНОЙ таблицы athletes (реестр
@@ -751,6 +811,18 @@ class SyncManager:
                     raise
                 return True
 
+            if operation == "delete_coach":
+                delete_fn = getattr(self.api, "delete_coach", None)
+                if delete_fn is None:
+                    return False
+                try:
+                    delete_fn(payload["remote_id"])
+                except ApiClientError as e:
+                    if e.status_code == 404:
+                        return True
+                    raise
+                return True
+
             if operation == "delete_matches":
                 delete_fn = getattr(self.api, "delete_matches_for_category", None)
                 if delete_fn is None:
@@ -805,6 +877,7 @@ class SyncManager:
                     gender=payload.get("gender"),
                     rank=payload.get("rank") or None,
                     photo_path=payload.get("photo_path") or None,
+                    coach_name=payload.get("coach_name") or None,
                 )
                 self.state.map_set("athlete", payload["aid"], remote["id"])
                 return True
@@ -823,11 +896,43 @@ class SyncManager:
                         gender=payload.get("gender"),
                         rank=payload.get("rank") or None,
                         photo_path=payload.get("photo_path") or None,
+                        coach_name=payload.get("coach_name"),
                     )
                 except ApiClientError as e:
                     if e.status_code == 404:
                         self.state.map_delete("athlete", payload["aid"])
                         print(f"[sync] update_athlete aid={payload['aid']}: 404 — удалён на сервере")
+                        return True
+                    raise
+                return True
+
+            if operation == "create_coach":
+                remote = self.api.create_coach(
+                    full_name=payload["full_name"],
+                    club_name=payload.get("club") or None,
+                    photo_path=payload.get("photo_path") or None,
+                    bio=payload.get("bio") or None,
+                )
+                self.state.map_set("coach", payload["cid"], remote["id"])
+                return True
+
+            if operation == "update_coach":
+                remote_coach_id = self.state.map_get("coach", payload["cid"])
+                if remote_coach_id is None:
+                    print(f"[sync] DEBUG: update_coach ждёт create_coach cid={payload['cid']}")
+                    return None
+                try:
+                    self.api.update_coach(
+                        remote_coach_id,
+                        full_name=payload["full_name"],
+                        club_name=payload.get("club") or None,
+                        photo_path=payload.get("photo_path") or None,
+                        bio=payload.get("bio") or None,
+                    )
+                except ApiClientError as e:
+                    if e.status_code == 404:
+                        self.state.map_delete("coach", payload["cid"])
+                        print(f"[sync] update_coach cid={payload['cid']}: 404 — удалён на сервере")
                         return True
                     raise
                 return True

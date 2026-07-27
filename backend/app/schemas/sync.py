@@ -33,6 +33,24 @@ class AthleteSyncUpdate(BaseModel):
     photo_path: str | None = None
 
 
+class CoachSyncCreate(BaseModel):
+    """Создание тренера из десктопа."""
+
+    full_name: str
+    club_name: str | None = None
+    photo_path: str | None = None
+    bio: str | None = None
+
+
+class CoachSyncUpdate(BaseModel):
+    """PATCH из десктопа: приходят только изменённые поля."""
+
+    full_name: str | None = None
+    club_name: str | None = None
+    photo_path: str | None = None
+    bio: str | None = None
+
+
 class CompetitionSyncCreate(BaseModel):
     name: str
     date: str
@@ -103,3 +121,21 @@ class AthleteChangesOut(BaseModel):
     server_time: str  # десктоп сохраняет как курсор для следующего запроса
     updated: list[AthleteChangeItem]
     deleted: list[int]  # центральные id жёстко удалённых спортсменов
+
+
+class CoachChangeItem(BaseModel):
+    """Одна карточка тренера, изменённая через админку сайта, для
+    подтягивания в десктоп (см. GET /sync/coaches/changes)."""
+
+    id: int
+    full_name: str
+    club_name: str | None
+    photo_path: str | None
+    bio: str | None
+    updated_at: str
+
+
+class CoachChangesOut(BaseModel):
+    server_time: str
+    updated: list[CoachChangeItem]
+    deleted: list[int]  # центральные id жёстко удалённых тренеров

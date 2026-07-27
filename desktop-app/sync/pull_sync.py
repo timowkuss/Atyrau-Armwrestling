@@ -7,20 +7,46 @@ sync_manager.py решает только половину задачи — де
 изменилось в админке с прошлого раза" — и накатывает изменения себе в
 armwrestling.db.
 
-Пока поддерживаются только карточки спортсменов (см. ARCHITECTURE.md —
-это единственная сущность, которая сегодня одновременно существует и в
-десктопе (таблица athletes), и в центральной базе с historией правок
-через updated_at). Расширять на клубы/тренеров/данные турнира можно по
-той же схеме, когда появится конкретная необходимость.
-"""
+Поддерживаются карточки спортсменов И тренеров (обе сущности одновременно
+существуют и в десктопе — таблицы athletes/coaches, — и в центральной базе
+с историей правок через updated_at). Тренеры опрашиваются ПЕРЕД
+спортсменами в каждом цикле — так у только что подтянутого/переименованного
+тренера уже есть актуальная запись в локальной таблице coaches к моменту,
+когда до него доберётся привязка через athlete["coach_name"] (см.
+_resolve_local_coach_id)."""
 
 import sqlite3
 import threading
+from datetime import datetime
 
 from . import config
 from .api_client import ApiClientError
 
-_CURSOR_NAME = "athletes"
+_CURSOR_ATHLETES = "athletes"
+_CURSOR_COACHES = "coaches"
+
+
+def _to_desktop_date(value: str | None) -> str:
+    """Центральная база отдаёт birth_date в ISO (ГГГГ-ММ-ДД —
+    a.birth_date.isoformat() на сервере), а вся остальная десктоп-логика
+    (форма спортсмена, compute_age_category, список "Спортсмены") ждёт
+    ДД.ММ.ГГГГ и делает birth_date.split("."). Раньше ISO-строка писалась
+    в armwrestling.db как есть — из-за этого открытие списка спортсменов
+    падало с ValueError на первом же спортсмене, изменённом через сайт."""
+    s = (value or "").strip()
+    if not s:
+        return "01.01.1970"
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").strftime("%d.%m.%Y")
+    except ValueError:
+        pass
+    try:
+        # уже в нужном формате — просто проверяем, что он валиден
+        datetime.strptime(s, "%d.%m.%Y")
+        return s
+    except ValueError:
+        print(f"[pull-sync] нераспознанный формат birth_date от сервера: {s!r}, беру 01.01.1970")
+        return "01.01.1970"
 
 
 def _split_full_name(full_name: str) -> tuple[str, str]:
@@ -51,8 +77,9 @@ class PullSyncManager:
         self.state = state
         self.db_path = db_path
         self.poll_interval = poll_interval
-        # Колбэк для UI (например, обновить список "Спортсмены" на экране,
-        # если он сейчас открыт). Необязателен — по умолчанию ничего не делает.
+        # Колбэк для UI (например, обновить список "Спортсмены"/"Тренеры"
+        # на экране, если он сейчас открыт). Необязателен — по умолчанию
+        # ничего не делает.
         self.on_changes_applied = on_changes_applied
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
@@ -61,7 +88,7 @@ class PullSyncManager:
         if self._thread is not None:
             return
         self._thread = threading.Thread(
-            target=self._loop, daemon=True, name="pull-sync-athletes"
+            target=self._loop, daemon=True, name="pull-sync"
         )
         self._thread.start()
 
@@ -79,57 +106,155 @@ class PullSyncManager:
 
     def poll_once(self) -> int:
         """Один цикл опроса. Возвращает число применённых изменений
-        (обновления + удаления) — удобно для ручного вызова из UI/тестов."""
+        (обновления + удаления, спортсмены + тренеры) — удобно для
+        ручного вызова из UI/тестов."""
         if not config.SYNC_ENABLED:
             return 0
 
-        since = self.state.get_cursor(_CURSOR_NAME)
-        try:
-            data = self.api.get_athlete_changes(since)
-        except ApiClientError as e:
-            print(f"[pull-sync] нет связи с сервером: {e}")
-            return 0
-
-        updated = data.get("updated", [])
-        deleted = data.get("deleted", [])
-        if not updated and not deleted:
-            # Даже если изменений нет, курсор всё равно двигаем вперёд —
-            # иначе при следующем опросе снова попросим "since=None" и
-            # получим ВСЮ базу целиком (сервер трактует пустой since как
-            # "отдай всё", см. GET /sync/athletes/changes).
-            self.state.set_cursor(_CURSOR_NAME, data["server_time"])
-            return 0
-
+        applied = 0
         conn = sqlite3.connect(str(self.db_path), timeout=5)
         conn.execute("PRAGMA busy_timeout = 5000")
         try:
-            for item in updated:
-                self._upsert_athlete(conn, item)
-            for remote_id in deleted:
-                self._delete_athlete(conn, remote_id)
-            conn.commit()
+            # Тренеры — ПЕРЕД спортсменами (см. docstring модуля).
+            applied += self._poll_coaches(conn)
+            applied += self._poll_athletes(conn)
         finally:
             conn.close()
 
-        self.state.set_cursor(_CURSOR_NAME, data["server_time"])
-
-        if self.on_changes_applied:
+        if applied and self.on_changes_applied:
             try:
                 self.on_changes_applied()
             except Exception as e:  # noqa: BLE001 — колбэк в UI не должен ронять поллер
                 print(f"[pull-sync] on_changes_applied упал: {e}")
 
+        return applied
+
+    # ── тренеры ───────────────────────────────────────────────
+    def _poll_coaches(self, conn: sqlite3.Connection) -> int:
+        since = self.state.get_cursor(_CURSOR_COACHES)
+        try:
+            data = self.api.get_coach_changes(since)
+        except ApiClientError as e:
+            print(f"[pull-sync] тренеры: нет связи с сервером: {e}")
+            return 0
+
+        updated = data.get("updated", [])
+        deleted = data.get("deleted", [])
+        if not updated and not deleted:
+            # Курсор двигаем всегда, даже без изменений — иначе следующий
+            # опрос снова уйдёт с since=None и получит всю таблицу целиком
+            # (сервер трактует пустой since как "отдай всё").
+            self.state.set_cursor(_CURSOR_COACHES, data["server_time"])
+            return 0
+
+        for item in updated:
+            self._upsert_coach(conn, item)
+        for remote_id in deleted:
+            self._delete_coach(conn, remote_id)
+        conn.commit()
+
+        self.state.set_cursor(_CURSOR_COACHES, data["server_time"])
         return len(updated) + len(deleted)
 
-    # ── применение изменений к armwrestling.db ──────────────
+    def _upsert_coach(self, conn: sqlite3.Connection, item: dict):
+        remote_id = item["id"]
+        full_name = (item.get("full_name") or "").strip()
+        club = item.get("club_name")
+        photo_path = item.get("photo_path")
+        bio = item.get("bio")
+
+        local_id = self.state.map_get_local("coach", remote_id)
+        if local_id is not None:
+            conn.execute(
+                "UPDATE coaches SET full_name=?, club=?, photo_path=?, bio=? WHERE id=?",
+                (full_name, club, photo_path, bio, local_id),
+            )
+            return
+
+        # Тренер мог уже существовать локально под этим же именем (создан
+        # в десктопе и ещё не успел уйти на сервер, либо был создан здесь
+        # же через athlete.coach_name раньше, чем добрался до него этот
+        # опрос) — сопоставляем по имени, чтобы не наплодить дублей.
+        row = conn.execute(
+            "SELECT id FROM coaches WHERE full_name = ? COLLATE NOCASE", (full_name,)
+        ).fetchone()
+        if row is not None:
+            local_id = row[0]
+            conn.execute(
+                "UPDATE coaches SET full_name=?, club=?, photo_path=?, bio=? WHERE id=?",
+                (full_name, club, photo_path, bio, local_id),
+            )
+            self.state.map_set("coach", local_id, remote_id)
+            return
+
+        cur = conn.execute(
+            "INSERT INTO coaches (full_name, club, photo_path, bio) VALUES (?,?,?,?)",
+            (full_name, club, photo_path, bio),
+        )
+        self.state.map_set("coach", cur.lastrowid, remote_id)
+
+    def _delete_coach(self, conn: sqlite3.Connection, remote_id: int):
+        local_id = self.state.map_get_local("coach", remote_id)
+        if local_id is None:
+            return
+        # Отвязываем учеников локально (как и на сервере — ondelete=SET
+        # NULL), затем удаляем самого тренера.
+        conn.execute("UPDATE athletes SET coach_id=NULL WHERE coach_id=?", (local_id,))
+        conn.execute("DELETE FROM coaches WHERE id=?", (local_id,))
+        self.state.map_delete("coach", local_id)
+
+    # ── спортсмены ────────────────────────────────────────────
+    def _poll_athletes(self, conn: sqlite3.Connection) -> int:
+        since = self.state.get_cursor(_CURSOR_ATHLETES)
+        try:
+            data = self.api.get_athlete_changes(since)
+        except ApiClientError as e:
+            print(f"[pull-sync] спортсмены: нет связи с сервером: {e}")
+            return 0
+
+        updated = data.get("updated", [])
+        deleted = data.get("deleted", [])
+        if not updated and not deleted:
+            self.state.set_cursor(_CURSOR_ATHLETES, data["server_time"])
+            return 0
+
+        for item in updated:
+            self._upsert_athlete(conn, item)
+        for remote_id in deleted:
+            self._delete_athlete(conn, remote_id)
+        conn.commit()
+
+        self.state.set_cursor(_CURSOR_ATHLETES, data["server_time"])
+        return len(updated) + len(deleted)
+
+    def _resolve_local_coach_id(self, conn: sqlite3.Connection, coach_name: str | None):
+        """ФИО тренера -> локальный id в таблице coaches. Сопоставление по
+        имени (не по id_map), т.к. AthleteChangeItem с сервера несёт
+        только текст coach_name, не central id тренера (см.
+        app/schemas/sync.py::AthleteChangeItem на бэкенде). Обычно к этому
+        моменту тренер уже подтянут через _poll_coaches этого же цикла;
+        если нет (гонка/старые данные) — заводим локальную запись-заглушку
+        по имени, она доразрешится в id_map при следующем опросе тренеров."""
+        name = (coach_name or "").strip()
+        if not name:
+            return None
+        row = conn.execute(
+            "SELECT id FROM coaches WHERE full_name = ? COLLATE NOCASE", (name,)
+        ).fetchone()
+        if row is not None:
+            return row[0]
+        cur = conn.execute("INSERT INTO coaches (full_name) VALUES (?)", (name,))
+        return cur.lastrowid
+
     def _upsert_athlete(self, conn: sqlite3.Connection, item: dict):
         remote_id = item["id"]
         first_name, last_name = _split_full_name(item.get("full_name", ""))
         gender = _normalize_gender_for_desktop(item.get("gender"))
-        birth_date = item.get("birth_date") or "1970-01-01"
+        birth_date = _to_desktop_date(item.get("birth_date"))
         club = item.get("club_name")
         rank = item.get("rank")
         photo_path = item.get("photo_path")
+        coach_id = self._resolve_local_coach_id(conn, item.get("coach_name"))
 
         local_id = self.state.map_get_local("athlete", remote_id)
 
@@ -144,15 +269,16 @@ class PullSyncManager:
         if local_id is not None:
             conn.execute(
                 "UPDATE athletes SET first_name=?, last_name=?, birth_date=?, "
-                "gender=?, club=?, rank=?, photo_path=? WHERE id=?",
-                (first_name, last_name, birth_date, gender, club, rank, photo_path, local_id),
+                "gender=?, club=?, rank=?, photo_path=?, coach_id=? WHERE id=?",
+                (first_name, last_name, birth_date, gender, club, rank, photo_path,
+                 coach_id, local_id),
             )
             return
 
         cur = conn.execute(
-            "INSERT INTO athletes (first_name, last_name, birth_date, gender, club, rank, photo_path) "
-            "VALUES (?,?,?,?,?,?,?)",
-            (first_name, last_name, birth_date, gender, club, rank, photo_path),
+            "INSERT INTO athletes (first_name, last_name, birth_date, gender, club, "
+            "rank, photo_path, coach_id) VALUES (?,?,?,?,?,?,?,?)",
+            (first_name, last_name, birth_date, gender, club, rank, photo_path, coach_id),
         )
         self.state.map_set("athlete", cur.lastrowid, remote_id)
 

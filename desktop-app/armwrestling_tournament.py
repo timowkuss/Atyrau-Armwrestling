@@ -125,21 +125,68 @@ def get_dvoeborie_points(place):
 
 
 
-def compute_age_category(birth_date_str, gender, tournament_year=None):
-    """Считает возраст по календарному году (turning age), не по точной дате."""
+def extract_birth_year(birth_date_str):
+    """Достаёт год рождения независимо от формата строки. Основной формат
+    в десктопе — 'DD.MM.YYYY', но из-за старого бага в pull_sync (до
+    конвертации ISO-дат с сервера через _to_desktop_date) в локальной БД
+    могли остаться записи в формате 'YYYY-MM-DD' — падать на них не
+    должны ни карточка спортсмена, ни расчёт возрастной категории."""
+    if not birth_date_str:
+        return datetime.now().year
+    s = str(birth_date_str).strip()
+    if "." in s:
+        year_part = s.split(".")[-1]
+    elif "-" in s:
+        parts = s.split("-")
+        # YYYY-MM-DD -> год первым; на всякий случай берём 4-значную часть
+        year_part = parts[0] if len(parts[0]) == 4 else parts[-1]
+    else:
+        year_part = s
+    try:
+        return int(year_part)
+    except ValueError:
+        return datetime.now().year
+
+
+def center_toplevel(win, width, height):
+    """Центрирует Toplevel-окно (width x height) относительно всего экрана.
+    Окно должно быть ещё в withdraw()/не отрисовано — вызываем ДО deiconify(),
+    иначе на некоторых WM виден скачок из угла в центр."""
+    win.update_idletasks()
+    sw = win.winfo_screenwidth()
+    sh = win.winfo_screenheight()
+    x = max(0, (sw - width) // 2)
+    y = max(0, (sh - height) // 2)
+    win.geometry(f"{width}x{height}+{x}+{y}")
+
+
+AGE_LEVEL_LABELS = OrderedDict([
+    (0, "До 15 лет (Sub-Junior)"),
+    (1, "16-18 лет (Junior)"),
+    (2, "19-23 лет (Youth)"),
+    (3, "24+ лет (Senior)"),
+])
+
+
+def get_age_level(birth_date_str, tournament_year=None):
+    """Возрастной уровень (0..3) по году рождения — общий для
+    compute_age_category и фильтра в окне 'Спортсмены'."""
     if tournament_year is None:
         tournament_year = datetime.now().year
-    birth_year = int(birth_date_str.split(".")[-1])   # 'дд.мм.гггг' -> год последним
+    birth_year = extract_birth_year(birth_date_str)
     turning_age = tournament_year - birth_year
-
     if turning_age <= 15:
-        level = 0
+        return 0
     elif turning_age <= 18:
-        level = 1
+        return 1
     elif turning_age <= 23:
-        level = 2
-    else:
-        level = 3
+        return 2
+    return 3
+
+
+def compute_age_category(birth_date_str, gender, tournament_year=None):
+    """Считает возраст по календарному году (turning age), не по точной дате."""
+    level = get_age_level(birth_date_str, tournament_year)
 
     for name, rule in AGE_CATEGORY_RULES.items():
         if rule["gender"] == gender and rule["level"] == level:
@@ -255,6 +302,15 @@ class Database:
             photo_path TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         );
+
+        CREATE TABLE IF NOT EXISTS coaches (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            full_name TEXT NOT NULL,
+            club TEXT,
+            photo_path TEXT,
+            bio TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
                           
         CREATE TABLE IF NOT EXISTS dvoeborie_overrides (
             tournament_id INTEGER NOT NULL,
@@ -303,6 +359,11 @@ class Database:
     
         if "athlete_id" not in p_cols:
             self.conn.execute("ALTER TABLE participants ADD COLUMN athlete_id INTEGER REFERENCES athletes(id)")
+
+        a_cols = [r[1] for r in self.conn.execute("PRAGMA table_info(athletes)").fetchall()]
+        if "coach_id" not in a_cols:
+            self.conn.execute("ALTER TABLE athletes ADD COLUMN coach_id INTEGER REFERENCES coaches(id)")
+        self.conn.commit()
 
     def create_tournament(self, name, date, location="", weight_tolerance=0,
                           bracket_system="double", format_type="separate"):
@@ -376,18 +437,61 @@ class Database:
         self.conn.commit()
         return cur.lastrowid
 
-    def add_athlete(self, first_name, last_name, birth_date, gender, club="", rank="", photo_path=""):
+    def add_athlete(self, first_name, last_name, birth_date, gender, club="", rank="",
+                     photo_path="", coach_id=None):
         cur = self.conn.execute(
-            "INSERT INTO athletes (first_name,last_name,birth_date,gender,club,rank,photo_path) VALUES (?,?,?,?,?,?,?)",
-            (first_name, last_name, birth_date, gender, club, rank, photo_path))
+            "INSERT INTO athletes (first_name,last_name,birth_date,gender,club,rank,photo_path,coach_id) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (first_name, last_name, birth_date, gender, club, rank, photo_path, coach_id))
         self.conn.commit()
         return cur.lastrowid
 
-    def update_athlete(self, aid, first_name, last_name, birth_date, gender, club, rank, photo_path):
+    def update_athlete(self, aid, first_name, last_name, birth_date, gender, club, rank,
+                        photo_path, coach_id=None):
         self.conn.execute(
-            "UPDATE athletes SET first_name=?,last_name=?,birth_date=?,gender=?,club=?,rank=?,photo_path=? WHERE id=?",
-            (first_name, last_name, birth_date, gender, club, rank, photo_path, aid))
+            "UPDATE athletes SET first_name=?,last_name=?,birth_date=?,gender=?,club=?,rank=?,"
+            "photo_path=?,coach_id=? WHERE id=?",
+            (first_name, last_name, birth_date, gender, club, rank, photo_path, coach_id, aid))
         self.conn.commit()
+
+    # ── тренеры ──────────────────────────────────────────────────
+    def add_coach(self, full_name, club="", photo_path="", bio=""):
+        cur = self.conn.execute(
+            "INSERT INTO coaches (full_name, club, photo_path, bio) VALUES (?,?,?,?)",
+            (full_name, club, photo_path, bio))
+        self.conn.commit()
+        return cur.lastrowid
+
+    def update_coach(self, cid, full_name, club="", photo_path="", bio=""):
+        self.conn.execute(
+            "UPDATE coaches SET full_name=?, club=?, photo_path=?, bio=? WHERE id=?",
+            (full_name, club, photo_path, bio, cid))
+        self.conn.commit()
+
+    def delete_coach(self, cid):
+        # Отвязываем учеников ДО удаления самого тренера — coach_id не
+        # объявлен с ON DELETE в схеме, битые ссылки после DELETE иначе
+        # останутся (та же логика, что и в delete_athlete для athlete_id
+        # участников).
+        self.conn.execute("UPDATE athletes SET coach_id=NULL WHERE coach_id=?", (cid,))
+        self.conn.execute("DELETE FROM coaches WHERE id=?", (cid,))
+        self.conn.commit()
+
+    def get_coaches(self, query=""):
+        if query:
+            like = f"%{query.lower()}%"
+            return self.conn.execute(
+                "SELECT * FROM coaches WHERE lower(full_name) LIKE ? ORDER BY full_name",
+                (like,)).fetchall()
+        return self.conn.execute("SELECT * FROM coaches ORDER BY full_name").fetchall()
+
+    def get_coach(self, cid):
+        return self.conn.execute("SELECT * FROM coaches WHERE id=?", (cid,)).fetchone()
+
+    def get_athletes_by_coach(self, coach_id):
+        return self.conn.execute(
+            "SELECT * FROM athletes WHERE coach_id=? ORDER BY last_name", (coach_id,)
+        ).fetchall()
 
     def delete_athlete(self, aid):
         # participants.athlete_id ссылается на athletes(id) БЕЗ ON DELETE —
@@ -423,12 +527,15 @@ class Database:
         self.conn.commit()
 
     def search_athletes(self, query=""):
+        base = ("SELECT athletes.*, coaches.full_name AS coach_name FROM athletes "
+                "LEFT JOIN coaches ON coaches.id = athletes.coach_id")
         if query:
             like = f"%{query.lower()}%"
             return self.conn.execute(
-                "SELECT * FROM athletes WHERE lower(first_name || ' ' || last_name) LIKE ? ORDER BY last_name",
+                base + " WHERE lower(athletes.first_name || ' ' || athletes.last_name) LIKE ? "
+                       "ORDER BY athletes.last_name",
                 (like,)).fetchall()
-        return self.conn.execute("SELECT * FROM athletes ORDER BY last_name").fetchall()
+        return self.conn.execute(base + " ORDER BY athletes.last_name").fetchall()
 
     def get_athlete(self, aid):
         return self.conn.execute("SELECT * FROM athletes WHERE id=?", (aid,)).fetchone()
@@ -549,6 +656,9 @@ _original_update_participant = Database.update_participant
 _original_save_match = Database.save_match
 _original_add_athlete = Database.add_athlete
 _original_update_athlete = Database.update_athlete
+_original_add_coach = Database.add_coach
+_original_update_coach = Database.update_coach
+_original_delete_coach = Database.delete_coach
 _original_delete_tournament = Database.delete_tournament
 _original_delete_category = Database.delete_category
 _original_delete_participant = Database.delete_participant
@@ -624,26 +734,56 @@ def _synced_save_match(self, match: dict):
     return mid
 
 def _synced_add_athlete(self, first_name, last_name, birth_date, gender,
-                         club="", rank="", photo_path=""):
+                         club="", rank="", photo_path="", coach_id=None):
     aid = _original_add_athlete(self, first_name, last_name, birth_date,
-                                 gender, club, rank, photo_path)
+                                 gender, club, rank, photo_path, coach_id)
     try:
+        coach = self.get_coach(coach_id) if coach_id else None
         sync_manager.on_athlete_created(aid, first_name, last_name,
-                                         birth_date, gender, club, rank, photo_path)
+                                         birth_date, gender, club, rank, photo_path,
+                                         coach_name=coach["full_name"] if coach else None)
     except Exception as e:
         print(f"[sync] add_athlete: {e}")
     return aid
 
 
 def _synced_update_athlete(self, aid, first_name, last_name, birth_date,
-                            gender, club, rank, photo_path):
+                            gender, club, rank, photo_path, coach_id=None):
     _original_update_athlete(self, aid, first_name, last_name, birth_date,
-                              gender, club, rank, photo_path)
+                              gender, club, rank, photo_path, coach_id)
     try:
+        # coach_name всегда передаём явно ("" если тренер снят) — точно
+        # так же, как first_name/birth_date/club выше передаются целиком,
+        # а не как diff. Это даёт update_athlete на сервере однозначный
+        # сигнал "тренер именно такой" вместо "не трогай поле".
+        coach = self.get_coach(coach_id) if coach_id else None
         sync_manager.on_athlete_updated(aid, first_name, last_name,
-                                         birth_date, gender, club, rank, photo_path)
+                                         birth_date, gender, club, rank, photo_path,
+                                         coach_name=coach["full_name"] if coach else "")
     except Exception as e:
         print(f"[sync] update_athlete: {e}")
+
+def _synced_add_coach(self, full_name, club="", photo_path="", bio=""):
+    cid = _original_add_coach(self, full_name, club, photo_path, bio)
+    try:
+        sync_manager.on_coach_created(cid, full_name, club, photo_path, bio)
+    except Exception as e:
+        print(f"[sync] add_coach: {e}")
+    return cid
+
+def _synced_update_coach(self, cid, full_name, club="", photo_path="", bio=""):
+    _original_update_coach(self, cid, full_name, club, photo_path, bio)
+    try:
+        sync_manager.on_coach_updated(cid, full_name, club, photo_path, bio)
+    except Exception as e:
+        print(f"[sync] update_coach: {e}")
+
+def _synced_delete_coach(self, cid):
+    _original_delete_coach(self, cid)
+    try:
+        sync_manager.on_coach_deleted(cid)
+    except Exception as e:
+        print(f"[sync] delete_coach: {e}")
 
 def _synced_delete_tournament(self, tid):
     _original_delete_tournament(self, tid)
@@ -683,6 +823,9 @@ Database.update_participant = _synced_update_participant
 Database.save_match = _synced_save_match
 Database.add_athlete = _synced_add_athlete
 Database.update_athlete = _synced_update_athlete
+Database.add_coach = _synced_add_coach
+Database.update_coach = _synced_update_coach
+Database.delete_coach = _synced_delete_coach
 Database.delete_athlete = _synced_delete_athlete
 
 
@@ -3387,10 +3530,16 @@ class CombinedResultsWindow(ctk.CTkToplevel):
 
 
 class AthleteCard(ctk.CTkFrame):
-    def __init__(self, master, athlete, on_edit, on_delete, **kwargs):
+    def __init__(self, master, athlete, on_edit, on_delete, index=None, **kwargs):
         super().__init__(master, corner_radius=10, **kwargs)
         self.configure(fg_color=("#1e2a3a", "#1e2a3a"))
         a = athlete
+
+        col = 0
+        if index is not None:
+            ctk.CTkLabel(self, text=f"#{index}", font=ctk.CTkFont(size=12, weight="bold"),
+                        text_color="#556677", width=36).grid(row=0, column=0, rowspan=3, padx=(10, 0), pady=10)
+            col = 1
 
         photo_label = ctk.CTkLabel(self, text="👤", font=("Arial", 28), width=50)
         if PIL_AVAILABLE and a["photo_path"] and Path(a["photo_path"]).exists():
@@ -3401,33 +3550,35 @@ class AthleteCard(ctk.CTkFrame):
                 photo_label._image = photo
             except Exception:
                 pass
-        photo_label.grid(row=0, column=0, rowspan=3, padx=(10, 5), pady=10)
+        photo_label.grid(row=0, column=col, rowspan=3, padx=(10, 5), pady=10)
 
         full_name = f"{a['last_name']} {a['first_name']}"
         ctk.CTkLabel(self, text=full_name, font=ctk.CTkFont(size=14, weight="bold"),
-                    anchor="w").grid(row=0, column=1, sticky="w", padx=5, pady=(8, 0))
+                    anchor="w").grid(row=0, column=col + 1, sticky="w", padx=5, pady=(8, 0))
 
         gender_label = "Ж" if a["gender"] == "F" else "М"
-        turning_age = datetime.now().year - int(a["birth_date"].split(".")[-1])
+        turning_age = datetime.now().year - extract_birth_year(a["birth_date"])
         natural_cat = compute_age_category(a["birth_date"], a["gender"])
         info = f"🎂 {a['birth_date']} ({turning_age} лет)   {gender_label}   🏛 {a['club'] or '—'}"
         ctk.CTkLabel(self, text=info, font=ctk.CTkFont(size=11),
-                    text_color="#8899aa", anchor="w").grid(row=1, column=1, sticky="w", padx=5)
+                    text_color="#8899aa", anchor="w").grid(row=1, column=col + 1, sticky="w", padx=5)
 
         cat_text = f"Категория: {natural_cat or '—'}"
         if a["rank"]:
             cat_text += f"   |   🥋 {a['rank']}"
+        if a["coach_name"]:
+            cat_text += f"   |   🧑‍🏫 {a['coach_name']}"
         ctk.CTkLabel(self, text=cat_text, font=ctk.CTkFont(size=11), text_color="#5588bb",
-                    anchor="w").grid(row=2, column=1, sticky="w", padx=5, pady=(0, 8))
+                    anchor="w").grid(row=2, column=col + 1, sticky="w", padx=5, pady=(0, 8))
 
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        btn_frame.grid(row=0, column=2, rowspan=3, padx=10, pady=10, sticky="e")
+        btn_frame.grid(row=0, column=col + 2, rowspan=3, padx=10, pady=10, sticky="e")
         ctk.CTkButton(btn_frame, text="✏️", width=36, height=32,
                     command=lambda: on_edit(a["id"])).pack(pady=2)
         ctk.CTkButton(btn_frame, text="🗑", width=36, height=32,
                     fg_color="#8b1a1a", hover_color="#a03030",
                     command=lambda: on_delete(a["id"])).pack(pady=2)
-        self.columnconfigure(1, weight=1)
+        self.columnconfigure(col + 1, weight=1)
 
 
     # ════
@@ -3440,14 +3591,22 @@ class AthletesWindow(ctk.CTkToplevel):
         self.db = db
         self.title("👤 Спортсмены — общий реестр")
         self.geometry("820x640")
+        center_toplevel(self, 820, 640)
         self.minsize(600, 400)
         self.configure(fg_color="#0d1117")
         self.after(50, self.safe_init)
 
     def safe_init(self):
-        self._build_ui()
-        self._refresh_list()
-        self.deiconify()
+        try:
+            self._build_ui()
+            self._refresh_list()
+        finally:
+            # Показываем окно в любом случае, даже если что-то выше упало —
+            # иначе окно навсегда останется в withdraw() (невидимым), а
+            # winfo_exists() всё равно будет True, и повторные клики по
+            # кнопке "Спортсмены" будут просто фокусировать невидимое окно,
+            # выглядя так, будто бы кнопка не реагирует.
+            self.deiconify()
 
     def _build_ui(self):
         ctrl = ctk.CTkFrame(self, fg_color="transparent")
@@ -3465,6 +3624,11 @@ class AthletesWindow(ctk.CTkToplevel):
         ctk.CTkEntry(ctrl, textvariable=self.search_var, width=220,
                     placeholder_text="🔍 Поиск по имени/фамилии...").pack(side="left", padx=10)
 
+        self.age_filter_var = ctk.StringVar(value="Все возрасты")
+        age_options = ["Все возрасты"] + list(AGE_LEVEL_LABELS.values())
+        ctk.CTkOptionMenu(ctrl, variable=self.age_filter_var, values=age_options,
+                    width=200, command=lambda *_: self._refresh_list()).pack(side="left", padx=5)
+
         self.count_label = ctk.CTkLabel(ctrl, text="", text_color="#556677")
         self.count_label.pack(side="right", padx=10)
 
@@ -3475,15 +3639,22 @@ class AthletesWindow(ctk.CTkToplevel):
         for w in self.list_frame.winfo_children():
             w.destroy()
         athletes = self.db.search_athletes(self.search_var.get().strip())
+
+        selected_age = self.age_filter_var.get()
+        if selected_age != "Все возрасты":
+            label_to_level = {v: k for k, v in AGE_LEVEL_LABELS.items()}
+            target_level = label_to_level[selected_age]
+            athletes = [a for a in athletes if get_age_level(a["birth_date"]) == target_level]
+
         self.count_label.configure(text=f"Всего: {len(athletes)}")
         if not athletes:
             ctk.CTkLabel(self.list_frame, text="Нет спортсменов.",
                     text_color="#445566").pack(pady=20)
             return
-        for a in athletes:
+        for i, a in enumerate(athletes, start=1):
             card = AthleteCard(self.list_frame, a,
                     on_edit=self._add_athlete_dialog,
-                    on_delete=self._delete_athlete)
+                    on_delete=self._delete_athlete, index=i)
             card.pack(fill="x", padx=5, pady=4)
 
     def _delete_athlete(self, aid):
@@ -3529,8 +3700,8 @@ class AthletesWindow(ctk.CTkToplevel):
     def _add_athlete_dialog(self, edit_id=None):
         dlg = tk.Toplevel(self)
         dlg.title("Редактировать спортсмена" if edit_id else "Добавить спортсмена")
-        dlg.geometry("660x660")
-        dlg.minsize(480, 660)
+        dlg.geometry("660x710")
+        dlg.minsize(480, 710)
         dlg.configure(bg="#161b22")
 
         fields = {}
@@ -3600,11 +3771,29 @@ class AthletesWindow(ctk.CTkToplevel):
         ctk.CTkOptionMenu(form, variable=rank_var, values=RANKS, width=260
                     ).grid(row=5, column=1, padx=(0, 15), pady=8, sticky="w")
 
+        # ─── Тренер (опционально; можно сменить или снять) ───
+        ctk.CTkLabel(form, text="Тренер:", anchor="e", width=110).grid(
+            row=6, column=0, padx=(15, 8), pady=8, sticky="e")
+        _NO_COACH = "— нет —"
+        coaches = self.db.get_coaches()
+        coach_display_to_id = {_NO_COACH: None}
+        for c in coaches:
+            coach_display_to_id[c["full_name"]] = c["id"]
+        existing_coach_name = _NO_COACH
+        if existing and existing["coach_id"]:
+            row = self.db.get_coach(existing["coach_id"])
+            if row:
+                existing_coach_name = row["full_name"]
+        coach_var = ctk.StringVar(value=existing_coach_name)
+        ctk.CTkOptionMenu(form, variable=coach_var,
+                    values=[_NO_COACH] + [c["full_name"] for c in coaches], width=260
+                    ).grid(row=6, column=1, padx=(0, 15), pady=8, sticky="w")
+
         # ─── Фото (в отдельной строке, чтобы не наезжало на кнопку) ───
         ctk.CTkLabel(form, text="Фото:", anchor="e", width=110).grid(
-            row=6, column=0, padx=(15, 8), pady=8, sticky="e")
+            row=7, column=0, padx=(15, 8), pady=8, sticky="e")
         photo_row = ctk.CTkFrame(form, fg_color="transparent")
-        photo_row.grid(row=6, column=1, padx=(0, 15), pady=8, sticky="w")
+        photo_row.grid(row=7, column=1, padx=(0, 15), pady=8, sticky="w")
 
         photo_path_var.set(existing["photo_path"] or "" if existing else "")
         photo_lbl = ctk.CTkLabel(photo_row,
@@ -3629,7 +3818,7 @@ class AthletesWindow(ctk.CTkToplevel):
 
         preview_label = ctk.CTkLabel(form, text="", text_color="#5588bb",
                     font=ctk.CTkFont(size=11), anchor="w", justify="left")
-        preview_label.grid(row=7, column=0, columnspan=2, padx=15, pady=(12, 0), sticky="w")
+        preview_label.grid(row=8, column=0, columnspan=2, padx=15, pady=(12, 0), sticky="w")
 
         def update_preview(*_):
             bd = birth_date_var.get().strip()
@@ -3660,12 +3849,13 @@ class AthletesWindow(ctk.CTkToplevel):
             gender = gender_reverse[gender_var.get()]
             club = fields["club"].get().strip()
             rank = rank_var.get()
+            coach_id = coach_display_to_id.get(coach_var.get())
             if edit_id:
                 self.db.update_athlete(edit_id, first_name, last_name, birth_date,
-                        gender, club, rank, photo_path_var.get())
+                        gender, club, rank, photo_path_var.get(), coach_id)
             else:
                 self.db.add_athlete(first_name, last_name, birth_date,
-                        gender, club, rank, photo_path_var.get())
+                        gender, club, rank, photo_path_var.get(), coach_id)
             print("Сохраняю спортсмена")
             dlg.destroy()
             self._refresh_list()
@@ -3679,6 +3869,233 @@ class AthletesWindow(ctk.CTkToplevel):
 
         dlg.bind("<Return>", lambda e: save())
 
+
+    # ════
+    #  ОКНО «ТРЕНЕРЫ» — общий реестр, не привязан к турниру
+    # ════
+class CoachCard(ctk.CTkFrame):
+    def __init__(self, master, coach, athletes_count, on_edit, on_delete, index=None, **kwargs):
+        super().__init__(master, corner_radius=10, **kwargs)
+        self.configure(fg_color=("#1e2a3a", "#1e2a3a"))
+        c = coach
+
+        col = 0
+        if index is not None:
+            ctk.CTkLabel(self, text=f"#{index}", font=ctk.CTkFont(size=12, weight="bold"),
+                        text_color="#556677", width=36).grid(row=0, column=0, rowspan=2, padx=(10, 0), pady=10)
+            col = 1
+
+        ctk.CTkLabel(self, text="🧑‍🏫", font=("Arial", 26), width=44).grid(
+            row=0, column=col, rowspan=2, padx=(10, 5), pady=10)
+
+        ctk.CTkLabel(self, text=c["full_name"], font=ctk.CTkFont(size=14, weight="bold"),
+                    anchor="w").grid(row=0, column=col + 1, sticky="w", padx=5, pady=(10, 0))
+
+        info = f"🏛 {c['club'] or '—'}   |   👥 учеников: {athletes_count}"
+        ctk.CTkLabel(self, text=info, font=ctk.CTkFont(size=11),
+                    text_color="#8899aa", anchor="w").grid(row=1, column=col + 1, sticky="w", padx=5, pady=(0, 10))
+
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.grid(row=0, column=col + 2, rowspan=2, padx=10, pady=10, sticky="e")
+        ctk.CTkButton(btn_frame, text="✏️", width=36, height=32,
+                    command=lambda: on_edit(c["id"])).pack(pady=2)
+        ctk.CTkButton(btn_frame, text="🗑", width=36, height=32,
+                    fg_color="#8b1a1a", hover_color="#a03030",
+                    command=lambda: on_delete(c["id"])).pack(pady=2)
+        self.columnconfigure(col + 1, weight=1)
+
+
+class CoachesWindow(ctk.CTkToplevel):
+    def __init__(self, master, db):
+        super().__init__(master)
+        self.withdraw()
+        self.db = db
+        self.title("🧑‍🏫 Тренеры — общий реестр")
+        self.geometry("820x640")
+        center_toplevel(self, 820, 640)
+        self.minsize(600, 400)
+        self.configure(fg_color="#0d1117")
+        self.after(50, self.safe_init)
+
+    def safe_init(self):
+        try:
+            self._build_ui()
+            self._refresh_list()
+        finally:
+            self.deiconify()
+
+    def _build_ui(self):
+        ctrl = ctk.CTkFrame(self, fg_color="transparent")
+        ctrl.pack(fill="x", padx=15, pady=15)
+
+        ctk.CTkButton(ctrl, text="➕ Добавить тренера", width=180, height=38,
+                    fg_color="#1a4a2a", hover_color="#2a6a3a",
+                    command=lambda: self._add_coach_dialog()).pack(side="left", padx=5)
+
+        self.search_var = ctk.StringVar()
+        self.search_var.trace_add("write", lambda *_: self._refresh_list())
+        ctk.CTkEntry(ctrl, textvariable=self.search_var, width=220,
+                    placeholder_text="🔍 Поиск по ФИО...").pack(side="left", padx=10)
+
+        self.count_label = ctk.CTkLabel(ctrl, text="", text_color="#556677")
+        self.count_label.pack(side="right", padx=10)
+
+        self.list_frame = ScrollableFrame(self, fg_color="#0d1117")
+        self.list_frame.pack(fill="both", expand=True, padx=15, pady=(0, 15))
+
+    def _refresh_list(self):
+        for w in self.list_frame.winfo_children():
+            w.destroy()
+        coaches = self.db.get_coaches(self.search_var.get().strip())
+        self.count_label.configure(text=f"Всего: {len(coaches)}")
+        if not coaches:
+            ctk.CTkLabel(self.list_frame, text="Нет тренеров.",
+                    text_color="#445566").pack(pady=20)
+            return
+        for i, c in enumerate(coaches, start=1):
+            count = len(self.db.get_athletes_by_coach(c["id"]))
+            card = CoachCard(self.list_frame, c, count,
+                    on_edit=self._add_coach_dialog,
+                    on_delete=self._delete_coach, index=i)
+            card.pack(fill="x", padx=5, pady=4)
+
+    def _delete_coach(self, cid):
+        if not messagebox.askyesno("Удалить",
+                    "Удалить тренера из реестра?\n"
+                    "Его спортсмены не удаляются — просто останутся без тренера."):
+            return
+        self.db.delete_coach(cid)
+        self._refresh_list()
+
+    def _add_coach_dialog(self, edit_id=None):
+        dlg = tk.Toplevel(self)
+        dlg.title("Редактировать тренера" if edit_id else "Добавить тренера")
+        dlg.geometry("680x600")
+        dlg.minsize(500, 600)
+        dlg.configure(bg="#161b22")
+
+        existing = self.db.get_coach(edit_id) if edit_id else None
+        fields = {}
+
+        def lbl_entry(parent, label, key, default="", row=0, placeholder=""):
+            ctk.CTkLabel(parent, text=label, anchor="e", width=110).grid(
+                row=row, column=0, padx=(15, 8), pady=8, sticky="e")
+            var = ctk.StringVar(value=default)
+            ctk.CTkEntry(parent, textvariable=var, width=300, placeholder_text=placeholder).grid(
+                row=row, column=1, padx=(0, 15), pady=8, sticky="w")
+            fields[key] = var
+            return var
+
+        form = ctk.CTkFrame(dlg, fg_color="transparent")
+        form.pack(fill="x", padx=10, pady=15)
+
+        lbl_entry(form, "ФИО*:", "full_name", existing["full_name"] if existing else "", row=0)
+        lbl_entry(form, "Клуб:", "club", (existing["club"] or "") if existing else "", row=1)
+
+        ctk.CTkLabel(form, text="О тренере:", anchor="ne", width=110).grid(
+            row=2, column=0, padx=(15, 8), pady=8, sticky="ne")
+        bio_box = ctk.CTkTextbox(form, width=300, height=70)
+        bio_box.grid(row=2, column=1, padx=(0, 15), pady=8, sticky="w")
+        if existing and existing["bio"]:
+            bio_box.insert("1.0", existing["bio"])
+
+        # ─── Ученики: уже привязанные + добавление существующих ───
+        ctk.CTkLabel(dlg, text="Ученики", font=ctk.CTkFont(size=13, weight="bold"),
+                    text_color="#8899aa").pack(anchor="w", padx=20, pady=(5, 0))
+        athletes_frame = ScrollableFrame(dlg, fg_color="#0d1117", height=180)
+        athletes_frame.pack(fill="both", expand=False, padx=15, pady=(5, 5))
+
+        def refresh_athletes_list():
+            for w in athletes_frame.winfo_children():
+                w.destroy()
+            if not edit_id:
+                ctk.CTkLabel(athletes_frame, text="Сначала сохраните тренера — "
+                        "потом можно будет привязывать учеников.",
+                        text_color="#445566").pack(pady=10)
+                return
+            assigned = self.db.get_athletes_by_coach(edit_id)
+            if not assigned:
+                ctk.CTkLabel(athletes_frame, text="Пока нет учеников.",
+                        text_color="#445566").pack(pady=10)
+            for a in assigned:
+                row = ctk.CTkFrame(athletes_frame, fg_color="transparent")
+                row.pack(fill="x", padx=5, pady=2)
+                ctk.CTkLabel(row, text=f"{a['last_name']} {a['first_name']}",
+                        anchor="w").pack(side="left", padx=5)
+
+                def unassign(aid=a["id"]):
+                    row_data = self.db.get_athlete(aid)
+                    self.db.update_athlete(
+                        aid, row_data["first_name"], row_data["last_name"],
+                        row_data["birth_date"], row_data["gender"], row_data["club"],
+                        row_data["rank"], row_data["photo_path"], None,
+                    )
+                    refresh_athletes_list()
+
+                ctk.CTkButton(row, text="✕ отвязать", width=90, height=26,
+                        fg_color="#3a1010", hover_color="#5a2020",
+                        command=unassign).pack(side="right", padx=5)
+
+        refresh_athletes_list()
+
+        add_row = ctk.CTkFrame(dlg, fg_color="transparent")
+        add_row.pack(fill="x", padx=15, pady=(0, 10))
+        assign_search_var = ctk.StringVar()
+        ctk.CTkEntry(add_row, textvariable=assign_search_var, width=300,
+                    placeholder_text="🔍 Найти спортсмена, чтобы привязать...").pack(side="left")
+
+        def do_assign():
+            if not edit_id:
+                messagebox.showinfo("Сначала сохраните", "Сначала сохраните тренера кнопкой ниже.")
+                return
+            q = assign_search_var.get().strip()
+            if not q:
+                return
+            matches = self.db.search_athletes(q)
+            if not matches:
+                messagebox.showinfo("Не найдено", "Спортсмен с таким именем не найден.")
+                return
+            if len(matches) > 1:
+                names = "\n".join(f"— {m['last_name']} {m['first_name']}" for m in matches[:10])
+                messagebox.showwarning("Уточните запрос",
+                        f"Найдено несколько совпадений, уточните имя:\n{names}")
+                return
+            a = matches[0]
+            self.db.update_athlete(
+                a["id"], a["first_name"], a["last_name"], a["birth_date"],
+                a["gender"], a["club"], a["rank"], a["photo_path"], edit_id,
+            )
+            assign_search_var.set("")
+            refresh_athletes_list()
+
+        ctk.CTkButton(add_row, text="➕ Привязать", width=110, height=32,
+                    command=do_assign).pack(side="left", padx=10)
+
+        def save():
+            full_name = fields["full_name"].get().strip()
+            if not full_name:
+                messagebox.showwarning("Ошибка", "Введите ФИО тренера.")
+                return
+            club = fields["club"].get().strip()
+            bio = bio_box.get("1.0", "end").strip()
+            nonlocal edit_id
+            if edit_id:
+                self.db.update_coach(edit_id, full_name, club, "", bio)
+            else:
+                edit_id = self.db.add_coach(full_name, club, "", bio)
+                refresh_athletes_list()
+            dlg.title("Редактировать тренера")
+            self._refresh_list()
+
+        btn_frame = ctk.CTkFrame(dlg, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=20, pady=15)
+        ctk.CTkButton(btn_frame, text="💾 Сохранить", fg_color="#1a4a2a",
+                    hover_color="#2a6a3a", height=40, command=save).pack(side="right", padx=5)
+        ctk.CTkButton(btn_frame, text="Закрыть", fg_color="#2a2a2a",
+                    height=40, command=lambda: (self._refresh_list(), dlg.destroy())
+                    ).pack(side="right", padx=5)
+
+
 # ════
 #  ГЛАВНОЕ ПРИЛОЖЕНИЕ
 # ════
@@ -3691,23 +4108,25 @@ class App(ctk.CTk):
         self.current_tournament_id = None
 
         self.title("🦾 ArmWrestling Tournament Manager")
-        self.geometry("1280x800")
         self.minsize(900, 600)
         self.configure(fg_color="#0d1117")
 
-        # Открываем сразу на весь экран. 'zoomed' — стандартный способ на
-        # Windows и большинстве Linux-WM; если он не поддерживается (бывает
-        # на некоторых Linux/macOS сборках Tk) — пробуем -zoomed через
-        # attributes, а если и это недоступно — просто растягиваем окно на
-        # размер экрана вручную, чтобы приложение в любом случае открылось
-        # на весь экран, а не в маленьком окне 1280x800.
-        try:
-            self.state("zoomed")
-        except Exception:
+        # Стартовый размер — на случай если zoomed вообще не применится
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        self.geometry(f"{sw}x{sh}+0+0")
+
+        def _apply_fullscreen():
             try:
-                self.attributes("-zoomed", True)
+                self.state("zoomed")
             except Exception:
-                self.geometry(f"{self.winfo_screenwidth()}x{self.winfo_screenheight()}+0+0")
+                try:
+                    self.attributes("-zoomed", True)
+                except Exception:
+                    self.geometry(f"{self.winfo_screenwidth()}x{self.winfo_screenheight()}+0+0")
+
+        # Применяем "zoomed" ПОСЛЕ того как окно замаплено — иначе виден
+        # промежуточный кадр с маленьким размером ("прыжок" разрешения).
+        self.after(10, _apply_fullscreen)
 
         self._build_ui()
         self._refresh_status_badge()
@@ -3735,6 +4154,10 @@ class App(ctk.CTk):
         ctk.CTkButton(self.sidebar, text="👤 Спортсмены", height=38,
                     fg_color="#1a2535", hover_color="#253545",
                     command=self._open_athletes_window).pack(padx=15, pady=(0, 6), fill="x")
+
+        ctk.CTkButton(self.sidebar, text="🧑‍🏫 Тренеры", height=38,
+                    fg_color="#1a2535", hover_color="#253545",
+                    command=self._open_coaches_window).pack(padx=15, pady=(0, 6), fill="x")
 
         ctk.CTkLabel(self.sidebar, text="ТУРНИРЫ",
                     font=ctk.CTkFont(size=10, weight="bold"),
@@ -4541,13 +4964,18 @@ class App(ctk.CTk):
                     justify="center").pack(pady=20, padx=10)
             return
         for t in tournaments:
+            finished = bool("status" in t.keys() and t["status"] == "finished")
             fr = ctk.CTkFrame(self.tournament_scroll, corner_radius=8,
                     fg_color="#1a2535" if t["id"] != self.current_tournament_id else "#1a3a5a")
             fr.pack(fill="x", padx=5, pady=3)
+            label_text = f"🏅 {t['name']}\n{t['date']}"
+            if finished:
+                label_text += "   ✅ ЗАВЕРШЁН"
             ctk.CTkButton(fr,
-                    text=f"🏅 {t['name']}\n{t['date']}",
+                    text=label_text,
                     fg_color="transparent", hover_color="#253545",
                     font=ctk.CTkFont(size=11), anchor="w",
+                    text_color=("#8bc98b" if finished else "#dce6f0"),
                     height=48,
                     command=lambda tid=t["id"]: self._select_tournament(tid)
                     ).pack(fill="x", padx=2, pady=2)
@@ -4617,9 +5045,19 @@ class App(ctk.CTk):
     
     def _open_athletes_window(self):
         if hasattr(self, "_athletes_window") and self._athletes_window.winfo_exists():
+            self._athletes_window.deiconify()
+            self._athletes_window.lift()
             self._athletes_window.focus()
             return
         self._athletes_window = AthletesWindow(self, self.db)
+
+    def _open_coaches_window(self):
+        if hasattr(self, "_coaches_window") and self._coaches_window.winfo_exists():
+            self._coaches_window.deiconify()
+            self._coaches_window.lift()
+            self._coaches_window.focus()
+            return
+        self._coaches_window = CoachesWindow(self, self.db)
 
     def _open_bracket_window(self, category, hand):
         """Не даёт открыть сетку одной и той же категории/руки дважды —
@@ -4636,16 +5074,14 @@ class App(ctk.CTk):
 
     def _new_tournament(self):
         dlg = tk.Toplevel(self)
+        dlg.withdraw()
         dlg.title("Новый турнир")
         dlg.geometry("500x800")
+        center_toplevel(dlg, 500, 800)
         dlg.minsize(420, 500)
         dlg.configure(bg="#161b22")
         dlg.resizable(True, True)
-
-        dlg.update_idletasks()
-        x = self.winfo_x() + self.winfo_width() // 2 - 230
-        y = self.winfo_y() + self.winfo_height() // 2 - 190
-        dlg.geometry(f"500x800+{x}+{y}")
+        dlg.deiconify()
 
         ctk.CTkLabel(dlg, text="🏆  Создать турнир",
                     font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(25, 15))
@@ -4778,15 +5214,26 @@ class App(ctk.CTk):
         if not self.current_tournament_id:
             return
         t = self.db.get_tournament(self.current_tournament_id)
-        if messagebox.askyesno("Удалить",
+        if not messagebox.askyesno("Удалить",
                     f"Удалить турнир «{t['name']}» и все данные?"):
-            self.db.delete_tournament(self.current_tournament_id)
-            self.current_tournament_id = None
-            self.title_label.configure(text="Выберите или создайте турнир")
-            self._refresh_tournament_list()
-            self._refresh_categories()
-            self._refresh_participants()
-            self._refresh_brackets_tab()
+            return
+
+        entered = simpledialog.askstring(
+            "Подтверждение", "Введите пароль для удаления:", show="*", parent=self
+        )
+        if entered is None:
+            return
+        if entered != DELETE_ATHLETE_PASSWORD:
+            messagebox.showerror("Неверный пароль", "Удаление отменено.")
+            return
+
+        self.db.delete_tournament(self.current_tournament_id)
+        self.current_tournament_id = None
+        self.title_label.configure(text="Выберите или создайте турнир")
+        self._refresh_tournament_list()
+        self._refresh_categories()
+        self._refresh_participants()
+        self._refresh_brackets_tab()
 
     def on_close(self):
         if messagebox.askyesno("Выход", "Закрыть программу?"):
