@@ -194,13 +194,6 @@ export function CoachesAdmin() {
             value={form.photo_path}
             onChange={(url) => setForm({ ...form, photo_path: url })}
           />
-          <textarea
-            placeholder="Биография"
-            value={form.bio ?? ''}
-            onChange={(e) => setForm({ ...form, bio: e.target.value })}
-            rows={2}
-            className={inputClass}
-          />
           <button
             type="submit"
             disabled={createCoach.isPending}

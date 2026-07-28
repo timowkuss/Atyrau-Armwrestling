@@ -4022,8 +4022,8 @@ class CoachesWindow(ctk.CTkToplevel):
     def _add_coach_dialog(self, edit_id=None):
         dlg = tk.Toplevel(self)
         dlg.title("Редактировать тренера" if edit_id else "Добавить тренера")
-        dlg.geometry("680x800")
-        dlg.minsize(500, 800)
+        dlg.geometry("680x480" if not edit_id else "680x800")
+        dlg.minsize(500, 480 if not edit_id else 800)
         dlg.configure(bg="#161b22")
 
         existing = self.db.get_coach(edit_id) if edit_id else None
@@ -4098,84 +4098,72 @@ class CoachesWindow(ctk.CTkToplevel):
         lbl_entry(form, "Клуб:", "club", (existing["club"] or "") if existing else "", row=5)
         lbl_entry(form, "Город/Район:", "city", (existing["city"] or "") if existing else "", row=6)
 
-        ctk.CTkLabel(form, text="О тренере:", anchor="ne", width=110).grid(
-            row=7, column=0, padx=(15, 8), pady=8, sticky="ne")
-        bio_box = ctk.CTkTextbox(form, width=300, height=70)
-        bio_box.grid(row=7, column=1, padx=(0, 15), pady=8, sticky="w")
-        if existing and existing["bio"]:
-            bio_box.insert("1.0", existing["bio"])
+        # ─── Ученики (только при редактировании существующего тренера;
+        # во время создания привязка учеников не делается — её выполняют
+        # отдельно, после сохранения, через десктоп или админку) ───
+        if existing:
+            ctk.CTkLabel(dlg, text="Ученики", font=ctk.CTkFont(size=13, weight="bold"),
+                        text_color="#8899aa").pack(anchor="w", padx=20, pady=(5, 0))
+            athletes_frame = ScrollableFrame(dlg, fg_color="#0d1117", height=180)
+            athletes_frame.pack(fill="both", expand=False, padx=15, pady=(5, 5))
 
-        # ─── Ученики: уже привязанные + добавление существующих ───
-        ctk.CTkLabel(dlg, text="Ученики", font=ctk.CTkFont(size=13, weight="bold"),
-                    text_color="#8899aa").pack(anchor="w", padx=20, pady=(5, 0))
-        athletes_frame = ScrollableFrame(dlg, fg_color="#0d1117", height=180)
-        athletes_frame.pack(fill="both", expand=False, padx=15, pady=(5, 5))
+            def refresh_athletes_list():
+                for w in athletes_frame.winfo_children():
+                    w.destroy()
+                assigned = self.db.get_athletes_by_coach(edit_id)
+                if not assigned:
+                    ctk.CTkLabel(athletes_frame, text="Пока нет учеников.",
+                            text_color="#445566").pack(pady=10)
+                for a in assigned:
+                    row = ctk.CTkFrame(athletes_frame, fg_color="transparent")
+                    row.pack(fill="x", padx=5, pady=2)
+                    ctk.CTkLabel(row, text=f"{a['last_name']} {a['first_name']}",
+                            anchor="w").pack(side="left", padx=5)
 
-        def refresh_athletes_list():
-            for w in athletes_frame.winfo_children():
-                w.destroy()
-            if not edit_id:
-                ctk.CTkLabel(athletes_frame, text="Сначала сохраните тренера — "
-                        "потом можно будет привязывать учеников.",
-                        text_color="#445566").pack(pady=10)
-                return
-            assigned = self.db.get_athletes_by_coach(edit_id)
-            if not assigned:
-                ctk.CTkLabel(athletes_frame, text="Пока нет учеников.",
-                        text_color="#445566").pack(pady=10)
-            for a in assigned:
-                row = ctk.CTkFrame(athletes_frame, fg_color="transparent")
-                row.pack(fill="x", padx=5, pady=2)
-                ctk.CTkLabel(row, text=f"{a['last_name']} {a['first_name']}",
-                        anchor="w").pack(side="left", padx=5)
+                    def unassign(aid=a["id"]):
+                        row_data = self.db.get_athlete(aid)
+                        self.db.update_athlete(
+                            aid, row_data["first_name"], row_data["last_name"],
+                            row_data["birth_date"], row_data["gender"], row_data["club"],
+                            row_data["rank"], row_data["photo_path"], None,
+                        )
+                        refresh_athletes_list()
 
-                def unassign(aid=a["id"]):
-                    row_data = self.db.get_athlete(aid)
-                    self.db.update_athlete(
-                        aid, row_data["first_name"], row_data["last_name"],
-                        row_data["birth_date"], row_data["gender"], row_data["club"],
-                        row_data["rank"], row_data["photo_path"], None,
-                    )
-                    refresh_athletes_list()
+                    ctk.CTkButton(row, text="✕ отвязать", width=90, height=26,
+                            fg_color="#3a1010", hover_color="#5a2020",
+                            command=unassign).pack(side="right", padx=5)
 
-                ctk.CTkButton(row, text="✕ отвязать", width=90, height=26,
-                        fg_color="#3a1010", hover_color="#5a2020",
-                        command=unassign).pack(side="right", padx=5)
-
-        refresh_athletes_list()
-
-        add_row = ctk.CTkFrame(dlg, fg_color="transparent")
-        add_row.pack(fill="x", padx=15, pady=(0, 10))
-        assign_search_var = ctk.StringVar()
-        ctk.CTkEntry(add_row, textvariable=assign_search_var, width=300,
-                    placeholder_text="🔍 Найти спортсмена, чтобы привязать...").pack(side="left")
-
-        def do_assign():
-            if not edit_id:
-                messagebox.showinfo("Сначала сохраните", "Сначала сохраните тренера кнопкой ниже.")
-                return
-            q = assign_search_var.get().strip()
-            if not q:
-                return
-            matches = self.db.search_athletes(q)
-            if not matches:
-                messagebox.showinfo("Не найдено", "Спортсмен с таким именем не найден.")
-                return
-            if len(matches) > 1:
-                names = "\n".join(f"— {m['last_name']} {m['first_name']}" for m in matches[:10])
-                messagebox.showwarning("Уточните запрос",
-                        f"Найдено несколько совпадений, уточните имя:\n{names}")
-                return
-            a = matches[0]
-            self.db.update_athlete(
-                a["id"], a["first_name"], a["last_name"], a["birth_date"],
-                a["gender"], a["club"], a["rank"], a["photo_path"], edit_id,
-            )
-            assign_search_var.set("")
             refresh_athletes_list()
 
-        ctk.CTkButton(add_row, text="➕ Привязать", width=110, height=32,
-                    command=do_assign).pack(side="left", padx=10)
+            add_row = ctk.CTkFrame(dlg, fg_color="transparent")
+            add_row.pack(fill="x", padx=15, pady=(0, 10))
+            assign_search_var = ctk.StringVar()
+            ctk.CTkEntry(add_row, textvariable=assign_search_var, width=300,
+                        placeholder_text="🔍 Найти спортсмена, чтобы привязать...").pack(side="left")
+
+            def do_assign():
+                q = assign_search_var.get().strip()
+                if not q:
+                    return
+                matches = self.db.search_athletes(q)
+                if not matches:
+                    messagebox.showinfo("Не найдено", "Спортсмен с таким именем не найден.")
+                    return
+                if len(matches) > 1:
+                    names = "\n".join(f"— {m['last_name']} {m['first_name']}" for m in matches[:10])
+                    messagebox.showwarning("Уточните запрос",
+                            f"Найдено несколько совпадений, уточните имя:\n{names}")
+                    return
+                a = matches[0]
+                self.db.update_athlete(
+                    a["id"], a["first_name"], a["last_name"], a["birth_date"],
+                    a["gender"], a["club"], a["rank"], a["photo_path"], edit_id,
+                )
+                assign_search_var.set("")
+                refresh_athletes_list()
+
+            ctk.CTkButton(add_row, text="➕ Привязать", width=110, height=32,
+                        command=do_assign).pack(side="left", padx=10)
 
         def save():
             first_name = fields["first_name"].get().strip()
@@ -4196,18 +4184,17 @@ class CoachesWindow(ctk.CTkToplevel):
             qualification = qualification_var.get()
             club = fields["club"].get().strip()
             city = fields["city"].get().strip()
-            bio = bio_box.get("1.0", "end").strip()
             full_name = f"{last_name} {first_name}".strip()
             nonlocal edit_id
             if edit_id:
-                self.db.update_coach(edit_id, full_name, club, "", bio,
+                self.db.update_coach(edit_id, full_name, club, "", "",
                         first_name, last_name, birth_date, iin, qualification, city)
             else:
-                edit_id = self.db.add_coach(full_name, club, "", bio,
+                edit_id = self.db.add_coach(full_name, club, "", "",
                         first_name, last_name, birth_date, iin, qualification, city)
-                refresh_athletes_list()
             dlg.title("Редактировать тренера")
             self._refresh_list()
+            dlg.destroy()
 
         btn_frame = ctk.CTkFrame(dlg, fg_color="transparent")
         btn_frame.pack(fill="x", padx=20, pady=15)
