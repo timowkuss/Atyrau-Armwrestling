@@ -4022,7 +4022,7 @@ class CoachesWindow(ctk.CTkToplevel):
     def _add_coach_dialog(self, edit_id=None):
         dlg = tk.Toplevel(self)
         dlg.title("Редактировать тренера" if edit_id else "Добавить тренера")
-        dlg.geometry("680x480" if not edit_id else "680x800")
+        dlg.geometry("620x500" if not edit_id else "620x500")
         dlg.minsize(500, 480 if not edit_id else 800)
         dlg.configure(bg="#161b22")
 
