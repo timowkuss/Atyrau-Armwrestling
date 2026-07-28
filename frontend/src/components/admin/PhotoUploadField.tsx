@@ -12,8 +12,8 @@ interface PhotoUploadFieldProps {
 }
 
 /** Кнопка выбора/съёмки фото + загрузка на Cloudinary через
- * POST /admin/media/upload. На телефоне capture="environment" открывает
- * сразу камеру вместо выбора файла из галереи. */
+ * POST /admin/media/upload. На телефоне открывается системный выбор:
+ * снять камерой или выбрать существующее фото из галереи. */
 export function PhotoUploadField({ value, onChange, fallbackPreview, size = 56 }: PhotoUploadFieldProps) {
   const { token } = useAuth()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -69,7 +69,6 @@ export function PhotoUploadField({ value, onChange, fallbackPreview, size = 56 }
         ref={inputRef}
         type="file"
         accept="image/jpeg,image/png,image/webp"
-        capture="environment"
         onChange={handleFile}
         className="hidden"
       />

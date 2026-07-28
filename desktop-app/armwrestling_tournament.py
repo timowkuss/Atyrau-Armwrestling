@@ -3816,29 +3816,36 @@ class AthletesWindow(ctk.CTkToplevel):
         ctk.CTkOptionMenu(form, variable=rank_var, values=RANKS, width=260
                     ).grid(row=5, column=1, padx=(0, 15), pady=8, sticky="w")
 
-        # ─── Тренер (опционально; можно сменить или снять) ───
-        ctk.CTkLabel(form, text="Тренер:", anchor="e", width=110).grid(
-            row=6, column=0, padx=(15, 8), pady=8, sticky="e")
+        # ─── Тренер (только при редактировании; при создании спортсмена
+        # привязка к тренеру не делается — её выполняют отдельно, после
+        # создания, через десктоп или админку) ───
         _NO_COACH = "— нет —"
-        coaches = self.db.get_coaches()
         coach_display_to_id = {_NO_COACH: None}
-        for c in coaches:
-            coach_display_to_id[c["full_name"]] = c["id"]
-        existing_coach_name = _NO_COACH
-        if existing and existing["coach_id"]:
-            row = self.db.get_coach(existing["coach_id"])
-            if row:
-                existing_coach_name = row["full_name"]
-        coach_var = ctk.StringVar(value=existing_coach_name)
-        ctk.CTkOptionMenu(form, variable=coach_var,
-                    values=[_NO_COACH] + [c["full_name"] for c in coaches], width=260
-                    ).grid(row=6, column=1, padx=(0, 15), pady=8, sticky="w")
+        coach_var = ctk.StringVar(value=_NO_COACH)
+        photo_row_num = 6
+
+        if existing:
+            ctk.CTkLabel(form, text="Тренер:", anchor="e", width=110).grid(
+                row=6, column=0, padx=(15, 8), pady=8, sticky="e")
+            coaches = self.db.get_coaches()
+            for c in coaches:
+                coach_display_to_id[c["full_name"]] = c["id"]
+            existing_coach_name = _NO_COACH
+            if existing["coach_id"]:
+                row = self.db.get_coach(existing["coach_id"])
+                if row:
+                    existing_coach_name = row["full_name"]
+            coach_var.set(existing_coach_name)
+            ctk.CTkOptionMenu(form, variable=coach_var,
+                        values=[_NO_COACH] + [c["full_name"] for c in coaches], width=260
+                        ).grid(row=6, column=1, padx=(0, 15), pady=8, sticky="w")
+            photo_row_num = 7
 
         # ─── Фото (в отдельной строке, чтобы не наезжало на кнопку) ───
         ctk.CTkLabel(form, text="Фото:", anchor="e", width=110).grid(
-            row=7, column=0, padx=(15, 8), pady=8, sticky="e")
+            row=photo_row_num, column=0, padx=(15, 8), pady=8, sticky="e")
         photo_row = ctk.CTkFrame(form, fg_color="transparent")
-        photo_row.grid(row=7, column=1, padx=(0, 15), pady=8, sticky="w")
+        photo_row.grid(row=photo_row_num, column=1, padx=(0, 15), pady=8, sticky="w")
 
         photo_path_var.set(existing["photo_path"] or "" if existing else "")
         photo_lbl = ctk.CTkLabel(photo_row,
@@ -3863,7 +3870,7 @@ class AthletesWindow(ctk.CTkToplevel):
 
         preview_label = ctk.CTkLabel(form, text="", text_color="#5588bb",
                     font=ctk.CTkFont(size=11), anchor="w", justify="left")
-        preview_label.grid(row=8, column=0, columnspan=2, padx=15, pady=(12, 0), sticky="w")
+        preview_label.grid(row=photo_row_num + 1, column=0, columnspan=2, padx=15, pady=(12, 0), sticky="w")
 
         def update_preview(*_):
             bd = birth_date_var.get().strip()

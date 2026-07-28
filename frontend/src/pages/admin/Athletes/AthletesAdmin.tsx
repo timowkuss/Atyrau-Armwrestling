@@ -14,6 +14,7 @@ import {
 } from '@/features/admin/useAthletesAdmin'
 import { LoadingState, ErrorState } from '@/components/ui/States'
 import { FeedbackBanner } from '@/components/admin/FeedbackBanner'
+import { PhotoUploadField } from '@/components/admin/PhotoUploadField'
 import type { AthleteInput, AthleteStatisticsUpdateInput, Gender } from '@/types/api'
 
 const EMPTY_FORM: AthleteInput = { full_name: '', gender: 'male' }
@@ -150,18 +151,6 @@ export function AthletesAdmin() {
               ))}
             </select>
             <select
-              value={form.coach_id ?? ''}
-              onChange={(e) => setForm({ ...form, coach_id: e.target.value ? Number(e.target.value) : undefined })}
-              className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
-            >
-              <option value="">Тренер — не указан</option>
-              {coaches.data?.items.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.full_name}
-                </option>
-              ))}
-            </select>
-            <select
               value={form.city_id ?? ''}
               onChange={(e) => setForm({ ...form, city_id: e.target.value ? Number(e.target.value) : undefined })}
               className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
@@ -174,6 +163,10 @@ export function AthletesAdmin() {
               ))}
             </select>
           </div>
+          <PhotoUploadField
+            value={form.photo_path}
+            onChange={(url) => setForm({ ...form, photo_path: url })}
+          />
           <button
             type="submit"
             disabled={createAthlete.isPending}
@@ -244,6 +237,11 @@ export function AthletesAdmin() {
                         ))}
                       </select>
                     </div>
+                    <PhotoUploadField
+                      value={editForm.photo_path}
+                      fallbackPreview={a.photo_path}
+                      onChange={(url) => setEditForm({ ...editForm, photo_path: url })}
+                    />
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleUpdate(a.id)}
@@ -266,18 +264,30 @@ export function AthletesAdmin() {
                 ) : (
                   <>
                     <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <p className="flex items-center gap-2 font-display text-base text-bone">
-                          {a.full_name}
-                          {a.is_hidden && (
-                            <span className="text-eyebrow rounded-[var(--radius-rivet)] bg-danger/15 px-2 py-0.5 text-danger">
-                              скрыт
-                            </span>
-                          )}
-                        </p>
-                        <p className="font-mono text-xs text-steel">
-                          {a.club_name ?? 'клуб не указан'} · {a.coach_name ?? 'без тренера'} · {a.rank ?? 'без разряда'}
-                        </p>
+                      <div className="flex items-center gap-3">
+                        {a.photo_path ? (
+                          <img
+                            src={a.photo_path}
+                            alt=""
+                            className="h-12 w-12 flex-shrink-0 rounded-full object-cover border border-steel-dim"
+                            onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')}
+                          />
+                        ) : (
+                          <div className="h-12 w-12 flex-shrink-0 rounded-full bg-ink border border-steel-dim" />
+                        )}
+                        <div>
+                          <p className="flex items-center gap-2 font-display text-base text-bone">
+                            {a.full_name}
+                            {a.is_hidden && (
+                              <span className="text-eyebrow rounded-[var(--radius-rivet)] bg-danger/15 px-2 py-0.5 text-danger">
+                                скрыт
+                              </span>
+                            )}
+                          </p>
+                          <p className="font-mono text-xs text-steel">
+                            {a.club_name ?? 'клуб не указан'} · {a.coach_name ?? 'без тренера'} · {a.rank ?? 'без разряда'}
+                          </p>
+                        </div>
                       </div>
                       <div className="flex flex-shrink-0 flex-wrap justify-end gap-2">
                         <button
