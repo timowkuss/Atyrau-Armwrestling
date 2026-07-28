@@ -17,5 +17,13 @@ class Settings(BaseSettings):
     # не совпадает с пользовательскими JWT сайта.
     DESKTOP_SYNC_TOKEN: str = "change-me-desktop-sync-token"
 
+    # ─── Загрузка фото (тренеры/спортсмены) через Cloudinary ───
+    # Бесплатный аккаунт на cloudinary.com даёт эти три значения.
+    # Если не заданы — эндпоинт /admin/media/upload вернёт понятную ошибку
+    # вместо непонятного 500, чтобы сразу было видно, что не настроено.
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
+
 
 settings = Settings()

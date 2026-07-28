@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from app.api.v1.admin import athletes, clubs, coaches, competitions, gallery, news
+from app.api.v1.admin import athletes, clubs, coaches, competitions, gallery, media, news
 from app.api.v1.deps import require_role
 from app.db.models.users import User
 
@@ -11,6 +11,7 @@ router.include_router(coaches.router)
 router.include_router(news.router)
 router.include_router(gallery.router)
 router.include_router(competitions.router)
+router.include_router(media.router)
 
 
 @router.get("/ping")

@@ -4,6 +4,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 const NAV_ITEMS = [
   { to: '/', label: 'Главная', end: true },
   { to: '/athletes', label: 'Спортсмены' },
+  { to: '/coaches', label: 'Тренеры' },
   { to: '/competitions', label: 'Соревнования' },
   { to: '/rankings', label: 'Рейтинги' },
   { to: '/news', label: 'Новости' },

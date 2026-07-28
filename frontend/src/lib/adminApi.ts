@@ -70,7 +70,38 @@ async function authedRequest<T>(
   return res.json() as Promise<T>
 }
 
+async function uploadFile<T>(token: string, path: string, file: File): Promise<T> {
+  const form = new FormData()
+  form.append('file', file)
+
+  let res: Response
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` }, // без Content-Type — за multipart boundary отвечает браузер
+      body: form,
+    })
+  } catch {
+    throw new ApiError(0, 'Не удалось связаться с сервером. Проверьте подключение.')
+  }
+
+  if (!res.ok) {
+    let detail = `Ошибка загрузки (${res.status})`
+    try {
+      const problem = await res.json()
+      if (typeof problem?.detail === 'string') detail = problem.detail
+    } catch {
+      // тело не JSON
+    }
+    throw new ApiError(res.status, detail)
+  }
+  return res.json() as Promise<T>
+}
+
 export const adminApi = {
+  media: {
+    upload: (token: string, file: File) => uploadFile<{ url: string }>(token, '/admin/media/upload', file),
+  },
   // Клубы/тренеры: GET-листинга в /admin нет — читать через api.clubs /
   // api.coaches (public), писать здесь.
   clubs: {

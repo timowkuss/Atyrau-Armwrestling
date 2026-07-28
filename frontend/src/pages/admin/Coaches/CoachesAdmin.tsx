@@ -5,6 +5,7 @@ import { useAdminCoachesList, useCreateCoach, useDeleteCoach, useUpdateCoach } f
 import { useCities } from '@/features/useCities'
 import { LoadingState, ErrorState } from '@/components/ui/States'
 import { FeedbackBanner } from '@/components/admin/FeedbackBanner'
+import { PhotoUploadField } from '@/components/admin/PhotoUploadField'
 import { COACH_QUALIFICATIONS, type CoachInput } from '@/types/api'
 
 const EMPTY_FORM: CoachInput = {
@@ -189,6 +190,10 @@ export function CoachesAdmin() {
               ))}
             </select>
           </div>
+          <PhotoUploadField
+            value={form.photo_path}
+            onChange={(url) => setForm({ ...form, photo_path: url })}
+          />
           <textarea
             placeholder="Биография"
             value={form.bio ?? ''}
@@ -263,6 +268,11 @@ export function CoachesAdmin() {
                         ))}
                       </select>
                     </div>
+                    <PhotoUploadField
+                      value={editForm.photo_path}
+                      fallbackPreview={coach.photo_path}
+                      onChange={(url) => setEditForm({ ...editForm, photo_path: url })}
+                    />
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleUpdate(coach.id)}
@@ -284,13 +294,25 @@ export function CoachesAdmin() {
                   </div>
                 ) : (
                   <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="font-display text-base text-bone">{coach.full_name}</p>
-                      <p className="font-mono text-xs text-steel">
-                        {coach.club_name ?? 'клуб не указан'} · {coach.city_name ?? 'город не указан'} ·{' '}
-                        {coach.qualification ?? 'без звания'} · {coach.athletes_count} спортсменов
-                      </p>
-                      <p className="font-mono text-xs text-steel-dim">ИИН: {coach.iin ?? '—'}</p>
+                    <div className="flex items-center gap-3">
+                      {coach.photo_path ? (
+                        <img
+                          src={coach.photo_path}
+                          alt=""
+                          className="h-12 w-12 flex-shrink-0 rounded-full object-cover border border-steel-dim"
+                          onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')}
+                        />
+                      ) : (
+                        <div className="h-12 w-12 flex-shrink-0 rounded-full bg-ink border border-steel-dim" />
+                      )}
+                      <div>
+                        <p className="font-display text-base text-bone">{coach.full_name}</p>
+                        <p className="font-mono text-xs text-steel">
+                          {coach.club_name ?? 'клуб не указан'} · {coach.city_name ?? 'город не указан'} ·{' '}
+                          {coach.qualification ?? 'без звания'} · {coach.athletes_count} спортсменов
+                        </p>
+                        <p className="font-mono text-xs text-steel-dim">ИИН: {coach.iin ?? '—'}</p>
+                      </div>
                     </div>
                     <div className="flex flex-shrink-0 gap-2">
                       <button

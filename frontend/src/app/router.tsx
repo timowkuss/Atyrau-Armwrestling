@@ -3,6 +3,8 @@ import { Layout } from '@/components/layout/Layout'
 import { Home } from '@/pages/Home/Home'
 import { Athletes } from '@/pages/Athletes/Athletes'
 import { AthleteProfile } from '@/pages/AthleteProfile/AthleteProfile'
+import { Coaches } from '@/pages/Coaches/Coaches'
+import { CoachProfile } from '@/pages/CoachProfile/CoachProfile'
 import { Competitions } from '@/pages/Competitions/Competitions'
 import { CompetitionDetail } from '@/pages/Competitions/CompetitionDetail'
 import { CompetitionBoard } from '@/pages/Competitions/CompetitionBoard'
@@ -30,6 +32,8 @@ export const router = createBrowserRouter([
       { index: true, element: <Home /> },
       { path: 'athletes', element: <Athletes /> },
       { path: 'athletes/:id', element: <AthleteProfile /> },
+      { path: 'coaches', element: <Coaches /> },
+      { path: 'coaches/:id', element: <CoachProfile /> },
       { path: 'competitions', element: <Competitions /> },
       { path: 'competitions/:id', element: <CompetitionDetail /> },
       { path: 'news', element: <News /> },
