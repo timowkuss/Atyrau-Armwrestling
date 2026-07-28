@@ -15,6 +15,7 @@ router = APIRouter(prefix="/coaches", tags=["public:coaches"])
 
 @router.get("", response_model=Page[CoachListOut])
 def list_coaches(
+    name: str | None = None,
     club_id: int | None = None,
     page: int = 1,
     page_size: int = 20,
@@ -32,11 +33,18 @@ def list_coaches(
         .outerjoin(Athlete, Athlete.coach_id == Coach.id)
         .group_by(Coach.id, Club.name, City.name)
     )
+    if name:
+        query = query.filter(Coach.full_name.ilike(f"%{name}%"))
     if club_id is not None:
         query = query.filter(Coach.club_id == club_id)
 
     total = query.count()
-    rows = query.offset((page - 1) * page_size).limit(page_size).all()
+    rows = (
+        query.order_by(Coach.full_name)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
     items = [
         CoachListOut(
             id=coach.id,

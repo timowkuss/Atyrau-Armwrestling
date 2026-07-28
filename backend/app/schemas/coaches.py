@@ -57,13 +57,19 @@ class CoachDetailOut(BaseModel):
 
 
 class CoachAdminListOut(CoachListOut):
-    """То же самое, но с ИИН — только для админки (см. GET /admin/coaches)."""
+    """То же самое, но с ИИН — только для админки (см. GET /admin/coaches).
+    first_name/last_name — отдельно, чтобы форма редактирования могла
+    предзаполнить поля без разбора full_name по пробелу."""
 
     iin: str | None
+    first_name: str | None
+    last_name: str | None
 
 
 class CoachAdminDetailOut(CoachDetailOut):
     iin: str | None
+    first_name: str | None
+    last_name: str | None
 
 
 class CoachCreate(BaseModel):

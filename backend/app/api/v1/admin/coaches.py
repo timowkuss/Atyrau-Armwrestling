@@ -1,200 +1,110 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func
-from sqlalchemy.orm import Session
+from datetime import date
 
-from app.api.v1.deps import require_role
-from app.db.models.athletes import Athlete
-from app.db.models.clubs import Club
-from app.db.models.coaches import Coach
-from app.db.models.geo import City
-from app.db.models.sync_tombstone import SyncTombstone
-from app.db.models.users import User
-from app.db.session import get_db
-from app.schemas.coaches import (
-    CoachAdminDetailOut,
-    CoachAdminListOut,
-    CoachCreate,
-    CoachUpdate,
-)
-from app.schemas.common import Page
-from app.services.cloudinary_photos import delete_cloudinary_photo
+from pydantic import BaseModel, field_validator
 
-router = APIRouter(prefix="/coaches", tags=["admin:coaches"])
-
-WRITE_ROLES = ("super_admin", "admin")
+# Тренерское звание — фиксированный список, синхронизирован со списком
+# COACH_QUALIFICATIONS в desktop-app/armwrestling_tournament.py и в
+# frontend/src/pages/admin/Coaches/CoachesAdmin.tsx.
+COACH_QUALIFICATIONS = [
+    "Без категории",
+    "Тренер II категории",
+    "Тренер I категории",
+    "Тренер высшей категории",
+    "Заслуженный тренер РК",
+]
 
 
-@router.get("", response_model=Page[CoachAdminListOut])
-def list_coaches_admin(
-    page: int = 1,
-    page_size: int = 200,
-    db: Session = Depends(get_db),
-    _: User = Depends(require_role(*WRITE_ROLES, "editor")),
-):
-    """Листинг с ИИН — только для админки (публичный /public/coaches его не
-    отдаёт, см. схемы coaches.py)."""
-    query = (
-        db.query(
-            Coach,
-            Club.name.label("club_name"),
-            City.name.label("city_name"),
-            func.count(Athlete.id).label("athletes_count"),
-        )
-        .outerjoin(Club, Coach.club_id == Club.id)
-        .outerjoin(City, Coach.city_id == City.id)
-        .outerjoin(Athlete, Athlete.coach_id == Coach.id)
-        .group_by(Coach.id, Club.name, City.name)
-        .order_by(Coach.full_name)
-    )
-    total = query.count()
-    rows = query.offset((page - 1) * page_size).limit(page_size).all()
-    items = [
-        CoachAdminListOut(
-            id=coach.id,
-            full_name=coach.full_name,
-            photo_path=coach.photo_path,
-            club_name=club_name,
-            city_name=city_name,
-            qualification=coach.qualification,
-            birth_date=coach.birth_date,
-            iin=coach.iin,
-            athletes_count=athletes_count,
-        )
-        for coach, club_name, city_name, athletes_count in rows
-    ]
-    return Page(items=items, total=total, page=page, page_size=page_size)
+def _validate_iin(value: str | None) -> str | None:
+    if value is None:
+        return value
+    value = value.strip()
+    if not value:
+        return None
+    if len(value) != 12 or not value.isdigit():
+        raise ValueError("ИИН должен состоять ровно из 12 цифр")
+    return value
 
 
-@router.get("/{coach_id}", response_model=CoachAdminDetailOut)
-def get_coach_admin(
-    coach_id: int,
-    db: Session = Depends(get_db),
-    _: User = Depends(require_role(*WRITE_ROLES, "editor")),
-):
-    coach = db.query(Coach).filter(Coach.id == coach_id).first()
-    if coach is None:
-        raise HTTPException(status_code=404, detail="Тренер не найден")
-    athletes_count = db.query(Athlete).filter(Athlete.coach_id == coach.id).count()
-    return CoachAdminDetailOut(
-        id=coach.id,
-        full_name=coach.full_name,
-        photo_path=coach.photo_path,
-        bio=coach.bio,
-        club_name=coach.club.name if coach.club else None,
-        city_name=coach.city.name if coach.city else None,
-        qualification=coach.qualification,
-        birth_date=coach.birth_date,
-        iin=coach.iin,
-        athletes_count=athletes_count,
-    )
+def _validate_birth_date(value: date | None) -> date | None:
+    if value is None:
+        return value
+    if value > date.today():
+        raise ValueError("Дата рождения не может быть в будущем")
+    return value
 
 
-@router.post("", status_code=201)
-def create_coach(
-    payload: CoachCreate,
-    db: Session = Depends(get_db),
-    _: User = Depends(require_role(*WRITE_ROLES)),
-):
-    if payload.iin and db.query(Coach).filter(Coach.iin == payload.iin).first():
-        raise HTTPException(status_code=400, detail="Тренер с таким ИИН уже существует")
-
-    data = payload.model_dump()
-    full_name = f"{data.pop('last_name')} {data.pop('first_name')}".strip()
-    coach = Coach(full_name=full_name, **data)
-    db.add(coach)
-    db.commit()
-    db.refresh(coach)
-    return {"id": coach.id}
+class CoachListOut(BaseModel):
+    id: int
+    full_name: str
+    photo_path: str | None
+    club_name: str | None
+    city_name: str | None
+    qualification: str | None
+    birth_date: date | None
+    athletes_count: int
 
 
-@router.patch("/{coach_id}")
-def update_coach(
-    coach_id: int,
-    payload: CoachUpdate,
-    db: Session = Depends(get_db),
-    _: User = Depends(require_role(*WRITE_ROLES)),
-):
-    coach = db.query(Coach).filter(Coach.id == coach_id).first()
-    if coach is None:
-        raise HTTPException(status_code=404, detail="Тренер не найден")
-
-    data = payload.model_dump(exclude_unset=True)
-
-    if data.get("iin") and (
-        db.query(Coach)
-        .filter(Coach.iin == data["iin"], Coach.id != coach_id)
-        .first()
-    ):
-        raise HTTPException(status_code=400, detail="Тренер с таким ИИН уже существует")
-
-    first_name = data.pop("first_name", None)
-    last_name = data.pop("last_name", None)
-    if first_name is not None:
-        coach.first_name = first_name
-    if last_name is not None:
-        coach.last_name = last_name
-    if first_name is not None or last_name is not None:
-        coach.full_name = f"{coach.last_name or ''} {coach.first_name or ''}".strip()
-
-    # ── фото: та же логика, что и в sync/coaches.py update_coach — старое
-    # фото в Cloudinary удаляем только ПОСЛЕ успешного сохранения новой
-    # ссылки, и только если оно реально поменялось.
-    old_photo_path = coach.photo_path
-    new_photo_path = data.get("photo_path", old_photo_path)
-    photo_changed = "photo_path" in data and new_photo_path != old_photo_path
-
-    for field, value in data.items():
-        setattr(coach, field, value)
-    db.commit()
-
-    if photo_changed and old_photo_path:
-        delete_cloudinary_photo(old_photo_path)
-
-    return {"status": "ok"}
+class CoachDetailOut(BaseModel):
+    id: int
+    full_name: str
+    photo_path: str | None
+    bio: str | None
+    club_name: str | None
+    city_name: str | None
+    qualification: str | None
+    birth_date: date | None
+    athletes_count: int
 
 
-@router.delete("/{coach_id}/photo")
-def delete_coach_photo(
-    coach_id: int,
-    db: Session = Depends(get_db),
-    _: User = Depends(require_role(*WRITE_ROLES)),
-):
-    """Отдельная кнопка "Удалить фото" в админке — без необходимости
-    гонять весь объект тренера ради одного поля. Делает то же самое, что
-    PATCH с photo_path=null (см. update_coach выше), просто удобнее
-    вызывать с фронта."""
-    coach = db.query(Coach).filter(Coach.id == coach_id).first()
-    if coach is None:
-        raise HTTPException(status_code=404, detail="Тренер не найден")
+class CoachAdminListOut(CoachListOut):
+    """То же самое, но с ИИН — только для админки (см. GET /admin/coaches).
+    first_name/last_name — отдельно, чтобы форма редактирования могла
+    предзаполнить поля без разбора full_name по пробелу."""
 
-    old_photo_path = coach.photo_path
-    if not old_photo_path:
-        return {"status": "ok"}
-
-    coach.photo_path = None
-    db.commit()
-
-    delete_cloudinary_photo(old_photo_path)
-    return {"status": "ok"}
+    iin: str | None
+    first_name: str | None
+    last_name: str | None
 
 
-@router.delete("/{coach_id}")
-def delete_coach(
-    coach_id: int,
-    db: Session = Depends(get_db),
-    _: User = Depends(require_role("super_admin")),
-):
-    coach = db.query(Coach).filter(Coach.id == coach_id).first()
-    if coach is None:
-        raise HTTPException(status_code=404, detail="Тренер не найден")
+class CoachAdminDetailOut(CoachDetailOut):
+    iin: str | None
+    first_name: str | None
+    last_name: str | None
 
-    old_photo_path = coach.photo_path
 
-    db.add(SyncTombstone(entity_type="coach", entity_id=coach_id))
-    db.delete(coach)
-    db.commit()
+class CoachCreate(BaseModel):
+    first_name: str
+    last_name: str
+    birth_date: date
+    iin: str
+    qualification: str | None = None
+    club_id: int | None = None
+    city_id: int | None = None
+    photo_path: str | None = None
+    bio: str | None = None
 
-    if old_photo_path:
-        delete_cloudinary_photo(old_photo_path)
+    _validate_iin_field = field_validator("iin")(_validate_iin)
+    _validate_birth_date_field = field_validator("birth_date")(_validate_birth_date)
 
-    return {"status": "deleted"}
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Поле не может быть пустым")
+        return value
+
+
+class CoachUpdate(BaseModel):
+    first_name: str | None = None
+    last_name: str | None = None
+    birth_date: date | None = None
+    iin: str | None = None
+    qualification: str | None = None
+    club_id: int | None = None
+    city_id: int | None = None
+    photo_path: str | None = None
+    bio: str | None = None
+
+    _validate_iin_field = field_validator("iin")(_validate_iin)
+    _validate_birth_date_field = field_validator("birth_date")(_validate_birth_date)
