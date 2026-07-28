@@ -2,17 +2,36 @@ import { useState } from 'react'
 import { useAuth } from '@/features/auth/AuthContext'
 import { useAdminClubsList } from '@/features/admin/useClubsAdmin'
 import { useAdminCoachesList, useCreateCoach, useDeleteCoach, useUpdateCoach } from '@/features/admin/useCoachesAdmin'
+import { useCities } from '@/features/useCities'
 import { LoadingState, ErrorState } from '@/components/ui/States'
 import { FeedbackBanner } from '@/components/admin/FeedbackBanner'
-import type { CoachInput } from '@/types/api'
+import { COACH_QUALIFICATIONS, type CoachInput } from '@/types/api'
 
-const EMPTY_FORM: CoachInput = { full_name: '', bio: '', club_id: undefined, photo_path: '' }
+const EMPTY_FORM: CoachInput = {
+  first_name: '',
+  last_name: '',
+  birth_date: '',
+  iin: '',
+  qualification: COACH_QUALIFICATIONS[0],
+  club_id: undefined,
+  city_id: undefined,
+  bio: '',
+  photo_path: '',
+}
+
+const inputClass =
+  'rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none'
+
+function isValidIin(value: string) {
+  return /^\d{12}$/.test(value)
+}
 
 export function CoachesAdmin() {
   const { user } = useAuth()
   const canDelete = user?.role_code === 'super_admin'
   const coaches = useAdminCoachesList()
   const clubs = useAdminClubsList()
+  const cities = useCities()
   const createCoach = useCreateCoach()
   const updateCoach = useUpdateCoach()
   const deleteCoach = useDeleteCoach()
@@ -26,9 +45,21 @@ export function CoachesAdmin() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
     setFeedback(null)
+    if (!form.first_name.trim() || !form.last_name.trim()) {
+      setFeedback({ kind: 'error', message: 'Укажите имя и фамилию тренера.' })
+      return
+    }
+    if (!form.birth_date) {
+      setFeedback({ kind: 'error', message: 'Укажите дату рождения (возраст).' })
+      return
+    }
+    if (!isValidIin(form.iin)) {
+      setFeedback({ kind: 'error', message: 'ИИН должен состоять ровно из 12 цифр.' })
+      return
+    }
     try {
-      await createCoach.mutateAsync({ ...form, club_id: form.club_id || undefined })
-      setFeedback({ kind: 'success', message: `Тренер «${form.full_name}» добавлен.` })
+      await createCoach.mutateAsync({ ...form, club_id: form.club_id || undefined, city_id: form.city_id || undefined })
+      setFeedback({ kind: 'success', message: `Тренер «${form.last_name} ${form.first_name}» добавлен.` })
       setForm(EMPTY_FORM)
       setShowCreate(false)
     } catch (err) {
@@ -38,6 +69,10 @@ export function CoachesAdmin() {
 
   async function handleUpdate(id: number) {
     setFeedback(null)
+    if (editForm.iin !== undefined && editForm.iin !== '' && !isValidIin(editForm.iin)) {
+      setFeedback({ kind: 'error', message: 'ИИН должен состоять ровно из 12 цифр.' })
+      return
+    }
     try {
       await updateCoach.mutateAsync({ id, payload: editForm })
       setFeedback({ kind: 'success', message: 'Изменения сохранены.' })
@@ -81,32 +116,86 @@ export function CoachesAdmin() {
 
       {showCreate && (
         <form onSubmit={handleCreate} className="plate mt-4 flex flex-col gap-3 rounded-[var(--radius-rivet)] p-4">
-          <input
-            required
-            placeholder="ФИО тренера"
-            value={form.full_name}
-            onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-            className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
-          />
+          <div className="flex flex-wrap gap-3">
+            <input
+              required
+              placeholder="Имя"
+              value={form.first_name}
+              onChange={(e) => setForm({ ...form, first_name: e.target.value })}
+              className={inputClass}
+            />
+            <input
+              required
+              placeholder="Фамилия"
+              value={form.last_name}
+              onChange={(e) => setForm({ ...form, last_name: e.target.value })}
+              className={inputClass}
+            />
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <input
+              required
+              type="date"
+              title="Дата рождения (возраст)"
+              value={form.birth_date}
+              onChange={(e) => setForm({ ...form, birth_date: e.target.value })}
+              className={inputClass}
+            />
+            <input
+              required
+              placeholder="ИИН (12 цифр)"
+              inputMode="numeric"
+              maxLength={12}
+              pattern="\d{12}"
+              value={form.iin}
+              onChange={(e) => setForm({ ...form, iin: e.target.value.replace(/\D/g, '').slice(0, 12) })}
+              className={`w-40 ${inputClass}`}
+            />
+            <select
+              value={form.qualification ?? COACH_QUALIFICATIONS[0]}
+              onChange={(e) => setForm({ ...form, qualification: e.target.value })}
+              className={inputClass}
+            >
+              {COACH_QUALIFICATIONS.map((q) => (
+                <option key={q} value={q}>
+                  {q}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <select
+              value={form.club_id ?? ''}
+              onChange={(e) => setForm({ ...form, club_id: e.target.value ? Number(e.target.value) : undefined })}
+              className={inputClass}
+            >
+              <option value="">Клуб — не указан</option>
+              {clubs.data?.items.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={form.city_id ?? ''}
+              onChange={(e) => setForm({ ...form, city_id: e.target.value ? Number(e.target.value) : undefined })}
+              className={inputClass}
+            >
+              <option value="">Город/Район — не указан</option>
+              {cities.data?.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.region_name})
+                </option>
+              ))}
+            </select>
+          </div>
           <textarea
             placeholder="Биография"
             value={form.bio ?? ''}
             onChange={(e) => setForm({ ...form, bio: e.target.value })}
             rows={2}
-            className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+            className={inputClass}
           />
-          <select
-            value={form.club_id ?? ''}
-            onChange={(e) => setForm({ ...form, club_id: e.target.value ? Number(e.target.value) : undefined })}
-            className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
-          >
-            <option value="">Клуб — не указан</option>
-            {clubs.data?.items.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
           <button
             type="submit"
             disabled={createCoach.isPending}
@@ -126,23 +215,54 @@ export function CoachesAdmin() {
               <li key={coach.id} className="plate rounded-[var(--radius-rivet)] p-4">
                 {editingId === coach.id ? (
                   <div className="flex flex-col gap-3">
-                    <input
-                      defaultValue={coach.full_name}
-                      onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
-                      className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
-                    />
-                    <select
-                      defaultValue=""
-                      onChange={(e) => setEditForm({ ...editForm, club_id: e.target.value ? Number(e.target.value) : undefined })}
-                      className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
-                    >
-                      <option value="">Клуб: оставить «{coach.club_name ?? 'не указан'}»</option>
-                      {clubs.data?.items.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex flex-wrap gap-3">
+                      <input
+                        placeholder="ИИН: оставить прежний"
+                        inputMode="numeric"
+                        maxLength={12}
+                        defaultValue={coach.iin ?? ''}
+                        onChange={(e) => setEditForm({ ...editForm, iin: e.target.value.replace(/\D/g, '').slice(0, 12) })}
+                        className={`w-48 ${inputClass}`}
+                      />
+                      <select
+                        defaultValue=""
+                        onChange={(e) => setEditForm({ ...editForm, qualification: e.target.value || undefined })}
+                        className={inputClass}
+                      >
+                        <option value="">Звание: оставить «{coach.qualification ?? 'не указано'}»</option>
+                        {COACH_QUALIFICATIONS.map((q) => (
+                          <option key={q} value={q}>
+                            {q}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                      <select
+                        defaultValue=""
+                        onChange={(e) => setEditForm({ ...editForm, club_id: e.target.value ? Number(e.target.value) : undefined })}
+                        className={inputClass}
+                      >
+                        <option value="">Клуб: оставить «{coach.club_name ?? 'не указан'}»</option>
+                        {clubs.data?.items.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        defaultValue=""
+                        onChange={(e) => setEditForm({ ...editForm, city_id: e.target.value ? Number(e.target.value) : undefined })}
+                        className={inputClass}
+                      >
+                        <option value="">Город: оставить «{coach.city_name ?? 'не указан'}»</option>
+                        {cities.data?.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} ({c.region_name})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleUpdate(coach.id)}
@@ -167,8 +287,10 @@ export function CoachesAdmin() {
                     <div>
                       <p className="font-display text-base text-bone">{coach.full_name}</p>
                       <p className="font-mono text-xs text-steel">
-                        {coach.club_name ?? 'клуб не указан'} · {coach.athletes_count} спортсменов
+                        {coach.club_name ?? 'клуб не указан'} · {coach.city_name ?? 'город не указан'} ·{' '}
+                        {coach.qualification ?? 'без звания'} · {coach.athletes_count} спортсменов
                       </p>
+                      <p className="font-mono text-xs text-steel-dim">ИИН: {coach.iin ?? '—'}</p>
                     </div>
                     <div className="flex flex-shrink-0 gap-2">
                       <button

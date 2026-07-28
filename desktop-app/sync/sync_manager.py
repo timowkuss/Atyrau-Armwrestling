@@ -220,24 +220,37 @@ class SyncManager:
         return self._try("update_athlete", payload, go)
 
     # ── тренер: карточка из локальной таблицы coaches ────────────
-    def on_coach_created(self, cid, full_name, club, photo_path, bio):
+    def on_coach_created(self, cid, full_name, club, photo_path, bio,
+                          first_name=None, last_name=None, birth_date=None,
+                          iin=None, qualification=None, city=None):
         payload = {"cid": cid, "full_name": full_name, "club": club,
-                   "photo_path": photo_path, "bio": bio}
+                   "photo_path": photo_path, "bio": bio,
+                   "first_name": first_name, "last_name": last_name,
+                   "birth_date": birth_date, "iin": iin,
+                   "qualification": qualification, "city": city}
 
         def go():
             remote = self.api.create_coach(
                 full_name=full_name, club_name=club or None,
                 photo_path=photo_path or None, bio=bio or None,
+                first_name=first_name or None, last_name=last_name or None,
+                birth_date=birth_date or None, iin=iin or None,
+                qualification=qualification or None, city_name=city or None,
             )
             self.state.map_set("coach", cid, remote["id"])
             return remote["id"]
 
         return self._try("create_coach", payload, go)
 
-    def on_coach_updated(self, cid, full_name, club, photo_path, bio):
+    def on_coach_updated(self, cid, full_name, club, photo_path, bio,
+                          first_name=None, last_name=None, birth_date=None,
+                          iin=None, qualification=None, city=None):
         remote_coach_id = self.state.map_get("coach", cid)
         payload = {"cid": cid, "full_name": full_name, "club": club,
-                   "photo_path": photo_path, "bio": bio}
+                   "photo_path": photo_path, "bio": bio,
+                   "first_name": first_name, "last_name": last_name,
+                   "birth_date": birth_date, "iin": iin,
+                   "qualification": qualification, "city": city}
         if remote_coach_id is None:
             self.state.enqueue("update_coach", payload)
             return None
@@ -246,6 +259,9 @@ class SyncManager:
             self.api.update_coach(
                 remote_coach_id, full_name=full_name, club_name=club or None,
                 photo_path=photo_path or None, bio=bio or None,
+                first_name=first_name or None, last_name=last_name or None,
+                birth_date=birth_date or None, iin=iin or None,
+                qualification=qualification or None, city_name=city or None,
             )
             return remote_coach_id
 
@@ -912,6 +928,12 @@ class SyncManager:
                     club_name=payload.get("club") or None,
                     photo_path=payload.get("photo_path") or None,
                     bio=payload.get("bio") or None,
+                    first_name=payload.get("first_name") or None,
+                    last_name=payload.get("last_name") or None,
+                    birth_date=payload.get("birth_date") or None,
+                    iin=payload.get("iin") or None,
+                    qualification=payload.get("qualification") or None,
+                    city_name=payload.get("city") or None,
                 )
                 self.state.map_set("coach", payload["cid"], remote["id"])
                 return True
@@ -928,6 +950,12 @@ class SyncManager:
                         club_name=payload.get("club") or None,
                         photo_path=payload.get("photo_path") or None,
                         bio=payload.get("bio") or None,
+                        first_name=payload.get("first_name") or None,
+                        last_name=payload.get("last_name") or None,
+                        birth_date=payload.get("birth_date") or None,
+                        iin=payload.get("iin") or None,
+                        qualification=payload.get("qualification") or None,
+                        city_name=payload.get("city") or None,
                     )
                 except ApiClientError as e:
                     if e.status_code == 404:

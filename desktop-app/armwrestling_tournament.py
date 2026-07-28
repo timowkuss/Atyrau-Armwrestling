@@ -109,6 +109,16 @@ AGE_CATEGORY_RULES = OrderedDict([
         "weights": ["Absolute"]}),
 ])
 RANKS = ["КМС", "МС", "МСМК", "ЗМС", "Без звания"]
+# Тренерское звание — не путать со спортивным разрядом (RANKS) выше.
+# Синхронизирован с COACH_QUALIFICATIONS в backend/app/schemas/coaches.py
+# и со списком в frontend/src/pages/admin/Coaches/CoachesAdmin.tsx.
+COACH_QUALIFICATIONS = [
+    "Без категории",
+    "Тренер II категории",
+    "Тренер I категории",
+    "Тренер высшей категории",
+    "Заслуженный тренер РК",
+]
 HAND_SUFFIX = {"Левая": "Left", "Правая": "Right", "Обе": "Both"}
 
 # ─── Очки двоеборья (сумма левой + правой руки) ────
@@ -306,6 +316,12 @@ class Database:
         CREATE TABLE IF NOT EXISTS coaches (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             full_name TEXT NOT NULL,
+            first_name TEXT,
+            last_name TEXT,
+            birth_date TEXT,                 -- 'YYYY-MM-DD' (для расчёта возраста)
+            iin TEXT,                        -- ИИН, 12 цифр
+            qualification TEXT,              -- тренерское звание
+            city TEXT,                       -- Город/Район
             club TEXT,
             photo_path TEXT,
             bio TEXT,
@@ -363,6 +379,13 @@ class Database:
         a_cols = [r[1] for r in self.conn.execute("PRAGMA table_info(athletes)").fetchall()]
         if "coach_id" not in a_cols:
             self.conn.execute("ALTER TABLE athletes ADD COLUMN coach_id INTEGER REFERENCES coaches(id)")
+        self.conn.commit()
+
+        # ─── Карточка тренера: Имя/Фамилия/возраст/ИИН/звание/город ───
+        c_cols = [r[1] for r in self.conn.execute("PRAGMA table_info(coaches)").fetchall()]
+        for col in ("first_name", "last_name", "birth_date", "iin", "qualification", "city"):
+            if col not in c_cols:
+                self.conn.execute(f"ALTER TABLE coaches ADD COLUMN {col} TEXT")
         self.conn.commit()
 
     def create_tournament(self, name, date, location="", weight_tolerance=0,
@@ -455,17 +478,25 @@ class Database:
         self.conn.commit()
 
     # ── тренеры ──────────────────────────────────────────────────
-    def add_coach(self, full_name, club="", photo_path="", bio=""):
+    def add_coach(self, full_name, club="", photo_path="", bio="",
+                  first_name="", last_name="", birth_date="", iin="",
+                  qualification="", city=""):
         cur = self.conn.execute(
-            "INSERT INTO coaches (full_name, club, photo_path, bio) VALUES (?,?,?,?)",
-            (full_name, club, photo_path, bio))
+            "INSERT INTO coaches (full_name, club, photo_path, bio, first_name, "
+            "last_name, birth_date, iin, qualification, city) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (full_name, club, photo_path, bio, first_name, last_name,
+             birth_date, iin, qualification, city))
         self.conn.commit()
         return cur.lastrowid
 
-    def update_coach(self, cid, full_name, club="", photo_path="", bio=""):
+    def update_coach(self, cid, full_name, club="", photo_path="", bio="",
+                      first_name="", last_name="", birth_date="", iin="",
+                      qualification="", city=""):
         self.conn.execute(
-            "UPDATE coaches SET full_name=?, club=?, photo_path=?, bio=? WHERE id=?",
-            (full_name, club, photo_path, bio, cid))
+            "UPDATE coaches SET full_name=?, club=?, photo_path=?, bio=?, first_name=?, "
+            "last_name=?, birth_date=?, iin=?, qualification=?, city=? WHERE id=?",
+            (full_name, club, photo_path, bio, first_name, last_name,
+             birth_date, iin, qualification, city, cid))
         self.conn.commit()
 
     def delete_coach(self, cid):
@@ -763,18 +794,32 @@ def _synced_update_athlete(self, aid, first_name, last_name, birth_date,
     except Exception as e:
         print(f"[sync] update_athlete: {e}")
 
-def _synced_add_coach(self, full_name, club="", photo_path="", bio=""):
-    cid = _original_add_coach(self, full_name, club, photo_path, bio)
+def _synced_add_coach(self, full_name, club="", photo_path="", bio="",
+                       first_name="", last_name="", birth_date="", iin="",
+                       qualification="", city=""):
+    cid = _original_add_coach(self, full_name, club, photo_path, bio,
+                               first_name, last_name, birth_date, iin,
+                               qualification, city)
     try:
-        sync_manager.on_coach_created(cid, full_name, club, photo_path, bio)
+        sync_manager.on_coach_created(cid, full_name, club, photo_path, bio,
+                                       first_name=first_name, last_name=last_name,
+                                       birth_date=birth_date, iin=iin,
+                                       qualification=qualification, city=city)
     except Exception as e:
         print(f"[sync] add_coach: {e}")
     return cid
 
-def _synced_update_coach(self, cid, full_name, club="", photo_path="", bio=""):
-    _original_update_coach(self, cid, full_name, club, photo_path, bio)
+def _synced_update_coach(self, cid, full_name, club="", photo_path="", bio="",
+                          first_name="", last_name="", birth_date="", iin="",
+                          qualification="", city=""):
+    _original_update_coach(self, cid, full_name, club, photo_path, bio,
+                            first_name, last_name, birth_date, iin,
+                            qualification, city)
     try:
-        sync_manager.on_coach_updated(cid, full_name, club, photo_path, bio)
+        sync_manager.on_coach_updated(cid, full_name, club, photo_path, bio,
+                                       first_name=first_name, last_name=last_name,
+                                       birth_date=birth_date, iin=iin,
+                                       qualification=qualification, city=city)
     except Exception as e:
         print(f"[sync] update_coach: {e}")
 
@@ -3970,8 +4015,8 @@ class CoachesWindow(ctk.CTkToplevel):
     def _add_coach_dialog(self, edit_id=None):
         dlg = tk.Toplevel(self)
         dlg.title("Редактировать тренера" if edit_id else "Добавить тренера")
-        dlg.geometry("680x600")
-        dlg.minsize(500, 600)
+        dlg.geometry("680x800")
+        dlg.minsize(500, 800)
         dlg.configure(bg="#161b22")
 
         existing = self.db.get_coach(edit_id) if edit_id else None
@@ -3989,13 +4034,67 @@ class CoachesWindow(ctk.CTkToplevel):
         form = ctk.CTkFrame(dlg, fg_color="transparent")
         form.pack(fill="x", padx=10, pady=15)
 
-        lbl_entry(form, "ФИО*:", "full_name", existing["full_name"] if existing else "", row=0)
-        lbl_entry(form, "Клуб:", "club", (existing["club"] or "") if existing else "", row=1)
+        lbl_entry(form, "Имя*:", "first_name", existing["first_name"] if existing else "", row=0)
+        lbl_entry(form, "Фамилия*:", "last_name", existing["last_name"] if existing else "", row=1)
+
+        # ─── Дата рождения (возраст) с автоматической маской дд.мм.гггг —
+        # тот же виджет/валидация, что и у спортсмена в _add_athlete_dialog.
+        ctk.CTkLabel(form, text="Дата рожд.*:", anchor="e", width=110).grid(
+            row=2, column=0, padx=(15, 8), pady=8, sticky="e")
+        birth_date_var = ctk.StringVar(value=existing["birth_date"] if existing else "")
+        birth_entry = ctk.CTkEntry(form, textvariable=birth_date_var, width=300,
+                    placeholder_text="  .  .    ")
+        birth_entry.grid(row=2, column=1, padx=(0, 15), pady=8, sticky="w")
+
+        def format_birthdate(event=None):
+            value = "".join(ch for ch in birth_entry.get() if ch.isdigit())[:8]
+            result = ""
+            if len(value) >= 1:
+                result += value[:2]
+            if len(value) > 2:
+                result += "." + value[2:4]
+            if len(value) > 4:
+                result += "." + value[4:]
+            cursor = len(result)
+            birth_entry.delete(0, "end")
+            birth_entry.insert(0, result)
+            birth_entry.icursor(cursor)
+
+        birth_entry.bind("<KeyRelease>", format_birthdate)
+
+        # ─── ИИН — ровно 12 цифр, маска не даёт ввести больше/нецифры ───
+        ctk.CTkLabel(form, text="ИИН*:", anchor="e", width=110).grid(
+            row=3, column=0, padx=(15, 8), pady=8, sticky="e")
+        iin_var = ctk.StringVar(value=existing["iin"] if existing else "")
+        iin_entry = ctk.CTkEntry(form, textvariable=iin_var, width=300,
+                    placeholder_text="12 цифр")
+        iin_entry.grid(row=3, column=1, padx=(0, 15), pady=8, sticky="w")
+
+        def format_iin(event=None):
+            value = "".join(ch for ch in iin_entry.get() if ch.isdigit())[:12]
+            if value != iin_entry.get():
+                iin_entry.delete(0, "end")
+                iin_entry.insert(0, value)
+
+        iin_entry.bind("<KeyRelease>", format_iin)
+
+        # ─── Тренерское звание ───
+        ctk.CTkLabel(form, text="Звание:", anchor="e", width=110).grid(
+            row=4, column=0, padx=(15, 8), pady=8, sticky="e")
+        qualification_var = ctk.StringVar(
+            value=existing["qualification"] if existing and existing["qualification"] in COACH_QUALIFICATIONS
+            else COACH_QUALIFICATIONS[0])
+        ctk.CTkOptionMenu(form, variable=qualification_var,
+                    values=COACH_QUALIFICATIONS, width=300
+                    ).grid(row=4, column=1, padx=(0, 15), pady=8, sticky="w")
+
+        lbl_entry(form, "Клуб:", "club", (existing["club"] or "") if existing else "", row=5)
+        lbl_entry(form, "Город/Район:", "city", (existing["city"] or "") if existing else "", row=6)
 
         ctk.CTkLabel(form, text="О тренере:", anchor="ne", width=110).grid(
-            row=2, column=0, padx=(15, 8), pady=8, sticky="ne")
+            row=7, column=0, padx=(15, 8), pady=8, sticky="ne")
         bio_box = ctk.CTkTextbox(form, width=300, height=70)
-        bio_box.grid(row=2, column=1, padx=(0, 15), pady=8, sticky="w")
+        bio_box.grid(row=7, column=1, padx=(0, 15), pady=8, sticky="w")
         if existing and existing["bio"]:
             bio_box.insert("1.0", existing["bio"])
 
@@ -4072,17 +4171,33 @@ class CoachesWindow(ctk.CTkToplevel):
                     command=do_assign).pack(side="left", padx=10)
 
         def save():
-            full_name = fields["full_name"].get().strip()
-            if not full_name:
-                messagebox.showwarning("Ошибка", "Введите ФИО тренера.")
+            first_name = fields["first_name"].get().strip()
+            last_name = fields["last_name"].get().strip()
+            if not first_name or not last_name:
+                messagebox.showwarning("Ошибка", "Введите имя и фамилию тренера.")
                 return
+            birth_date = birth_date_var.get().strip()
+            try:
+                datetime.strptime(birth_date, "%d.%m.%Y")
+            except ValueError:
+                messagebox.showwarning("Ошибка", "Дата рождения в формате дд.мм.гггг (например, 25062002).")
+                return
+            iin = iin_var.get().strip()
+            if len(iin) != 12 or not iin.isdigit():
+                messagebox.showwarning("Ошибка", "ИИН должен состоять ровно из 12 цифр.")
+                return
+            qualification = qualification_var.get()
             club = fields["club"].get().strip()
+            city = fields["city"].get().strip()
             bio = bio_box.get("1.0", "end").strip()
+            full_name = f"{last_name} {first_name}".strip()
             nonlocal edit_id
             if edit_id:
-                self.db.update_coach(edit_id, full_name, club, "", bio)
+                self.db.update_coach(edit_id, full_name, club, "", bio,
+                        first_name, last_name, birth_date, iin, qualification, city)
             else:
-                edit_id = self.db.add_coach(full_name, club, "", bio)
+                edit_id = self.db.add_coach(full_name, club, "", bio,
+                        first_name, last_name, birth_date, iin, qualification, city)
                 refresh_athletes_list()
             dlg.title("Редактировать тренера")
             self._refresh_list()

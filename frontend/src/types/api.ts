@@ -200,11 +200,20 @@ export interface CoachListItem {
   full_name: string
   photo_path: string | null
   club_name: string | null
+  city_name: string | null
+  qualification: string | null
+  birth_date: string | null
   athletes_count: number
 }
 
 export interface CoachDetail extends CoachListItem {
   bio: string | null
+}
+
+// ИИН отдаётся только через /admin/coaches (не публично) — см.
+// CoachAdminListOut/CoachAdminDetailOut в backend/app/schemas/coaches.py.
+export interface CoachAdminListItem extends CoachListItem {
+  iin: string | null
 }
 
 export interface NewsListItem {
@@ -281,11 +290,26 @@ export interface ClubInput {
   founded_year?: number | null
 }
 
+// Список тренерских званий — синхронизирован с COACH_QUALIFICATIONS в
+// backend/app/schemas/coaches.py и desktop-app/armwrestling_tournament.py.
+export const COACH_QUALIFICATIONS = [
+  'Без категории',
+  'Тренер II категории',
+  'Тренер I категории',
+  'Тренер высшей категории',
+  'Заслуженный тренер РК',
+] as const
+
 export interface CoachInput {
-  full_name: string
+  first_name: string
+  last_name: string
+  birth_date: string
+  iin: string
+  qualification?: string | null
+  club_id?: number | null
+  city_id?: number | null
   photo_path?: string | null
   bio?: string | null
-  club_id?: number | null
 }
 
 // --- Admin: athletes -------------------------------------------------------

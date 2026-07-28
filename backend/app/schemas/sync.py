@@ -40,6 +40,14 @@ class CoachSyncCreate(BaseModel):
     club_name: str | None = None
     photo_path: str | None = None
     bio: str | None = None
+    # Добавлено вместе с карточкой тренера в админке (Имя/Фамилия/возраст/
+    # ИИН/звание/город) — те же поля десктоп теперь тоже собирает и шлёт.
+    first_name: str | None = None
+    last_name: str | None = None
+    birth_date: str | None = None  # 'YYYY-MM-DD'
+    iin: str | None = None
+    qualification: str | None = None
+    city_name: str | None = None  # best-effort сопоставление с cities.name
 
 
 class CoachSyncUpdate(BaseModel):
@@ -49,6 +57,12 @@ class CoachSyncUpdate(BaseModel):
     club_name: str | None = None
     photo_path: str | None = None
     bio: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    birth_date: str | None = None
+    iin: str | None = None
+    qualification: str | None = None
+    city_name: str | None = None
 
 
 class CompetitionSyncCreate(BaseModel):
@@ -132,6 +146,12 @@ class CoachChangeItem(BaseModel):
     club_name: str | None
     photo_path: str | None
     bio: str | None
+    first_name: str | None = None
+    last_name: str | None = None
+    birth_date: str | None = None
+    iin: str | None = None
+    qualification: str | None = None
+    city_name: str | None = None
     updated_at: str
 
 

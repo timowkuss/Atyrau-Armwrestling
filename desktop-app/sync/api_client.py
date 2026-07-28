@@ -96,14 +96,20 @@ class SyncApiClient:
         params = {"since": since} if since else None
         return self._request("GET", "/coaches/changes", params=params)
 
-    def create_coach(self, full_name, club_name=None, photo_path=None, bio=None):
+    def create_coach(self, full_name, club_name=None, photo_path=None, bio=None,
+                      first_name=None, last_name=None, birth_date=None, iin=None,
+                      qualification=None, city_name=None):
         return self._request("POST", "/coaches", json_body={
             "full_name": full_name, "club_name": club_name,
             "photo_path": photo_path, "bio": bio,
+            "first_name": first_name, "last_name": last_name,
+            "birth_date": birth_date, "iin": iin,
+            "qualification": qualification, "city_name": city_name,
         })
 
     def update_coach(self, remote_coach_id, full_name=None, club_name=None,
-                      photo_path=None, bio=None):
+                      photo_path=None, bio=None, first_name=None, last_name=None,
+                      birth_date=None, iin=None, qualification=None, city_name=None):
         body = {}
         if full_name is not None:
             body["full_name"] = full_name
@@ -113,6 +119,18 @@ class SyncApiClient:
             body["photo_path"] = photo_path
         if bio is not None:
             body["bio"] = bio
+        if first_name is not None:
+            body["first_name"] = first_name
+        if last_name is not None:
+            body["last_name"] = last_name
+        if birth_date is not None:
+            body["birth_date"] = birth_date
+        if iin is not None:
+            body["iin"] = iin
+        if qualification is not None:
+            body["qualification"] = qualification
+        if city_name is not None:
+            body["city_name"] = city_name
         return self._request("PATCH", f"/coaches/{remote_coach_id}", json_body=body)
 
     def delete_coach(self, remote_id):

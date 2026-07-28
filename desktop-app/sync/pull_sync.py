@@ -162,12 +162,20 @@ class PullSyncManager:
         club = item.get("club_name")
         photo_path = item.get("photo_path")
         bio = item.get("bio")
+        first_name = item.get("first_name")
+        last_name = item.get("last_name")
+        birth_date = _to_desktop_date(item.get("birth_date")) if item.get("birth_date") else None
+        iin = item.get("iin")
+        qualification = item.get("qualification")
+        city = item.get("city_name")
 
         local_id = self.state.map_get_local("coach", remote_id)
         if local_id is not None:
             conn.execute(
-                "UPDATE coaches SET full_name=?, club=?, photo_path=?, bio=? WHERE id=?",
-                (full_name, club, photo_path, bio, local_id),
+                "UPDATE coaches SET full_name=?, club=?, photo_path=?, bio=?, "
+                "first_name=?, last_name=?, birth_date=?, iin=?, qualification=?, city=? WHERE id=?",
+                (full_name, club, photo_path, bio, first_name, last_name,
+                 birth_date, iin, qualification, city, local_id),
             )
             return
 
@@ -181,15 +189,19 @@ class PullSyncManager:
         if row is not None:
             local_id = row[0]
             conn.execute(
-                "UPDATE coaches SET full_name=?, club=?, photo_path=?, bio=? WHERE id=?",
-                (full_name, club, photo_path, bio, local_id),
+                "UPDATE coaches SET full_name=?, club=?, photo_path=?, bio=?, "
+                "first_name=?, last_name=?, birth_date=?, iin=?, qualification=?, city=? WHERE id=?",
+                (full_name, club, photo_path, bio, first_name, last_name,
+                 birth_date, iin, qualification, city, local_id),
             )
             self.state.map_set("coach", local_id, remote_id)
             return
 
         cur = conn.execute(
-            "INSERT INTO coaches (full_name, club, photo_path, bio) VALUES (?,?,?,?)",
-            (full_name, club, photo_path, bio),
+            "INSERT INTO coaches (full_name, club, photo_path, bio, first_name, "
+            "last_name, birth_date, iin, qualification, city) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (full_name, club, photo_path, bio, first_name, last_name,
+             birth_date, iin, qualification, city),
         )
         self.state.map_set("coach", cur.lastrowid, remote_id)
 

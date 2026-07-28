@@ -1,13 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/features/auth/AuthContext'
-import { api } from '@/lib/api'
 import { adminApi } from '@/lib/adminApi'
 import type { CoachInput } from '@/types/api'
 
 export function useAdminCoachesList() {
+  // Через /admin/coaches (не публичный /public/coaches) — только так
+  // отдаётся ИИН, нужный для редактирования карточки тренера в админке.
+  const { token } = useAuth()
   return useQuery({
-    queryKey: ['admin', 'coaches', 'list-via-public'],
-    queryFn: () => api.coaches.list({ page_size: 200 }),
+    queryKey: ['admin', 'coaches', 'list'],
+    queryFn: () => adminApi.coaches.list(token!),
+    enabled: !!token,
+    placeholderData: (prev) => prev,
   })
 }
 

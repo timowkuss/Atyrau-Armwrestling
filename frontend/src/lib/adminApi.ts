@@ -6,6 +6,7 @@ import type {
   AthleteStatisticsUpdateInput,
   AthleteUpdateInput,
   ClubInput,
+  CoachAdminListItem,
   CoachInput,
   CompetitionAdminUpdateInput,
   CompetitionDetail,
@@ -21,6 +22,7 @@ import type {
   NewsAdminDetail,
   NewsAdminListItem,
   NewsInput,
+  Page,
   StatusResult,
 } from '@/types/api'
 
@@ -79,6 +81,8 @@ export const adminApi = {
     remove: (token: string, id: number) => authedRequest<StatusResult>(token, 'DELETE', `/admin/clubs/${id}`),
   },
   coaches: {
+    // С ИИН — в отличие от api.coaches.list (публичный, без ИИН).
+    list: (token: string) => authedRequest<Page<CoachAdminListItem>>(token, 'GET', '/admin/coaches', undefined, { page_size: 200 }),
     create: (token: string, payload: CoachInput) =>
       authedRequest<CreatedRef>(token, 'POST', '/admin/coaches', payload),
     update: (token: string, id: number, payload: Partial<CoachInput>) =>

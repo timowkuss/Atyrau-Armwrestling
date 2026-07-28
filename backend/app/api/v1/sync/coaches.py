@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.api.v1.deps import require_desktop_sync
 from app.db.models.clubs import Club
 from app.db.models.coaches import Coach
+from app.db.models.geo import City
 from app.db.models.sync_tombstone import SyncTombstone
 from app.db.session import get_db
 from app.schemas.sync import (
@@ -29,6 +30,31 @@ def _find_or_create_club(db: Session, club_name: str | None) -> int | None:
     db.add(club)
     db.flush()
     return club.id
+
+
+def _find_city_id(db: Session, city_name: str | None) -> int | None:
+    """Город/район из десктопа — свободный текст, справочника cities там
+    нет. В отличие от клубов, City требует обязательный region_id, поэтому
+    город не создаём "вслепую" — только best-effort сопоставление по
+    имени с уже существующим справочником (см. также location_name в
+    CompetitionSyncCreate)."""
+    if not city_name or not city_name.strip():
+        return None
+    city = db.query(City).filter(City.name.ilike(city_name.strip())).first()
+    return city.id if city else None
+
+
+def _parse_birth_date(value: str | None) -> date | None:
+    """Десктоп шлёт дд.мм.гггг (как вводит организатор), возможен и ISO —
+    та же логика, что в sync/athletes.py._parse_birth_date."""
+    if not value:
+        return None
+    for fmt in ("%d.%m.%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(value, fmt).date()
+        except ValueError:
+            continue
+    return None
 
 
 def _find_existing_coach(db: Session, full_name: str) -> Coach | None:
@@ -59,7 +85,11 @@ def get_coach_changes(
 
     server_time = datetime.now(timezone.utc)
 
-    query = db.query(Coach, Club.name).outerjoin(Club, Coach.club_id == Club.id)
+    query = (
+        db.query(Coach, Club.name, City.name)
+        .outerjoin(Club, Coach.club_id == Club.id)
+        .outerjoin(City, Coach.city_id == City.id)
+    )
     if since_dt is not None:
         query = query.filter(Coach.updated_at > since_dt)
     rows = query.all()
@@ -71,9 +101,15 @@ def get_coach_changes(
             club_name=club_name,
             photo_path=c.photo_path,
             bio=c.bio,
+            first_name=c.first_name,
+            last_name=c.last_name,
+            birth_date=c.birth_date.isoformat() if c.birth_date else None,
+            iin=c.iin,
+            qualification=c.qualification,
+            city_name=city_name,
             updated_at=c.updated_at.isoformat(),
         )
-        for c, club_name in rows
+        for c, club_name, city_name in rows
     ]
 
     deleted: list[int] = []
@@ -99,6 +135,8 @@ def create_coach(
     _: bool = Depends(require_desktop_sync),
 ):
     club_id = _find_or_create_club(db, payload.club_name)
+    city_id = _find_city_id(db, payload.city_name)
+    birth_date = _parse_birth_date(payload.birth_date)
 
     existing = _find_existing_coach(db, payload.full_name)
     if existing is not None:
@@ -107,18 +145,36 @@ def create_coach(
         # тихо доливаем пустые поля, не перетирая уже заполненные.
         if not existing.club_id and club_id:
             existing.club_id = club_id
+        if not existing.city_id and city_id:
+            existing.city_id = city_id
         if not existing.photo_path and payload.photo_path:
             existing.photo_path = payload.photo_path
         if not existing.bio and payload.bio:
             existing.bio = payload.bio
+        if not existing.first_name and payload.first_name:
+            existing.first_name = payload.first_name
+        if not existing.last_name and payload.last_name:
+            existing.last_name = payload.last_name
+        if not existing.birth_date and birth_date:
+            existing.birth_date = birth_date
+        if not existing.iin and payload.iin:
+            existing.iin = payload.iin
+        if not existing.qualification and payload.qualification:
+            existing.qualification = payload.qualification
         db.commit()
         return {"id": existing.id, "status": "existing"}
 
     coach = Coach(
         full_name=payload.full_name,
         club_id=club_id,
+        city_id=city_id,
         photo_path=payload.photo_path,
         bio=payload.bio,
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        birth_date=birth_date,
+        iin=payload.iin,
+        qualification=payload.qualification,
     )
     db.add(coach)
     db.commit()
@@ -139,6 +195,10 @@ def update_coach(
     data = payload.model_dump(exclude_unset=True)
     if "club_name" in data:
         coach.club_id = _find_or_create_club(db, data.pop("club_name"))
+    if "city_name" in data:
+        coach.city_id = _find_city_id(db, data.pop("city_name"))
+    if "birth_date" in data:
+        coach.birth_date = _parse_birth_date(data.pop("birth_date"))
 
     for field, value in data.items():
         setattr(coach, field, value)

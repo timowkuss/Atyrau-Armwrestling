@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Date, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -13,6 +13,24 @@ class Coach(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     full_name: Mapped[str] = mapped_column(String(200), nullable=False)
+
+    # ─── Карточка тренера в админке: Имя/Фамилия/возраст/ИИН/звание/город.
+    # first_name/last_name хранятся отдельно (как у Athlete в десктопе),
+    # full_name пересчитывается сервером при сохранении и остаётся
+    # единственным полем для отображения/поиска — чтобы не трогать уже
+    # существующие места, где используется coach.full_name.
+    first_name: Mapped[str | None] = mapped_column(String(100))
+    last_name: Mapped[str | None] = mapped_column(String(100))
+    birth_date: Mapped[date | None] = mapped_column(Date)
+    # ИИН — 12 цифр. У старых записей может отсутствовать, поэтому nullable
+    # на уровне БД, но обязателен в CoachCreate для новых тренеров.
+    iin: Mapped[str | None] = mapped_column(String(12), unique=True)
+    # Тренерское звание (не путать с Athlete.rank — спортивный разряд).
+    qualification: Mapped[str | None] = mapped_column(String(100))
+    city_id: Mapped[int | None] = mapped_column(
+        ForeignKey("cities.id", ondelete="SET NULL")
+    )
+
     photo_path: Mapped[str | None] = mapped_column(String(500))
     bio: Mapped[str | None] = mapped_column(Text)
     club_id: Mapped[int | None] = mapped_column(
@@ -26,4 +44,5 @@ class Coach(Base):
     )
 
     club: Mapped["Club"] = relationship(back_populates="coaches")
+    city: Mapped["City"] = relationship()
     athletes: Mapped[list["Athlete"]] = relationship(back_populates="coach")

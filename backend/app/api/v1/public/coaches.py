@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.db.models.athletes import Athlete
 from app.db.models.clubs import Club
 from app.db.models.coaches import Coach
+from app.db.models.geo import City
 from app.db.session import get_db
 from app.schemas.coaches import CoachDetailOut, CoachListOut
 from app.schemas.common import Page
@@ -23,11 +24,13 @@ def list_coaches(
         db.query(
             Coach,
             Club.name.label("club_name"),
+            City.name.label("city_name"),
             func.count(Athlete.id).label("athletes_count"),
         )
         .outerjoin(Club, Coach.club_id == Club.id)
+        .outerjoin(City, Coach.city_id == City.id)
         .outerjoin(Athlete, Athlete.coach_id == Coach.id)
-        .group_by(Coach.id, Club.name)
+        .group_by(Coach.id, Club.name, City.name)
     )
     if club_id is not None:
         query = query.filter(Coach.club_id == club_id)
@@ -40,9 +43,12 @@ def list_coaches(
             full_name=coach.full_name,
             photo_path=coach.photo_path,
             club_name=club_name,
+            city_name=city_name,
+            qualification=coach.qualification,
+            birth_date=coach.birth_date,
             athletes_count=athletes_count,
         )
-        for coach, club_name, athletes_count in rows
+        for coach, club_name, city_name, athletes_count in rows
     ]
     return Page(items=items, total=total, page=page, page_size=page_size)
 
@@ -54,6 +60,7 @@ def get_coach(coach_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Тренер не найден")
 
     club_name = coach.club.name if coach.club else None
+    city_name = coach.city.name if coach.city else None
     athletes_count = db.query(Athlete).filter(Athlete.coach_id == coach.id).count()
 
     return CoachDetailOut(
@@ -62,5 +69,8 @@ def get_coach(coach_id: int, db: Session = Depends(get_db)):
         photo_path=coach.photo_path,
         bio=coach.bio,
         club_name=club_name,
+        city_name=city_name,
+        qualification=coach.qualification,
+        birth_date=coach.birth_date,
         athletes_count=athletes_count,
     )
