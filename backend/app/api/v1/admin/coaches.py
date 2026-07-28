@@ -17,6 +17,7 @@ from app.schemas.coaches import (
     CoachUpdate,
 )
 from app.schemas.common import Page
+from app.services.cloudinary_photos import delete_cloudinary_photo
 
 router = APIRouter(prefix="/coaches", tags=["admin:coaches"])
 
@@ -135,9 +136,45 @@ def update_coach(
     if first_name is not None or last_name is not None:
         coach.full_name = f"{coach.last_name or ''} {coach.first_name or ''}".strip()
 
+    # ── фото: та же логика, что и в sync/coaches.py update_coach — старое
+    # фото в Cloudinary удаляем только ПОСЛЕ успешного сохранения новой
+    # ссылки, и только если оно реально поменялось.
+    old_photo_path = coach.photo_path
+    new_photo_path = data.get("photo_path", old_photo_path)
+    photo_changed = "photo_path" in data and new_photo_path != old_photo_path
+
     for field, value in data.items():
         setattr(coach, field, value)
     db.commit()
+
+    if photo_changed and old_photo_path:
+        delete_cloudinary_photo(old_photo_path)
+
+    return {"status": "ok"}
+
+
+@router.delete("/{coach_id}/photo")
+def delete_coach_photo(
+    coach_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(*WRITE_ROLES)),
+):
+    """Отдельная кнопка "Удалить фото" в админке — без необходимости
+    гонять весь объект тренера ради одного поля. Делает то же самое, что
+    PATCH с photo_path=null (см. update_coach выше), просто удобнее
+    вызывать с фронта."""
+    coach = db.query(Coach).filter(Coach.id == coach_id).first()
+    if coach is None:
+        raise HTTPException(status_code=404, detail="Тренер не найден")
+
+    old_photo_path = coach.photo_path
+    if not old_photo_path:
+        return {"status": "ok"}
+
+    coach.photo_path = None
+    db.commit()
+
+    delete_cloudinary_photo(old_photo_path)
     return {"status": "ok"}
 
 
@@ -150,7 +187,14 @@ def delete_coach(
     coach = db.query(Coach).filter(Coach.id == coach_id).first()
     if coach is None:
         raise HTTPException(status_code=404, detail="Тренер не найден")
+
+    old_photo_path = coach.photo_path
+
     db.add(SyncTombstone(entity_type="coach", entity_id=coach_id))
     db.delete(coach)
     db.commit()
+
+    if old_photo_path:
+        delete_cloudinary_photo(old_photo_path)
+
     return {"status": "deleted"}

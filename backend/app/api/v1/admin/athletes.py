@@ -19,6 +19,7 @@ from app.schemas.athletes import (
     AthleteStatisticsUpdate,
     AthleteUpdate,
 )
+from app.services.cloudinary_photos import delete_cloudinary_photo
 from app.services.elo_engine import elo_combined
 
 router = APIRouter(prefix="/athletes", tags=["admin:athletes"])
@@ -86,9 +87,46 @@ def update_athlete(
     if athlete is None:
         raise HTTPException(status_code=404, detail="Спортсмен не найден")
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+
+    # ── фото: та же логика, что и в sync/athletes.py update_athlete —
+    # старое фото в Cloudinary удаляем только ПОСЛЕ успешного сохранения
+    # новой ссылки, и только если оно реально поменялось.
+    old_photo_path = athlete.photo_path
+    new_photo_path = data.get("photo_path", old_photo_path)
+    photo_changed = "photo_path" in data and new_photo_path != old_photo_path
+
+    for field, value in data.items():
         setattr(athlete, field, value)
     db.commit()
+
+    if photo_changed and old_photo_path:
+        delete_cloudinary_photo(old_photo_path)
+
+    return {"status": "ok"}
+
+
+@router.delete("/{athlete_id}/photo")
+def delete_athlete_photo(
+    athlete_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(*WRITE_ROLES)),
+):
+    """Отдельная кнопка "Удалить фото" в админке — та же логика, что
+    PATCH с photo_path=null в update_athlete выше, просто удобнее
+    вызывать с фронта одной кнопкой."""
+    athlete = db.query(Athlete).filter(Athlete.id == athlete_id).first()
+    if athlete is None:
+        raise HTTPException(status_code=404, detail="Спортсмен не найден")
+
+    old_photo_path = athlete.photo_path
+    if not old_photo_path:
+        return {"status": "ok"}
+
+    athlete.photo_path = None
+    db.commit()
+
+    delete_cloudinary_photo(old_photo_path)
     return {"status": "ok"}
 
 
@@ -113,13 +151,20 @@ def delete_athlete(
         # жёсткое удаление физически невозможно, пока есть история участий
         # (см. app/db/models/competitions.py). Раньше этой проверки тут не
         # было — db.delete(athlete) на спортсмене с историей падал бы
-        # необработанным IntegrityError (500) прямо в админке сайта.
+        # необработанным IntegrityError (500) прямо в админке сайта. Фото
+        # НЕ трогаем — карточка может снова стать видимой.
         athlete.is_hidden = True
         db.commit()
         return {"status": "hidden", "reason": "has_participations"}
 
+    old_photo_path = athlete.photo_path
+
     db.delete(athlete)
     db.commit()
+
+    if old_photo_path:
+        delete_cloudinary_photo(old_photo_path)
+
     return {"status": "deleted"}
 
 
