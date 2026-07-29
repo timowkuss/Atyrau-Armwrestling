@@ -29,6 +29,17 @@ from flask import Flask
 from threading import Thread
 import webbrowser
 
+# ─── .env рядом со скриптом/exe — сюда судья/организатор прописывает
+# CLOUDINARY_CLOUD_NAME и CLOUDINARY_UPLOAD_PRESET (см. sync/cloudinary_client.py).
+# ДОЛЖНО стоять раньше импорта sync.cloudinary_client ниже — тот читает
+# os.environ на уровне модуля, при самом импорте.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv не установлен — просто не подхватываем .env,
+          # переменные окружения всё ещё можно задать вручную в системе
+
 try:
     from PIL import Image, ImageTk, ImageDraw, ImageFont, ImageOps
     PIL_AVAILABLE = True
@@ -686,6 +697,8 @@ class Database:
 #  повторяется позже через sync_manager.flush_pending().
 # ════════════════════════════════════════════════════════════════
 from sync.sync_manager import sync_manager  # noqa: E402
+from sync.cloudinary_client import upload_photo, CloudinaryUploadError, is_configured  # noqa: E402
+from sync.photo_cache import resolve_local_photo_path  # noqa: E402
 
 _original_create_tournament = Database.create_tournament
 _original_add_category = Database.add_category
@@ -4029,8 +4042,8 @@ class CoachesWindow(ctk.CTkToplevel):
     def _add_coach_dialog(self, edit_id=None):
         dlg = tk.Toplevel(self)
         dlg.title("Редактировать тренера" if edit_id else "Добавить тренера")
-        dlg.geometry("620x500" if not edit_id else "620x500")
-        dlg.minsize(500, 480 if not edit_id else 800)
+        dlg.geometry("620x560" if not edit_id else "620x560")
+        dlg.minsize(500, 540 if not edit_id else 860)
         dlg.configure(bg="#161b22")
 
         existing = self.db.get_coach(edit_id) if edit_id else None
@@ -4104,6 +4117,86 @@ class CoachesWindow(ctk.CTkToplevel):
 
         lbl_entry(form, "Клуб:", "club", (existing["club"] or "") if existing else "", row=5)
         lbl_entry(form, "Город/Район:", "city", (existing["city"] or "") if existing else "", row=6)
+
+        # ─── Фото — загружается СРАЗУ в Cloudinary при выборе файла (не при
+        # сохранении формы), чтобы photo_path всегда был готовой ссылкой
+        # https://res.cloudinary.com/..., одинаково доступной и десктопу, и
+        # сайту (см. sync/cloudinary_client.py). Локальный путь в БД больше
+        # не сохраняется — иначе фото было бы видно только на этом компьютере.
+        ctk.CTkLabel(form, text="Фото:", anchor="e", width=110).grid(
+            row=7, column=0, padx=(15, 8), pady=8, sticky="ne")
+
+        photo_path_var = ctk.StringVar(value=(existing["photo_path"] or "") if existing else "")
+
+        photo_block = ctk.CTkFrame(form, fg_color="transparent")
+        photo_block.grid(row=7, column=1, padx=(0, 15), pady=8, sticky="w")
+
+        photo_top_row = ctk.CTkFrame(photo_block, fg_color="transparent")
+        photo_top_row.pack(anchor="w")
+
+        photo_thumb_lbl = ctk.CTkLabel(photo_top_row, text="", width=54, height=64)
+        photo_thumb_lbl.pack(side="left", padx=(0, 10))
+
+        def render_thumb(local_path):
+            if not (PIL_AVAILABLE and local_path):
+                photo_thumb_lbl.configure(image=None, text="")
+                return
+            try:
+                img = Image.open(local_path).resize((54, 64))
+                photo_img = ctk.CTkImage(light_image=img, dark_image=img, size=(54, 64))
+                photo_thumb_lbl.configure(image=photo_img, text="")
+                photo_thumb_lbl.image = photo_img  # держим ссылку — иначе GC уберёт картинку
+            except Exception:
+                photo_thumb_lbl.configure(image=None, text="")
+
+        def choose_photo():
+            p = filedialog.askopenfilename(
+                filetypes=[("Images", "*.png *.jpg *.jpeg *.webp")])
+            if not p:
+                return
+            if not is_configured():
+                messagebox.showwarning(
+                    "Cloudinary не настроен",
+                    "Загрузка фото недоступна: на этом компьютере не заданы "
+                    "переменные окружения CLOUDINARY_CLOUD_NAME / "
+                    "CLOUDINARY_UPLOAD_PRESET.\n\nТренер будет сохранён без фото.")
+                return
+
+            render_thumb(p)  # мгновенный локальный превью, пока идёт загрузка
+            photo_status_lbl.configure(text="Загрузка в Cloudinary…", text_color="#c9a227")
+            upload_btn.configure(state="disabled")
+
+            def worker():
+                try:
+                    url = upload_photo(p, folder="coaches")
+                except CloudinaryUploadError as e:
+                    def on_error():
+                        photo_status_lbl.configure(text=f"Ошибка: {e}", text_color="#d05050")
+                        upload_btn.configure(state="normal")
+                    dlg.after(0, on_error)
+                    return
+
+                def on_success():
+                    photo_path_var.set(url)
+                    photo_status_lbl.configure(text="Загружено ✓", text_color="#3fa34d")
+                    upload_btn.configure(state="normal")
+                dlg.after(0, on_success)
+
+            Thread(target=worker, daemon=True).start()
+
+        upload_btn = ctk.CTkButton(photo_top_row, text="📷 Выбрать", width=90, height=28,
+                    command=choose_photo)
+        upload_btn.pack(side="left")
+
+        photo_status_lbl = ctk.CTkLabel(photo_block, text="", text_color="#8899aa",
+                    anchor="w", justify="left", wraplength=260)
+        photo_status_lbl.pack(anchor="w", pady=(6, 0))
+
+        if photo_path_var.get():
+            photo_status_lbl.configure(text="Загружено ✓", text_color="#3fa34d")
+            render_thumb(resolve_local_photo_path(photo_path_var.get()))
+        else:
+            photo_status_lbl.configure(text="не выбрано")
 
         # ─── Ученики (только при редактировании существующего тренера;
         # во время создания привязка учеников не делается — её выполняют
@@ -4192,12 +4285,13 @@ class CoachesWindow(ctk.CTkToplevel):
             club = fields["club"].get().strip()
             city = fields["city"].get().strip()
             full_name = f"{last_name} {first_name}".strip()
+            photo_path = photo_path_var.get()
             nonlocal edit_id
             if edit_id:
-                self.db.update_coach(edit_id, full_name, club, "", "",
+                self.db.update_coach(edit_id, full_name, club, photo_path, "",
                         first_name, last_name, birth_date, iin, qualification, city)
             else:
-                edit_id = self.db.add_coach(full_name, club, "", "",
+                edit_id = self.db.add_coach(full_name, club, photo_path, "",
                         first_name, last_name, birth_date, iin, qualification, city)
             dlg.title("Редактировать тренера")
             self._refresh_list()

@@ -3,3 +3,4 @@ pillow
 reportlab
 flask
 requests
+python-dotenv
