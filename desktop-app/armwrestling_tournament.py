@@ -3835,10 +3835,12 @@ class AthleteCard(ctk.CTkFrame):
         cat_text = f"Категория: {natural_cat or '—'}"
         if a["rank"]:
             cat_text += f"   |   🥋 {a['rank']}"
-        if a["coach_name"]:
-            cat_text += f"   |   🧑‍🏫 {a['coach_name']}"
         ctk.CTkLabel(self, text=cat_text, font=ctk.CTkFont(size=11), text_color="#5588bb",
-                    anchor="w").grid(row=2, column=col + 1, sticky="w", padx=5, pady=(0, 8))
+                    anchor="w").grid(row=2, column=col + 1, sticky="w", padx=5)
+
+        if a["coach_name"]:
+            ctk.CTkLabel(self, text=f"Тренер: {a['coach_name']}", font=ctk.CTkFont(size=11),
+                        text_color="#44aa77", anchor="w").grid(row=3, column=col + 1, sticky="w", padx=5, pady=(0, 8))
 
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         btn_frame.grid(row=0, column=col + 2, rowspan=3, padx=10, pady=10, sticky="e")
