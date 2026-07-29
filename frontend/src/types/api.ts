@@ -249,6 +249,15 @@ export interface ClubRankingRow {
   bronze_count: number
 }
 
+export interface CoachRankingRow {
+  position: number | null
+  coach_id: number
+  coach_name: string
+  club_name: string | null
+  athletes_count: number
+  points: number
+}
+
 export interface City {
   id: number
   name: string
