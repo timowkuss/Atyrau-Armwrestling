@@ -4042,8 +4042,9 @@ class CoachesWindow(ctk.CTkToplevel):
     def _add_coach_dialog(self, edit_id=None):
         dlg = tk.Toplevel(self)
         dlg.title("Редактировать тренера" if edit_id else "Добавить тренера")
-        dlg.geometry("620x560" if not edit_id else "620x560")
-        dlg.minsize(500, 540 if not edit_id else 860)
+        dlg.geometry("620x580" if not edit_id else "660x900")
+        dlg.minsize(560, 560 if not edit_id else 780)
+        dlg.resizable(False, True)
         dlg.configure(bg="#161b22")
 
         existing = self.db.get_coach(edit_id) if edit_id else None
@@ -4203,22 +4204,30 @@ class CoachesWindow(ctk.CTkToplevel):
         # отдельно, после сохранения, через десктоп или админку) ───
         if existing:
             ctk.CTkLabel(dlg, text="Ученики", font=ctk.CTkFont(size=13, weight="bold"),
-                        text_color="#8899aa").pack(anchor="w", padx=20, pady=(5, 0))
-            athletes_frame = ScrollableFrame(dlg, fg_color="#0d1117", height=180)
-            athletes_frame.pack(fill="both", expand=False, padx=15, pady=(5, 5))
+                        text_color="#8899aa").pack(anchor="w", padx=20, pady=(8, 4))
+
+            athletes_card = ctk.CTkFrame(dlg, fg_color="#0d1117", corner_radius=10,
+                        border_width=1, border_color="#232b36")
+            athletes_card.pack(fill="both", expand=True, padx=20, pady=(0, 8))
+
+            athletes_frame = ScrollableFrame(athletes_card, fg_color="transparent")
+            athletes_frame.pack(fill="both", expand=True, padx=4, pady=4)
 
             def refresh_athletes_list():
                 for w in athletes_frame.winfo_children():
                     w.destroy()
                 assigned = self.db.get_athletes_by_coach(edit_id)
                 if not assigned:
-                    ctk.CTkLabel(athletes_frame, text="Пока нет учеников.",
-                            text_color="#445566").pack(pady=10)
+                    empty = ctk.CTkFrame(athletes_frame, fg_color="transparent")
+                    empty.pack(fill="both", expand=True, pady=30)
+                    ctk.CTkLabel(empty, text="🤷", font=("Arial", 26)).pack()
+                    ctk.CTkLabel(empty, text="Пока нет учеников",
+                            text_color="#445566").pack(pady=(4, 0))
                 for a in assigned:
-                    row = ctk.CTkFrame(athletes_frame, fg_color="transparent")
-                    row.pack(fill="x", padx=5, pady=2)
+                    row = ctk.CTkFrame(athletes_frame, fg_color="#161b22", corner_radius=8)
+                    row.pack(fill="x", padx=6, pady=3)
                     ctk.CTkLabel(row, text=f"{a['last_name']} {a['first_name']}",
-                            anchor="w").pack(side="left", padx=5)
+                            anchor="w").pack(side="left", padx=10, pady=6)
 
                     def unassign(aid=a["id"]):
                         row_data = self.db.get_athlete(aid)
@@ -4231,15 +4240,16 @@ class CoachesWindow(ctk.CTkToplevel):
 
                     ctk.CTkButton(row, text="✕ отвязать", width=90, height=26,
                             fg_color="#3a1010", hover_color="#5a2020",
-                            command=unassign).pack(side="right", padx=5)
+                            command=unassign).pack(side="right", padx=8, pady=6)
 
             refresh_athletes_list()
 
             add_row = ctk.CTkFrame(dlg, fg_color="transparent")
-            add_row.pack(fill="x", padx=15, pady=(0, 10))
+            add_row.pack(fill="x", padx=20, pady=(0, 10))
             assign_search_var = ctk.StringVar()
-            ctk.CTkEntry(add_row, textvariable=assign_search_var, width=300,
-                        placeholder_text="🔍 Найти спортсмена, чтобы привязать...").pack(side="left")
+            ctk.CTkEntry(add_row, textvariable=assign_search_var,
+                        placeholder_text="🔍 Найти спортсмена, чтобы привязать..."
+                        ).pack(side="left", fill="x", expand=True, ipady=2)
 
             def do_assign():
                 q = assign_search_var.get().strip()
@@ -4263,7 +4273,7 @@ class CoachesWindow(ctk.CTkToplevel):
                 refresh_athletes_list()
 
             ctk.CTkButton(add_row, text="➕ Привязать", width=110, height=32,
-                        command=do_assign).pack(side="left", padx=10)
+                        command=do_assign).pack(side="left", padx=(10, 0))
 
         def save():
             first_name = fields["first_name"].get().strip()
