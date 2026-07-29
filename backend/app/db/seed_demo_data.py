@@ -8,6 +8,7 @@
 Идемпотентно: если демо-турнир уже есть — скрипт ничего не делает.
 """
 
+import random
 from datetime import date
 
 from app.db.models.athletes import Athlete
@@ -70,6 +71,9 @@ def seed_demo_data():
 
         athletes = []
         for full_name, birth_date, gender, club, coach, city, rank in athletes_data:
+            prefix = birth_date.strftime("%y%m%d")
+            suffix = f"{random.randint(0, 999999):06d}"
+            iin = prefix + suffix
             athlete = Athlete(
                 full_name=full_name,
                 birth_date=birth_date,
@@ -78,6 +82,7 @@ def seed_demo_data():
                 coach_id=coach.id,
                 city_id=city.id,
                 rank=rank,
+                iin=iin,
             )
             db.add(athlete)
             athletes.append(athlete)

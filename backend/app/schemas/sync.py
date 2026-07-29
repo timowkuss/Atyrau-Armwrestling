@@ -30,6 +30,8 @@ class AthleteSyncCreate(_StrictModel):
     rank: str | None = None
     photo_path: str | None = None
     coach_name: str | None = None
+    iin: str | None = None
+    phone: str | None = None
 
 
 class AthleteSyncUpdate(_StrictModel):
@@ -42,6 +44,8 @@ class AthleteSyncUpdate(_StrictModel):
     rank: str | None = None
     photo_path: str | None = None
     coach_name: str | None = None
+    iin: str | None = None
+    phone: str | None = None
 
 
 class CoachSyncCreate(_StrictModel):
@@ -139,6 +143,8 @@ class AthleteChangeItem(BaseModel):
     rank: str | None
     photo_path: str | None
     coach_name: str | None
+    iin: str | None = None
+    phone: str | None = None
     is_hidden: bool
     updated_at: str
 

@@ -430,6 +430,28 @@ class Database:
                 self.conn.execute(f"ALTER TABLE coaches ADD COLUMN {col} TEXT")
         self.conn.commit()
 
+        a_cols = [r[1] for r in self.conn.execute("PRAGMA table_info(athletes)").fetchall()]
+        if "iin" not in a_cols:
+            self.conn.execute("ALTER TABLE athletes ADD COLUMN iin TEXT")
+        if "phone" not in a_cols:
+            self.conn.execute("ALTER TABLE athletes ADD COLUMN phone TEXT")
+        self.conn.commit()
+
+        rows = self.conn.execute("SELECT id, birth_date FROM athletes WHERE iin IS NULL OR iin=''").fetchall()
+        for r in rows:
+            if r["birth_date"]:
+                try:
+                    bd = datetime.datetime.strptime(r["birth_date"], "%d.%m.%Y")
+                    prefix = bd.strftime("%y%m%d")
+                except:
+                    prefix = datetime.datetime.now().strftime("%y%m%d")
+            else:
+                prefix = datetime.datetime.now().strftime("%y%m%d")
+            suffix = f"{random.randint(0, 999999):06d}"
+            iin = prefix + suffix
+            self.conn.execute("UPDATE athletes SET iin=? WHERE id=?", (iin, r["id"]))
+        self.conn.commit()
+
     def create_tournament(self, name, date, location="", weight_tolerance=0,
                           bracket_system="double", format_type="separate"):
         cur = self.conn.execute(
@@ -503,20 +525,20 @@ class Database:
         return cur.lastrowid
 
     def add_athlete(self, first_name, last_name, birth_date, gender, club="", rank="",
-                     photo_path="", coach_id=None):
+                     photo_path="", coach_id=None, iin="", phone=""):
         cur = self.conn.execute(
-            "INSERT INTO athletes (first_name,last_name,birth_date,gender,club,rank,photo_path,coach_id) "
-            "VALUES (?,?,?,?,?,?,?,?)",
-            (first_name, last_name, birth_date, gender, club, rank, photo_path, coach_id))
+            "INSERT INTO athletes (first_name,last_name,birth_date,gender,club,rank,photo_path,coach_id,iin,phone) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (first_name, last_name, birth_date, gender, club, rank, photo_path, coach_id, iin, phone))
         self.conn.commit()
         return cur.lastrowid
 
     def update_athlete(self, aid, first_name, last_name, birth_date, gender, club, rank,
-                        photo_path, coach_id=None):
+                        photo_path, coach_id=None, iin=None, phone=None):
         self.conn.execute(
             "UPDATE athletes SET first_name=?,last_name=?,birth_date=?,gender=?,club=?,rank=?,"
-            "photo_path=?,coach_id=? WHERE id=?",
-            (first_name, last_name, birth_date, gender, club, rank, photo_path, coach_id, aid))
+            "photo_path=?,coach_id=?,iin=?,phone=? WHERE id=?",
+            (first_name, last_name, birth_date, gender, club, rank, photo_path, coach_id, iin, phone, aid))
         self.conn.commit()
 
     # ── тренеры ──────────────────────────────────────────────────
@@ -814,23 +836,28 @@ def _synced_save_match(self, match: dict):
     return mid
 
 def _synced_add_athlete(self, first_name, last_name, birth_date, gender,
-                         club="", rank="", photo_path="", coach_id=None):
+                         club="", rank="", photo_path="", coach_id=None,
+                         iin="", phone=""):
     aid = _original_add_athlete(self, first_name, last_name, birth_date,
-                                 gender, club, rank, photo_path, coach_id)
+                                 gender, club, rank, photo_path, coach_id,
+                                 iin=iin, phone=phone)
     try:
         coach = self.get_coach(coach_id) if coach_id else None
         sync_manager.on_athlete_created(aid, first_name, last_name,
                                          birth_date, gender, club, rank, photo_path,
-                                         coach_name=coach["full_name"] if coach else None)
+                                         coach_name=coach["full_name"] if coach else None,
+                                         iin=iin, phone=phone)
     except Exception as e:
         print(f"[sync] add_athlete: {e}")
     return aid
 
 
 def _synced_update_athlete(self, aid, first_name, last_name, birth_date,
-                            gender, club, rank, photo_path, coach_id=None):
+                            gender, club, rank, photo_path, coach_id=None,
+                            iin=None, phone=None):
     _original_update_athlete(self, aid, first_name, last_name, birth_date,
-                              gender, club, rank, photo_path, coach_id)
+                              gender, club, rank, photo_path, coach_id,
+                              iin=iin, phone=phone)
     try:
         # coach_name всегда передаём явно ("" если тренер снят) — точно
         # так же, как first_name/birth_date/club выше передаются целиком,
@@ -839,7 +866,8 @@ def _synced_update_athlete(self, aid, first_name, last_name, birth_date,
         coach = self.get_coach(coach_id) if coach_id else None
         sync_manager.on_athlete_updated(aid, first_name, last_name,
                                          birth_date, gender, club, rank, photo_path,
-                                         coach_name=coach["full_name"] if coach else "")
+                                         coach_name=coach["full_name"] if coach else "",
+                                         iin=iin, phone=phone)
     except Exception as e:
         print(f"[sync] update_athlete: {e}")
 
@@ -3799,7 +3827,8 @@ class AthleteCard(ctk.CTkFrame):
         gender_label = "Ж" if a["gender"] == "F" else "М"
         turning_age = datetime.now().year - extract_birth_year(a["birth_date"])
         natural_cat = compute_age_category(a["birth_date"], a["gender"])
-        info = f"🎂 {a['birth_date']} ({turning_age} лет)   {gender_label}   🏛 {a['club'] or '—'}"
+        iin_display = a["iin"] if a["iin"] else "—"
+        info = f"🎂 {a['birth_date']} ({turning_age} лет)   {gender_label}   🏛 {a['club'] or '—'}   ИИН: {iin_display}"
         ctk.CTkLabel(self, text=info, font=ctk.CTkFont(size=11),
                     text_color="#8899aa", anchor="w").grid(row=1, column=col + 1, sticky="w", padx=5)
 
@@ -3962,10 +3991,15 @@ class AthletesWindow(ctk.CTkToplevel):
 
         lbl_entry(form, "Имя*:", "first_name", existing["first_name"] if existing else "", row=0)
         lbl_entry(form, "Фамилия*:", "last_name", existing["last_name"] if existing else "", row=1)
+        lbl_entry(form, "ИИН* (12 цифр):", "iin", existing["iin"] if existing else "", row=2,
+                  placeholder="12 цифр")
 
         # ─── Дата рождения с автоматической маской дд.мм.гггг ───
+        lbl_entry(form, "Телефон:", "phone", existing["phone"] if existing else "", row=3,
+                  placeholder="8(702)313-53-83")
+
         ctk.CTkLabel(form, text="Дата рожд.*:", anchor="e", width=110).grid(
-            row=2, column=0, padx=(15, 8), pady=8, sticky="e")
+            row=4, column=0, padx=(15, 8), pady=8, sticky="e")
         birth_date_var = ctk.StringVar(value=existing["birth_date"] if existing else "")
         birth_entry = ctk.CTkEntry(form, textvariable=birth_date_var, width=260,
                     placeholder_text="  .  .    ")
@@ -3992,24 +4026,24 @@ class AthletesWindow(ctk.CTkToplevel):
 
         # ─── Пол ───
         ctk.CTkLabel(form, text="Пол*:", anchor="e", width=110).grid(
-            row=3, column=0, padx=(15, 8), pady=8, sticky="e")
+            row=5, column=0, padx=(15, 8), pady=8, sticky="e")
         gender_display = {"M": "Мужской", "F": "Женский"}
         gender_reverse = {"Мужской": "M", "Женский": "F"}
         gender_var = ctk.StringVar(
             value=gender_display.get(existing["gender"], "Мужской") if existing else "Мужской")
         ctk.CTkOptionMenu(form, variable=gender_var,
                     values=["Мужской", "Женский"], width=260
-                    ).grid(row=3, column=1, padx=(0, 15), pady=8, sticky="w")
+                    ).grid(row=5, column=1, padx=(0, 15), pady=8, sticky="w")
 
-        lbl_entry(form, "Клуб:", "club", existing["club"] or "" if existing else "", row=4)
+        lbl_entry(form, "Клуб:", "club", existing["club"] or "" if existing else "", row=6)
 
         # ─── Звание (выпадающий список, обязательное) ───
         ctk.CTkLabel(form, text="Звание*:", anchor="e", width=110).grid(
-            row=5, column=0, padx=(15, 8), pady=8, sticky="e")
+            row=7, column=0, padx=(15, 8), pady=8, sticky="e")
         rank_var = ctk.StringVar(
             value=existing["rank"] if existing and existing["rank"] in RANKS else "Без звания")
         ctk.CTkOptionMenu(form, variable=rank_var, values=RANKS, width=260
-                    ).grid(row=5, column=1, padx=(0, 15), pady=8, sticky="w")
+                    ).grid(row=7, column=1, padx=(0, 15), pady=8, sticky="w")
 
         # ─── Тренер (только при редактировании; при создании спортсмена
         # привязка к тренеру не делается — её выполняют отдельно, после
@@ -4017,11 +4051,11 @@ class AthletesWindow(ctk.CTkToplevel):
         _NO_COACH = "— нет —"
         coach_display_to_id = {_NO_COACH: None}
         coach_var = ctk.StringVar(value=_NO_COACH)
-        photo_row_num = 6
+        photo_row_num = 8
 
         if existing:
             ctk.CTkLabel(form, text="Тренер:", anchor="e", width=110).grid(
-                row=6, column=0, padx=(15, 8), pady=8, sticky="e")
+                row=8, column=0, padx=(15, 8), pady=8, sticky="e")
             coaches = self.db.get_coaches()
             for c in coaches:
                 coach_display_to_id[c["full_name"]] = c["id"]
@@ -4033,8 +4067,8 @@ class AthletesWindow(ctk.CTkToplevel):
             coach_var.set(existing_coach_name)
             ctk.CTkOptionMenu(form, variable=coach_var,
                         values=[_NO_COACH] + [c["full_name"] for c in coaches], width=260
-                        ).grid(row=6, column=1, padx=(0, 15), pady=8, sticky="w")
-            photo_row_num = 7
+                        ).grid(row=8, column=1, padx=(0, 15), pady=8, sticky="w")
+            photo_row_num = 9
 
         # ─── Фото (в отдельной строке, чтобы не наезжало на кнопку) ───
         ctk.CTkLabel(form, text="Фото:", anchor="e", width=110).grid(
@@ -4081,12 +4115,20 @@ class AthletesWindow(ctk.CTkToplevel):
         gender_var.trace_add("write", update_preview)
         update_preview()
 
+        def validate_iin(value):
+            return bool(value and len(value) == 12 and value.isdigit())
+
         def save():
             first_name = fields["first_name"].get().strip()
             last_name = fields["last_name"].get().strip()
             birth_date = birth_date_var.get().strip()
+            iin = fields["iin"].get().strip()
+            phone = fields["phone"].get().strip()
             if not first_name or not last_name:
                 messagebox.showwarning("Ошибка", "Введите имя и фамилию.")
+                return
+            if not validate_iin(iin):
+                messagebox.showwarning("Ошибка", "ИИН должен содержать 12 цифр.")
                 return
             try:
                 datetime.strptime(birth_date, "%d.%m.%Y")
@@ -4099,10 +4141,12 @@ class AthletesWindow(ctk.CTkToplevel):
             coach_id = coach_display_to_id.get(coach_var.get())
             if edit_id:
                 self.db.update_athlete(edit_id, first_name, last_name, birth_date,
-                        gender, club, rank, photo_path_var.get(), coach_id)
+                        gender, club, rank, photo_path_var.get(), coach_id,
+                        iin=iin, phone=phone)
             else:
                 self.db.add_athlete(first_name, last_name, birth_date,
-                        gender, club, rank, photo_path_var.get(), coach_id)
+                        gender, club, rank, photo_path_var.get(), coach_id,
+                        iin=iin, phone=phone)
             print("Сохраняю спортсмена")
             dlg.destroy()
             self._refresh_list()
@@ -4227,12 +4271,8 @@ class CoachesWindow(ctk.CTkToplevel):
     def _add_coach_dialog(self, edit_id=None):
         dlg = tk.Toplevel(self)
         dlg.title("Редактировать тренера" if edit_id else "Добавить тренера")
-        scr_w = dlg.winfo_screenwidth()
-        scr_h = dlg.winfo_screenheight()
-        w = min(960, scr_w - 80)
-        h = min(760, scr_h - 120)
-        dlg.geometry(f"{w}x{h}")
-        dlg.minsize(800, 600)
+        dlg.geometry("1300x810")
+        dlg.minsize(1300, 650)
         dlg.resizable(True, True)
         dlg.configure(bg="#0d1117")
         dlg.transient(self)

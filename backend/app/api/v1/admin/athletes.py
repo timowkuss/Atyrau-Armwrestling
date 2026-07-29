@@ -57,6 +57,8 @@ def list_athletes_admin(
             rank=athlete.rank,
             photo_path=athlete.photo_path,
             is_hidden=athlete.is_hidden,
+            iin=athlete.iin,
+            phone=athlete.phone,
         )
         for athlete, club_name, coach_name, city_name in rows
     ]
@@ -68,7 +70,11 @@ def create_athlete(
     db: Session = Depends(get_db),
     _: User = Depends(require_role(*WRITE_ROLES)),
 ):
-    athlete = Athlete(**payload.model_dump())
+    athlete = Athlete(**payload.model_dump(exclude={"iin", "phone"}))
+    if payload.iin:
+        athlete.iin = payload.iin
+    if payload.phone:
+        athlete.phone = payload.phone
     db.add(athlete)
     db.flush()
     db.add(AthleteStatistic(athlete_id=athlete.id))

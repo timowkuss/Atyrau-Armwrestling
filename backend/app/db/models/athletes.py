@@ -61,6 +61,9 @@ class Athlete(Base):
     # тот же формат ARM###### что использует BadgeGenerator в десктопе
     external_barcode_id: Mapped[str | None] = mapped_column(String(30), unique=True)
 
+    iin: Mapped[str | None] = mapped_column(String(12), unique=True)
+    phone: Mapped[str | None] = mapped_column(String(30))
+
     is_hidden: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

@@ -17,6 +17,8 @@ class AthleteListOut(BaseModel):
 
 class AthleteAdminListOut(AthleteListOut):
     is_hidden: bool
+    iin: str | None = None
+    phone: str | None = None
 
 
 class AthleteStatisticsOut(BaseModel):
@@ -55,6 +57,8 @@ class AthleteDetailOut(BaseModel):
     photo_path: str | None
     bio: str | None
     statistics: AthleteStatisticsOut | None
+    iin: str | None = None
+    phone: str | None = None
 
 
 class AthleteCompetitionHistoryItem(BaseModel):
@@ -88,6 +92,8 @@ class AthleteCreate(BaseModel):
     rank: str | None = None
     photo_path: str | None = None
     bio: str | None = None
+    iin: str
+    phone: str | None = None
 
 
 class AthleteUpdate(BaseModel):
@@ -103,6 +109,8 @@ class AthleteUpdate(BaseModel):
     photo_path: str | None = None
     bio: str | None = None
     is_hidden: bool | None = None
+    iin: str | None = None
+    phone: str | None = None
     # external_barcode_id НЕ включён — это идентификатор из десктопа
     # (BadgeGenerator), сайт его не назначает и не меняет.
 

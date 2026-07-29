@@ -174,11 +174,13 @@ class SyncManager:
 
     # ── спортсмен: карточка из локальной таблицы athletes ───────
     def on_athlete_created(self, aid, first_name, last_name, birth_date,
-                           gender, club, rank, photo_path, coach_name=None):
+                           gender, club, rank, photo_path, coach_name=None,
+                           iin=None, phone=None):
         payload = {
             "aid": aid, "first_name": first_name, "last_name": last_name,
             "birth_date": birth_date, "gender": gender, "club": club,
             "rank": rank, "photo_path": photo_path, "coach_name": coach_name,
+            "iin": iin, "phone": phone,
         }
 
         def go():
@@ -190,6 +192,8 @@ class SyncManager:
                 rank=rank or None,
                 photo_path=photo_path or None,
                 coach_name=coach_name or None,
+                iin=iin or None,
+                phone=phone or None,
             )
             self.state.map_set("athlete", aid, remote["id"])
             return remote["id"]
@@ -197,12 +201,14 @@ class SyncManager:
         return self._try("create_athlete", payload, go)
 
     def on_athlete_updated(self, aid, first_name, last_name, birth_date,
-                           gender, club, rank, photo_path, coach_name=None):
+                           gender, club, rank, photo_path, coach_name=None,
+                           iin=None, phone=None):
         remote_athlete_id = self.state.map_get("athlete", aid)
         payload = {
             "aid": aid, "first_name": first_name, "last_name": last_name,
             "birth_date": birth_date, "gender": gender, "club": club,
             "rank": rank, "photo_path": photo_path, "coach_name": coach_name,
+            "iin": iin, "phone": phone,
         }
         if remote_athlete_id is None:
             self.state.enqueue("update_athlete", payload)
@@ -222,6 +228,8 @@ class SyncManager:
                 # api_client.update_athlete, поэтому передаём coach_name как
                 # есть, без "or None" (в отличие от club/rank/photo_path выше).
                 coach_name=coach_name,
+                iin=iin,
+                phone=phone,
             )
             return remote_athlete_id
 
@@ -951,6 +959,8 @@ class SyncManager:
                     rank=payload.get("rank") or None,
                     photo_path=payload.get("photo_path") or None,
                     coach_name=payload.get("coach_name") or None,
+                    iin=payload.get("iin") or None,
+                    phone=payload.get("phone") or None,
                 )
                 self.state.map_set("athlete", payload["aid"], remote["id"])
                 return True
@@ -974,6 +984,8 @@ class SyncManager:
                         rank=payload.get("rank") or None,
                         photo_path=payload.get("photo_path") or None,
                         coach_name=payload.get("coach_name"),
+                        iin=payload.get("iin"),
+                        phone=payload.get("phone"),
                     )
                 except ApiClientError as e:
                     if e.status_code == 404:

@@ -266,6 +266,8 @@ class PullSyncManager:
         club = item.get("club_name")
         rank = item.get("rank")
         photo_path = item.get("photo_path")
+        iin = item.get("iin")
+        phone = item.get("phone")
         coach_id = self._resolve_local_coach_id(conn, item.get("coach_name"))
 
         local_id = self.state.map_get_local("athlete", remote_id)
@@ -281,16 +283,16 @@ class PullSyncManager:
         if local_id is not None:
             conn.execute(
                 "UPDATE athletes SET first_name=?, last_name=?, birth_date=?, "
-                "gender=?, club=?, rank=?, photo_path=?, coach_id=? WHERE id=?",
+                "gender=?, club=?, rank=?, photo_path=?, coach_id=?, iin=?, phone=? WHERE id=?",
                 (first_name, last_name, birth_date, gender, club, rank, photo_path,
-                 coach_id, local_id),
+                 coach_id, iin, phone, local_id),
             )
             return
 
         cur = conn.execute(
             "INSERT INTO athletes (first_name, last_name, birth_date, gender, club, "
-            "rank, photo_path, coach_id) VALUES (?,?,?,?,?,?,?,?)",
-            (first_name, last_name, birth_date, gender, club, rank, photo_path, coach_id),
+            "rank, photo_path, coach_id, iin, phone) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (first_name, last_name, birth_date, gender, club, rank, photo_path, coach_id, iin, phone),
         )
         self.state.map_set("athlete", cur.lastrowid, remote_id)
 

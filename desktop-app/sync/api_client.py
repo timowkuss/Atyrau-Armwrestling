@@ -59,16 +59,17 @@ class SyncApiClient:
         return self._request("GET", "/athletes/search", params=params)
 
     def create_athlete(self, full_name, club_name=None, gender=None, birth_date=None,
-                        rank=None, photo_path=None, coach_name=None):
+                        rank=None, photo_path=None, coach_name=None, iin=None, phone=None):
         return self._request("POST", "/athletes", json_body={
             "full_name": full_name, "club_name": club_name,
             "gender": gender, "birth_date": birth_date, "rank": rank,
             "photo_path": photo_path, "coach_name": coach_name,
+            "iin": iin, "phone": phone,
         })
 
     def update_athlete(self, remote_athlete_id, full_name=None, club_name=None,
                         gender=None, birth_date=None, rank=None, photo_path=None,
-                        coach_name=UNSET):
+                        coach_name=UNSET, iin=UNSET, phone=UNSET):
         body = {}
         if full_name is not None:
             body["full_name"] = full_name
@@ -86,6 +87,10 @@ class SyncApiClient:
             # "" — явная отвязка тренера, отличается от "не передано вовсе"
             # (та же логика сентинела, что у table_number в update_match).
             body["coach_name"] = coach_name
+        if iin is not UNSET:
+            body["iin"] = iin
+        if phone is not UNSET:
+            body["phone"] = phone
         return self._request("PATCH", f"/athletes/{remote_athlete_id}", json_body=body)
 
     # ── тренеры ──────────────────────────────────────────────

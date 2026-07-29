@@ -156,6 +156,8 @@ def get_athlete_changes(
             rank=a.rank,
             photo_path=a.photo_path,
             coach_name=coach_name,
+            iin=a.iin,
+            phone=a.phone,
             is_hidden=a.is_hidden,
             updated_at=a.updated_at.isoformat(),
         )
@@ -217,6 +219,8 @@ def create_athlete(
         coach_id=coach_id,
         rank=payload.rank,
         photo_path=payload.photo_path,
+        iin=payload.iin,
+        phone=payload.phone,
     )
     db.add(athlete)
     db.flush()
@@ -241,6 +245,10 @@ def update_athlete(
         athlete.club_id = _find_or_create_club(db, data.pop("club_name"))
     if "coach_name" in data:
         athlete.coach_id = _find_coach(db, data.pop("coach_name"))
+    if "iin" in data:
+        athlete.iin = data.pop("iin")
+    if "phone" in data:
+        athlete.phone = data.pop("phone")
     if "birth_date" in data and data["birth_date"]:
         data["birth_date"] = _parse_birth_date(data["birth_date"])
     if "gender" in data and data["gender"]:
