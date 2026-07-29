@@ -129,6 +129,7 @@ class AthleteChangeItem(BaseModel):
     birth_date: str | None
     rank: str | None
     photo_path: str | None
+    coach_name: str | None
     is_hidden: bool
     updated_at: str
 

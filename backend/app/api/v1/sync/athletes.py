@@ -141,7 +141,7 @@ def get_athlete_changes(
 
     server_time = datetime.now(timezone.utc)
 
-    query = db.query(Athlete, Club.name).outerjoin(Club, Athlete.club_id == Club.id)
+    query = db.query(Athlete, Club.name, Coach.full_name).outerjoin(Club, Athlete.club_id == Club.id).outerjoin(Coach, Athlete.coach_id == Coach.id)
     if since_dt is not None:
         query = query.filter(Athlete.updated_at > since_dt)
     rows = query.all()
@@ -155,10 +155,11 @@ def get_athlete_changes(
             birth_date=a.birth_date.isoformat() if a.birth_date else None,
             rank=a.rank,
             photo_path=a.photo_path,
+            coach_name=coach_name,
             is_hidden=a.is_hidden,
             updated_at=a.updated_at.isoformat(),
         )
-        for a, club_name in rows
+        for a, club_name, coach_name in rows
     ]
 
     deleted: list[int] = []
