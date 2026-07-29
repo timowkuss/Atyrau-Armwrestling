@@ -214,6 +214,8 @@ export interface CoachDetail extends CoachListItem {
 // CoachAdminListOut/CoachAdminDetailOut в backend/app/schemas/coaches.py.
 export interface CoachAdminListItem extends CoachListItem {
   iin: string | null
+  first_name: string | null
+  last_name: string | null
 }
 
 export interface NewsListItem {

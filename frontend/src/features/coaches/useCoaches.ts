@@ -1,7 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 
-export function useCoaches(params?: { club_id?: number; page?: number; page_size?: number }) {
+export function useCoaches(params?: {
+  name?: string
+  club_id?: number
+  page?: number
+  page_size?: number
+}) {
   return useQuery({
     queryKey: ['coaches', params],
     queryFn: () => api.coaches.list(params),

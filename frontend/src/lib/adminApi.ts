@@ -5,6 +5,7 @@ import type {
   AthleteStatisticsAdmin,
   AthleteStatisticsUpdateInput,
   AthleteUpdateInput,
+  City,
   ClubInput,
   CoachAdminListItem,
   CoachInput,
@@ -104,6 +105,13 @@ export const adminApi = {
   },
   // Клубы/тренеры: GET-листинга в /admin нет — читать через api.clubs /
   // api.coaches (public), писать здесь.
+  reference: {
+    // Находит город по названию или создаёт новый — так поле города в
+    // формах админки можно заполнять свободным текстом, а не только
+    // выбором из фиксированного справочника.
+    resolveCity: (token: string, name: string) =>
+      authedRequest<City>(token, 'POST', '/admin/reference/cities', { name }),
+  },
   clubs: {
     create: (token: string, payload: ClubInput) =>
       authedRequest<CreatedRef>(token, 'POST', '/admin/clubs', payload),

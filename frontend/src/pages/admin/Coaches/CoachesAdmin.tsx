@@ -2,10 +2,10 @@ import { useState } from 'react'
 import { useAuth } from '@/features/auth/AuthContext'
 import { useAdminClubsList } from '@/features/admin/useClubsAdmin'
 import { useAdminCoachesList, useCreateCoach, useDeleteCoach, useUpdateCoach } from '@/features/admin/useCoachesAdmin'
-import { useCities } from '@/features/useCities'
 import { LoadingState, ErrorState } from '@/components/ui/States'
 import { FeedbackBanner } from '@/components/admin/FeedbackBanner'
 import { PhotoUploadField } from '@/components/admin/PhotoUploadField'
+import { CityCombobox } from '@/components/admin/CityCombobox'
 import { COACH_QUALIFICATIONS, type CoachInput } from '@/types/api'
 
 const EMPTY_FORM: CoachInput = {
@@ -32,7 +32,6 @@ export function CoachesAdmin() {
   const canDelete = user?.role_code === 'super_admin'
   const coaches = useAdminCoachesList()
   const clubs = useAdminClubsList()
-  const cities = useCities()
   const createCoach = useCreateCoach()
   const updateCoach = useUpdateCoach()
   const deleteCoach = useDeleteCoach()
@@ -177,18 +176,11 @@ export function CoachesAdmin() {
                 </option>
               ))}
             </select>
-            <select
-              value={form.city_id ?? ''}
-              onChange={(e) => setForm({ ...form, city_id: e.target.value ? Number(e.target.value) : undefined })}
+            <CityCombobox
+              placeholder="Город/Район"
               className={inputClass}
-            >
-              <option value="">Город/Район — не указан</option>
-              {cities.data?.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.region_name})
-                </option>
-              ))}
-            </select>
+              onChange={(cityId) => setForm({ ...form, city_id: cityId })}
+            />
           </div>
           <PhotoUploadField
             value={form.photo_path}
@@ -213,6 +205,20 @@ export function CoachesAdmin() {
               <li key={coach.id} className="plate rounded-[var(--radius-rivet)] p-4">
                 {editingId === coach.id ? (
                   <div className="flex flex-col gap-3">
+                    <div className="flex flex-wrap gap-3">
+                      <input
+                        placeholder="Имя"
+                        defaultValue={coach.first_name ?? ''}
+                        onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
+                        className={inputClass}
+                      />
+                      <input
+                        placeholder="Фамилия"
+                        defaultValue={coach.last_name ?? ''}
+                        onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
+                        className={inputClass}
+                      />
+                    </div>
                     <div className="flex flex-wrap gap-3">
                       <input
                         placeholder="ИИН: оставить прежний"
@@ -248,18 +254,12 @@ export function CoachesAdmin() {
                           </option>
                         ))}
                       </select>
-                      <select
-                        defaultValue=""
-                        onChange={(e) => setEditForm({ ...editForm, city_id: e.target.value ? Number(e.target.value) : undefined })}
+                      <CityCombobox
+                        initialText={coach.city_name ?? ''}
+                        placeholder="Город/Район"
                         className={inputClass}
-                      >
-                        <option value="">Город: оставить «{coach.city_name ?? 'не указан'}»</option>
-                        {cities.data?.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name} ({c.region_name})
-                          </option>
-                        ))}
-                      </select>
+                        onChange={(cityId) => setEditForm({ ...editForm, city_id: cityId })}
+                      />
                     </div>
                     <PhotoUploadField
                       value={editForm.photo_path}

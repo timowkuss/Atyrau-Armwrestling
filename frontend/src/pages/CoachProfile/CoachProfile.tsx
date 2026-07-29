@@ -42,7 +42,7 @@ export function CoachProfile() {
       </Link>
 
       <div className="plate mt-4 flex flex-col gap-6 rounded-[var(--radius-rivet)] p-6 sm:flex-row sm:items-center">
-        <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-brass/50 bg-ink font-display text-2xl text-steel">
+        <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-rivet)] border-2 border-brass/50 bg-ink font-display text-2xl text-steel">
           {c.photo_path ? (
             <img src={c.photo_path} alt="" className="h-full w-full object-cover" />
           ) : (

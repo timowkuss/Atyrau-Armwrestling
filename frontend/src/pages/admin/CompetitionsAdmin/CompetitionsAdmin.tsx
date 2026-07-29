@@ -6,9 +6,9 @@ import {
   useDeleteDocument,
   useUpdateCompetition,
 } from '@/features/admin/useCompetitionsAdmin'
-import { useCities } from '@/features/useCities'
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/States'
 import { FeedbackBanner } from '@/components/admin/FeedbackBanner'
+import { CityCombobox } from '@/components/admin/CityCombobox'
 import type { CompetitionAdminUpdateInput, GalleryDocumentInput } from '@/types/api'
 
 export function CompetitionsAdmin() {
@@ -57,6 +57,7 @@ export function CompetitionsAdmin() {
                       description: c.description,
                       poster_path: c.poster_path,
                       regulations_doc_path: c.regulations_doc_path,
+                      location_city_name: c.location_city_name,
                     }}
                   />
                 )}
@@ -74,10 +75,14 @@ function CompetitionEditPanel({
   initial,
 }: {
   competitionId: number
-  initial: { description: string | null; poster_path: string | null; regulations_doc_path: string | null }
+  initial: {
+    description: string | null
+    poster_path: string | null
+    regulations_doc_path: string | null
+    location_city_name: string | null
+  }
 }) {
   const updateCompetition = useUpdateCompetition()
-  const cities = useCities()
   const documents = useAdminDocuments(competitionId)
   const createDocument = useCreateDocument()
   const deleteDocument = useDeleteDocument()
@@ -146,18 +151,12 @@ function CompetitionEditPanel({
             onChange={(e) => setForm({ ...form, regulations_doc_path: e.target.value })}
             className="flex-1 min-w-[200px] rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
           />
-          <select
-            value={form.location_city_id ?? ''}
-            onChange={(e) => setForm({ ...form, location_city_id: e.target.value ? Number(e.target.value) : undefined })}
+          <CityCombobox
+            initialText={initial.location_city_name ?? ''}
+            placeholder="Город"
             className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
-          >
-            <option value="">Город: не менять</option>
-            {cities.data?.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+            onChange={(cityId) => setForm({ ...form, location_city_id: cityId })}
+          />
         </div>
         <button
           onClick={handleSave}

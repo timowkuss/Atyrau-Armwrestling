@@ -239,6 +239,13 @@ class Database:
         # падении ОС) и на порядок быстрее дефолтного FULL.
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA synchronous=NORMAL")
+        # Встроенный SQL lower() у SQLite понимает только ASCII и не трогает
+        # кириллицу («Иванов» → «Иванов», а не «иванов») — из-за этого поиск
+        # по ФИО (тренеры, спортсмены) не находил вообще ничего при вводе на
+        # русском. Подменяем на Python-реализацию str.lower(), которая
+        # корректно работает с юникодом — чинит все места, использующие
+        # lower(...) LIKE ? одним махом.
+        self.conn.create_function("lower", 1, lambda s: s.lower() if s is not None else None)
         self._create_tables()
 
     def _create_tables(self):

@@ -98,7 +98,7 @@ export const api = {
       request<Page<ClubListItem>>('/public/clubs', params),
   },
   coaches: {
-    list: (params?: { club_id?: number; page?: number; page_size?: number }) =>
+    list: (params?: { name?: string; club_id?: number; page?: number; page_size?: number }) =>
       request<Page<CoachListItem>>('/public/coaches', params),
     get: (id: number) => request<CoachDetail>(`/public/coaches/${id}`),
   },

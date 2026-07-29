@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useAuth } from '@/features/auth/AuthContext'
-import { useCities } from '@/features/useCities'
 import { useAdminClubsList, useCreateClub, useDeleteClub, useUpdateClub } from '@/features/admin/useClubsAdmin'
 import { LoadingState, ErrorState } from '@/components/ui/States'
 import { FeedbackBanner } from '@/components/admin/FeedbackBanner'
+import { CityCombobox } from '@/components/admin/CityCombobox'
 import type { ClubInput } from '@/types/api'
 
 const EMPTY_FORM: ClubInput = { name: '', description: '', city_id: undefined, founded_year: undefined, logo_path: '' }
@@ -12,7 +12,6 @@ export function ClubsAdmin() {
   const { user } = useAuth()
   const canDelete = user?.role_code === 'super_admin'
   const clubs = useAdminClubsList()
-  const cities = useCities()
   const createClub = useCreateClub()
   const updateClub = useUpdateClub()
   const deleteClub = useDeleteClub()
@@ -100,18 +99,11 @@ export function ClubsAdmin() {
             className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
           />
           <div className="flex flex-wrap gap-3">
-            <select
-              value={form.city_id ?? ''}
-              onChange={(e) => setForm({ ...form, city_id: e.target.value ? Number(e.target.value) : undefined })}
+            <CityCombobox
+              placeholder="Город"
               className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
-            >
-              <option value="">Город — не указан</option>
-              {cities.data?.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+              onChange={(cityId) => setForm({ ...form, city_id: cityId })}
+            />
             <input
               type="number"
               placeholder="Год основания"
@@ -145,18 +137,12 @@ export function ClubsAdmin() {
                       className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
                     />
                     <div className="flex flex-wrap gap-3">
-                      <select
-                        defaultValue=""
-                        onChange={(e) => setEditForm({ ...editForm, city_id: e.target.value ? Number(e.target.value) : undefined })}
+                      <CityCombobox
+                        initialText={club.city_name ?? ''}
+                        placeholder="Город"
                         className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
-                      >
-                        <option value="">Город: оставить «{club.city_name ?? 'не указан'}»</option>
-                        {cities.data?.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={(cityId) => setEditForm({ ...editForm, city_id: cityId })}
+                      />
                       <input
                         type="number"
                         placeholder="Год основания"

@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useAuth } from '@/features/auth/AuthContext'
 import { useAdminClubsList } from '@/features/admin/useClubsAdmin'
 import { useAdminCoachesList } from '@/features/admin/useCoachesAdmin'
-import { useCities } from '@/features/useCities'
 import {
   useAdminAthleteStatistics,
   useAdminAthletes,
@@ -15,6 +14,7 @@ import {
 import { LoadingState, ErrorState } from '@/components/ui/States'
 import { FeedbackBanner } from '@/components/admin/FeedbackBanner'
 import { PhotoUploadField } from '@/components/admin/PhotoUploadField'
+import { CityCombobox } from '@/components/admin/CityCombobox'
 import type { AthleteInput, AthleteStatisticsUpdateInput, Gender } from '@/types/api'
 
 const EMPTY_FORM: AthleteInput = { full_name: '', gender: 'male' }
@@ -27,7 +27,6 @@ export function AthletesAdmin() {
   const athletes = useAdminAthletes(search || undefined)
   const clubs = useAdminClubsList()
   const coaches = useAdminCoachesList()
-  const cities = useCities()
 
   const createAthlete = useCreateAthlete()
   const updateAthlete = useUpdateAthlete()
@@ -150,18 +149,11 @@ export function AthletesAdmin() {
                 </option>
               ))}
             </select>
-            <select
-              value={form.city_id ?? ''}
-              onChange={(e) => setForm({ ...form, city_id: e.target.value ? Number(e.target.value) : undefined })}
+            <CityCombobox
+              placeholder="Город"
               className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
-            >
-              <option value="">Город — не указан</option>
-              {cities.data?.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+              onChange={(cityId) => setForm({ ...form, city_id: cityId })}
+            />
           </div>
           <PhotoUploadField
             value={form.photo_path}
@@ -236,6 +228,12 @@ export function AthletesAdmin() {
                           </option>
                         ))}
                       </select>
+                      <CityCombobox
+                        initialText={a.city_name ?? ''}
+                        placeholder="Город"
+                        className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+                        onChange={(cityId) => setEditForm({ ...editForm, city_id: cityId })}
+                      />
                     </div>
                     <PhotoUploadField
                       value={editForm.photo_path}

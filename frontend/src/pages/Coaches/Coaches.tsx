@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useCoaches } from '@/features/coaches/useCoaches'
 import { CoachCard } from '@/components/ui/CoachCard'
@@ -8,9 +9,13 @@ const PAGE_SIZE = 12
 
 export function Coaches() {
   const [params, setParams] = useSearchParams()
+  const [nameInput, setNameInput] = useState(params.get('name') ?? '')
+
   const page = Number(params.get('page') ?? '1')
+  const name = params.get('name') ?? undefined
 
   const { data, isLoading, isError, error, refetch, isPlaceholderData } = useCoaches({
+    name,
     page,
     page_size: PAGE_SIZE,
   })
@@ -19,7 +24,13 @@ export function Coaches() {
     const next = new URLSearchParams(params)
     if (value) next.set(key, value)
     else next.delete(key)
+    next.delete('page')
     setParams(next)
+  }
+
+  function submitName(e: React.FormEvent) {
+    e.preventDefault()
+    updateParam('name', nameInput.trim() || null)
   }
 
   return (
@@ -30,10 +41,49 @@ export function Coaches() {
         Тренерский состав федерации Атырауской области — клубы, звания и подопечные спортсмены.
       </p>
 
+      <div className="plate mt-8 flex flex-col gap-4 rounded-[var(--radius-rivet)] p-4 sm:flex-row sm:flex-wrap sm:items-end">
+        <form onSubmit={submitName} className="flex flex-1 flex-col gap-1 min-w-[200px]">
+          <label htmlFor="coach-name" className="text-eyebrow text-steel">
+            Имя
+          </label>
+          <input
+            id="coach-name"
+            value={nameInput}
+            onChange={(e) => setNameInput(e.target.value)}
+            placeholder="Поиск по имени…"
+            className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone placeholder:text-steel-dim focus:border-brass focus:outline-none"
+          />
+        </form>
+
+        <button
+          type="button"
+          onClick={submitName}
+          className="rounded-[var(--radius-rivet)] bg-rust px-4 py-2 text-sm font-semibold text-bone transition-colors hover:bg-rust-dim"
+        >
+          Применить
+        </button>
+
+        {name && (
+          <button
+            type="button"
+            onClick={() => {
+              setNameInput('')
+              setParams(new URLSearchParams())
+            }}
+            className="text-sm text-steel underline decoration-steel-dim hover:text-brass"
+          >
+            Сбросить
+          </button>
+        )}
+      </div>
+
       <div className="mt-8">
         {isLoading && <LoadingState label="Загрузка тренеров" />}
         {isError && <ErrorState message={(error as Error).message} onRetry={() => refetch()} />}
-        {data && data.items.length === 0 && (
+        {data && data.items.length === 0 && name && (
+          <EmptyState title="Никого не нашли" message="Попробуйте изменить запрос поиска." />
+        )}
+        {data && data.items.length === 0 && !name && (
           <EmptyState title="Пока никого нет" message="Тренеры появятся здесь после регистрации в федерации." />
         )}
         {data && data.items.length > 0 && (
