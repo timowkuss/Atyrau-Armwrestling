@@ -1948,9 +1948,10 @@ class ParticipantCard(ctk.CTkFrame):
         p = participant
 
         photo_label = ctk.CTkLabel(self, text="👤", font=("Arial", 28), width=50)
-        if PIL_AVAILABLE and p["photo_path"] and Path(p["photo_path"]).exists():
+        local_photo = resolve_local_photo_path(p["photo_path"]) if PIL_AVAILABLE and p["photo_path"] else None
+        if local_photo:
             try:
-                img = Image.open(p["photo_path"]).resize((50, 60))
+                img = Image.open(local_photo).resize((50, 60))
                 photo = ctk.CTkImage(img, size=(50, 60))
                 photo_label = ctk.CTkLabel(self, image=photo, text="")
                 photo_label._image = photo
@@ -2004,9 +2005,10 @@ class ParticipantGroupCard(ctk.CTkFrame):
 
         photo_label = ctk.CTkLabel(photo_holder, text="👤",
                     font=("Arial", 30), text_color="#556677")
-        if PIL_AVAILABLE and first["photo_path"] and Path(first["photo_path"]).exists():
+        local_photo = resolve_local_photo_path(first["photo_path"]) if PIL_AVAILABLE and first["photo_path"] else None
+        if local_photo:
             try:
-                img = Image.open(first["photo_path"])
+                img = Image.open(local_photo)
                 img = ImageOps.exif_transpose(img)
                 img = ImageOps.fit(img, (self.PHOTO_W, self.PHOTO_H), Image.LANCZOS)
                 photo = ctk.CTkImage(img, size=(self.PHOTO_W, self.PHOTO_H))
@@ -3810,9 +3812,10 @@ class AthleteCard(ctk.CTkFrame):
             col = 1
 
         photo_label = ctk.CTkLabel(self, text="👤", font=("Arial", 28), width=50)
-        if PIL_AVAILABLE and a["photo_path"] and Path(a["photo_path"]).exists():
+        local_photo = resolve_local_photo_path(a["photo_path"]) if PIL_AVAILABLE and a["photo_path"] else None
+        if local_photo:
             try:
-                img = Image.open(a["photo_path"]).resize((50, 60))
+                img = Image.open(local_photo).resize((50, 60))
                 photo = ctk.CTkImage(img, size=(50, 60))
                 photo_label = ctk.CTkLabel(self, image=photo, text="")
                 photo_label._image = photo
