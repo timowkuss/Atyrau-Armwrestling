@@ -341,6 +341,8 @@ class Database:
             FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
             FOREIGN KEY (category_id) REFERENCES weight_categories(id) ON DELETE CASCADE
         );
+        CREATE INDEX IF NOT EXISTS idx_matches_category_hand ON matches(category_id, hand);
+        CREATE INDEX IF NOT EXISTS idx_matches_category_hand_status ON matches(category_id, hand, status);
         CREATE TABLE IF NOT EXISTS athletes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             first_name TEXT NOT NULL,
@@ -702,6 +704,11 @@ class Database:
         if not pid:
             return None
         return self.conn.execute("SELECT * FROM participants WHERE id=?", (pid,)).fetchone()
+
+    def get_participants_by_category(self, category_id):
+        cur = self.conn.execute(
+            "SELECT * FROM participants WHERE category_id=?", (category_id,))
+        return [dict(row) for row in cur.fetchall()]
 
     def close(self):
         self.conn.close()
@@ -1647,17 +1654,28 @@ class DoubleEliminationEngine:
     # ──── ТЕКУЩИЙ / СЛЕДУЮЩИЙ МАТЧ ────
     def get_current_and_next_match(self, category_id, hand):
         matches = self.db.get_matches(category_id, hand)
+
+        # Текущий: первый pending-матч где известны оба участника
         ready = [m for m in matches
                  if m["status"] == "pending" and m["p1_id"] and m["p2_id"]]
-        if not ready:
-            return None, None
+        ready.sort(key=lambda m: (m["stage"], m["id"]))
+        current = ready[0] if ready else None
 
-        def sort_key(m):
-            return (m["stage"], m["id"])
-        
-        ready.sort(key=sort_key)
-        current = ready[0]
-        nxt = ready[1] if len(ready) > 1 else None
+        # Следующий: структурно следующий матч в сетке после текущего
+        # (даже если участники ещё не назначены — покажем «— ожидание —»)
+        if current:
+            remaining = [m for m in matches
+                         if m["id"] != current["id"]
+                         and m["status"] not in ("done", "bye")]
+            remaining.sort(key=lambda m: (m["stage"], m["id"]))
+            nxt = remaining[0] if remaining else None
+        else:
+            remaining = [m for m in matches
+                         if m["status"] not in ("done", "bye")]
+            remaining.sort(key=lambda m: (m["stage"], m["id"]))
+            current = remaining[0] if remaining else None
+            nxt = remaining[1] if remaining and len(remaining) > 1 else None
+
         return current, nxt
 
     # ──── ПОИСК АКТИВНОГО МАТЧА ПО УЧАСТНИКУ ────
@@ -2168,6 +2186,8 @@ class SingleEliminationEngine:
             return
         m = self._get_match(match_id)
         col = "p1_id" if slot == 1 else "p2_id"
+        if col not in ("p1_id", "p2_id"):
+            raise ValueError(f"Недопустимая колонка: {col}")
         if m[col] is not None:
             return
         self.db.conn.execute(f"UPDATE matches SET {col}=? WHERE id=?", (player_id, match_id))
@@ -2176,8 +2196,9 @@ class SingleEliminationEngine:
 
     def _update_status_after_fill(self, match_id):
         m = self._get_match(match_id)
-        if m["status"] != "waiting":
+        if m["status"] not in ("waiting",):
             return
+
         if m["p1_id"] and m["p2_id"]:
             self.db.conn.execute("UPDATE matches SET status='pending' WHERE id=?", (match_id,))
             self.db.conn.commit()
@@ -2230,13 +2251,25 @@ class SingleEliminationEngine:
 
     def get_current_and_next_match(self, category_id, hand):
         matches = self.db.get_matches(category_id, hand)
+
         ready = [m for m in matches
                  if m["status"] == "pending" and m["p1_id"] and m["p2_id"]]
-        if not ready:
-            return None, None
         ready.sort(key=lambda m: (m["stage"], m["id"]))
-        current = ready[0]
-        nxt = ready[1] if len(ready) > 1 else None
+        current = ready[0] if ready else None
+
+        if current:
+            remaining = [m for m in matches
+                         if m["id"] != current["id"]
+                         and m["status"] not in ("done", "bye")]
+            remaining.sort(key=lambda m: (m["stage"], m["id"]))
+            nxt = remaining[0] if remaining else None
+        else:
+            remaining = [m for m in matches
+                         if m["status"] not in ("done", "bye")]
+            remaining.sort(key=lambda m: (m["stage"], m["id"]))
+            current = remaining[0] if remaining else None
+            nxt = remaining[1] if remaining and len(remaining) > 1 else None
+
         return current, nxt
 
     def find_active_match_for_participant(self, category_id, hand, participant_id):
@@ -2401,6 +2434,12 @@ class BracketWindow(ctk.CTkToplevel):
         # организатора (см. _build_broadcast_bar / _apply_broadcast_settings),
         # который сохраняется локально и переживает закрытие окна.
         self.table_number = db.get_bracket_table_number(category["id"], hand)
+
+        # Кеш данных для ускорения отрисовки (см. _ensure_cache)
+        self._match_cache = None
+        self._participant_cache = {}
+        self._cache_dirty = True
+        self._load_bracket_timer = None
 
         self.title(f"Сетка — {category['name']} — {hand}")
         self.geometry("1200x800")
@@ -2588,7 +2627,8 @@ class BracketWindow(ctk.CTkToplevel):
             self.engine.advance_winner(current["id"], pid)
             self._show_scan_status(
                 f"🏆 ПОБЕДИТЕЛЬ: {participant['name']}!", "#00ff88")
-            self._load_bracket()
+            self._invalidate_cache()
+            self._load_bracket_debounced()
         else:
             # Не в текущем матче
             self._show_scan_status(
@@ -2611,7 +2651,7 @@ class BracketWindow(ctk.CTkToplevel):
         def pname(pid):
             if not pid:
                 return "?"
-            p = self.db.get_participant(pid)
+            p = self._participant_cache.get(pid)
             return p["name"] if p else "?"
 
         current, nxt = self.engine.get_current_and_next_match(
@@ -2621,7 +2661,7 @@ class BracketWindow(ctk.CTkToplevel):
             txt = (f"⚔️  {pname(current['p1_id'])}  vs  {pname(current['p2_id'])}")
             self.lbl_current.configure(text=txt, text_color="#4dccff")
         else:
-            matches = self.db.get_matches(self.category["id"], self.hand)
+            matches = self._match_cache
             if not matches:
                 self.lbl_current.configure(text="⚔️  Сетка не создана", text_color="#556677")
             else:
@@ -2657,11 +2697,36 @@ class BracketWindow(ctk.CTkToplevel):
                 self.lbl_next.cget("text"),
             )
 
+    def _ensure_cache(self):
+        if not self._cache_dirty and self._match_cache is not None:
+            return
+        t0 = __import__("time").time()
+        self._match_cache = self.db.get_matches(self.category["id"], self.hand)
+        all_participants = self.db.get_participants_by_category(self.category["id"])
+        self._participant_cache = {p["id"]: p for p in all_participants}
+        self._cache_dirty = False
+        dt = __import__("time").time() - t0
+        if dt > 0.01:
+            print(f"[perf] кеш: {len(self._match_cache)} матчей, {len(self._participant_cache)} участников за {dt:.3f}s")
+
+    def _invalidate_cache(self):
+        self._cache_dirty = True
+
     def _load_bracket(self):
+        self._ensure_cache()
+        t0 = __import__("time").time()
         self._refresh_match_info_bar()
         self._draw_bracket()
         self._render_match_list()
         self._render_results()
+        dt = __import__("time").time() - t0
+        if dt > 0.01:
+            print(f"[perf] _load_bracket: {dt:.3f}s")
+
+    def _load_bracket_debounced(self):
+        if self._load_bracket_timer:
+            self.after_cancel(self._load_bracket_timer)
+        self._load_bracket_timer = self.after(250, self._load_bracket)
 
     def _tournament_locked(self, show_warning=True):
         """True, если турнир этой сетки завершён — редактирование запрещено."""
@@ -2691,6 +2756,7 @@ class BracketWindow(ctk.CTkToplevel):
         rng = random.Random(f"{self.tournament_id}-{self.category['id']}")
         rng.shuffle(ids)
         self.engine.generate_bracket(self.tournament_id, self.category["id"], self.hand, ids)
+        self._invalidate_cache()
         self._load_bracket()
         self._assign_table_number()
 
@@ -2840,10 +2906,37 @@ class BracketWindow(ctk.CTkToplevel):
         except Exception as e:
             print(f"[sync] _reset_bracket: {e}")
         self.db.clear_matches(self.category["id"], self.hand)
+        self._invalidate_cache()
         self._load_bracket()
         messagebox.showinfo("Готово", "Сетка сброшена.")
 
     # ────
+    @staticmethod
+    def _build_stage_labels(w_round_names, l_round_names):
+        """Определяет подписи «Полуфинал» / «Финал» для колонок сетки.
+
+        Double elimination:
+          - Последний раунд WB (Финал WB) → Полуфинал
+          - Последний раунд LB (Финал LB) → Полуфинал
+          - Сам финал (Гранд-финал) подписывается отдельно в _draw_bracket
+
+        Single elimination:
+          - Последний раунд → Финал
+          - Предпоследний → Полуфинал
+        """
+        labels = {}
+        has_lb = len(l_round_names) > 0
+
+        if w_round_names:
+            labels[("winners", w_round_names[-1])] = "Полуфинал" if has_lb else "Финал"
+            if not has_lb and len(w_round_names) >= 2:
+                labels[("winners", w_round_names[-2])] = "Полуфинал"
+
+        if has_lb and l_round_names:
+            labels[("losers", l_round_names[-1])] = "Полуфинал"
+
+        return labels
+
     def _draw_bracket(self):
         self.canvas.delete("all")
         # Определяем реальный текущий матч через движок
@@ -2871,15 +2964,22 @@ class BracketWindow(ctk.CTkToplevel):
             else:   
                 f_rounds.setdefault(r, []).append(m)
 
-        BOX_W, BOX_H = 200, 52
-        H_GAP = 36
-        SLOT_H = BOX_H + 14
-        X_START = 20
-        Y_W_START = 60
+        # Крупнее карточки и больше воздуха между колонками/строками —
+        # так надписи не наезжают друг на друга и сетка выглядит аккуратнее.
+        BOX_W, BOX_H = 250, 72
+        H_GAP = 64
+        SLOT_H = BOX_H + 22
+        X_START = 24
+        HEADER_H = 34          # место под заголовок колонки над первой карточкой
+        Y_W_START = 24 + HEADER_H
 
-        w_rounds_list = list(w_rounds.values())
+        w_rounds_list = list(w_rounds.items())
         if not w_rounds_list:
             return
+
+        w_round_names = list(w_rounds.keys())
+        l_round_names = list(l_rounds.keys())
+        stage_labels = self._build_stage_labels(w_round_names, l_round_names)
 
         def y_pos(match_idx, round_idx):
             step = SLOT_H * (2 ** round_idx)
@@ -2889,7 +2989,7 @@ class BracketWindow(ctk.CTkToplevel):
         w_col_x = []
         w_y_positions = []
 
-        for ri, rmatches in enumerate(w_rounds_list):
+        for ri, (rname, rmatches) in enumerate(w_rounds_list):
             x = X_START + ri * (BOX_W + H_GAP)
             col_ys = []
             for mi, m in enumerate(rmatches):
@@ -2903,6 +3003,14 @@ class BracketWindow(ctk.CTkToplevel):
                         fill="#2a4a6a", width=1)
             w_col_x.append(x)
             w_y_positions.append(col_ys)
+
+            label = stage_labels.get(("winners", rname))
+            if label:
+                self.canvas.create_text(
+                    x + BOX_W / 2, Y_W_START - HEADER_H / 2,
+                    text=label, fill="#7fb8ff",
+                    font=("Arial", 15, "bold"), anchor="c")
+
             if ri + 1 < len(w_rounds_list) and len(col_ys) >= 2:
                 x_mid = x + BOX_W + H_GAP // 2
                 x_next = x + BOX_W + H_GAP
@@ -2916,14 +3024,25 @@ class BracketWindow(ctk.CTkToplevel):
 
         x_final = X_START + len(w_rounds_list) * (BOX_W + H_GAP)
         y_final = Y_W_START
+        gf_x_by_index = {}
         for fi, (rname, rmatches) in enumerate(f_rounds.items()):
             x_this = x_final + fi * (BOX_W + H_GAP)   # ← сдвиг вправо вместо вниз
-            for m in rmatches:
-                is_reset = "переигровка" in m["round_name"]
-                if is_reset and not (m["p1_id"] and m["p2_id"]) and m["status"] != "done":
-                    continue
+            gf_x_by_index[fi] = x_this
+            is_reset_round = "переигровка" in rname
+            visible_matches = [
+                m for m in rmatches
+                if not (is_reset_round and not (m["p1_id"] and m["p2_id"]) and m["status"] != "done")
+            ]
+            if visible_matches:
+                # Первый матч финала — «Финал», переигровка — «Гранд-финал».
+                label = "Гранд-финал" if is_reset_round else "Финал"
+                self.canvas.create_text(
+                    x_this + BOX_W / 2, Y_W_START - HEADER_H / 2,
+                    text=label, fill="#ffcc66",
+                    font=("Arial", 15, "bold"), anchor="c")
+            for m in visible_matches:
                 self._draw_match_box(m, x_this, y_final, BOX_W, BOX_H, highlight="#3a3010")
-                if w_col_x:
+                if fi == 0 and w_col_x:
                     x_prev = w_col_x[-1] + BOX_W
                     x_mid = x_prev + H_GAP // 2
                     y_wf = w_y_positions[-1][0] + BOX_H // 2 if w_y_positions and w_y_positions[-1] else y_final + BOX_H // 2
@@ -2931,20 +3050,26 @@ class BracketWindow(ctk.CTkToplevel):
                     self.canvas.create_line(x_prev, y_wf, x_mid, y_wf, fill="#8a6a10", width=1)
                     self.canvas.create_line(x_mid, y_wf, x_mid, y_f, fill="#8a6a10", width=1)
                     self.canvas.create_line(x_mid, y_f, x_this, y_f, fill="#8a6a10", width=1)
+                elif fi > 0 and fi - 1 in gf_x_by_index:
+                    # Переигровка — просто следующая карточка на той же
+                    # строке, соединяем её с обычным гранд-финалом слева.
+                    x_prev = gf_x_by_index[fi - 1] + BOX_W
+                    y_c = y_final + BOX_H // 2
+                    self.canvas.create_line(x_prev, y_c, x_this, y_c, fill="#8a6a10", width=1)
 
         max_y_w = Y_W_START
         for col_ys in w_y_positions:
             for y in col_ys:
                 max_y_w = max(max_y_w, y + BOX_H)
 
-        Y_L_START = max_y_w + 50
+        Y_L_START = max_y_w + 80
         l_rounds_list = list(l_rounds.values())
 
         if l_rounds_list:
             self.canvas.create_text(
-                X_START, Y_L_START - 22,
+                X_START, Y_L_START - 46,
                 text="⬇  НИЖНЯЯ СЕТКА (Losers Bracket)",
-                fill="#cc6633", font=("Arial", 11, "bold"), anchor="w")
+                fill="#cc6633", font=("Arial", 13, "bold"), anchor="w")
 
             # Вычисляем позиции матчей нижней сетки с правильным вертикальным расположением.
             # В нечётных раундах (0,2,4…) приходят проигравшие из верхней сетки — матчи
@@ -2952,7 +3077,7 @@ class BracketWindow(ctk.CTkToplevel):
             # В чётных раундах (1,3,5…) победители уплотняются вдвое.
             # Базовый шаг вертикали берём из первого раунда нижней сетки.
 
-            L_SLOT_H = BOX_H + 14   # шаг для первого раунда нижней сетки
+            L_SLOT_H = BOX_H + 22   # шаг для первого раунда нижней сетки (совпадает с SLOT_H верхней)
             l_col_positions = []     # list of list of (x, y) per round
 
             for ri, rmatches in enumerate(l_rounds_list):
@@ -2969,6 +3094,13 @@ class BracketWindow(ctk.CTkToplevel):
                     self._draw_match_box(m, x, y, BOX_W, BOX_H, highlight="#2a1510")
                     col_ys.append(y)
                 l_col_positions.append((x, col_ys))
+
+                label = stage_labels.get(("losers", l_round_names[ri]))
+                if label and col_ys:
+                    self.canvas.create_text(
+                        x + BOX_W / 2, min(col_ys) - 18,
+                        text=label, fill="#ff9955",
+                        font=("Arial", 14, "bold"), anchor="c")
 
             # Соединительные линии между раундами нижней сетки.
             # Тип перехода определяется по РЕАЛЬНЫМ размерам раундов (а не по чётности
@@ -3051,14 +3183,35 @@ class BracketWindow(ctk.CTkToplevel):
             max_l_y = Y_L_START
             for ri, rmatches in enumerate(l_rounds_list):
                 step_mult = 2 ** (ri // 2)
-                step = (BOX_H + 14) * step_mult
-                first_offset = (step - (BOX_H + 14)) // 2
+                step = (BOX_H + 22) * step_mult
+                first_offset = (step - (BOX_H + 22)) // 2
                 bottom = Y_L_START + first_offset + (len(rmatches) - 1) * step + BOX_H
                 max_l_y = max(max_l_y, bottom)
             total_h = max_l_y + 60
         else:
             total_h = max_y_w + 60
         self.canvas.configure(scrollregion=(0, 0, total_w, total_h))
+
+    @staticmethod
+    def _round_rect(canvas, x1, y1, x2, y2, radius=14, **kwargs):
+        """Прямоугольник со скруглёнными углами (обычный create_rectangle
+        в Tkinter углы скруглять не умеет — рисуем сглаженный полигон)."""
+        r = min(radius, (x2 - x1) / 2, (y2 - y1) / 2)
+        points = [
+            x1 + r, y1,
+            x2 - r, y1,
+            x2, y1,
+            x2, y1 + r,
+            x2, y2 - r,
+            x2, y2,
+            x2 - r, y2,
+            x1 + r, y2,
+            x1, y2,
+            x1, y2 - r,
+            x1, y1 + r,
+            x1, y1,
+        ]
+        return canvas.create_polygon(points, smooth=True, **kwargs)
 
     def _draw_match_box(self, m, x, y, w, h, highlight=None):
         c = self.canvas
@@ -3073,23 +3226,20 @@ class BracketWindow(ctk.CTkToplevel):
             bg = "#103820"
             outline_color = "#00ff88"
             outline_w = 3
-            c.create_rectangle(x - 4, y - 4, x + w + 4, y + h + 4,
-                        outline="#00ff88", width=2)
+            self._round_rect(c, x - 4, y - 4, x + w + 4, y + h + 4,
+                        radius=16, fill="", outline="#00ff88", width=2)
         elif is_next:
             outline_color = "#ffaa33"
-            outline_w = 2
-        c.create_rectangle(x, y, x + w, y + h, fill=bg, outline=outline_color, width=outline_w)
+            outline_w = 3
+            self._round_rect(c, x - 4, y - 4, x + w + 4, y + h + 4,
+                        radius=16, fill="", outline="#ffaa33", width=2, dash=(5, 3))
+        self._round_rect(c, x, y, x + w, y + h, radius=14,
+                        fill=bg, outline=outline_color, width=outline_w)
 
         def pname(pid):
             if pid:
-                p = self.db.get_participant(pid)
+                p = self._participant_cache.get(pid)
                 return p["name"] if p else "?"
-            # Слот пуст. Если матч структурно является BYE (один участник
-            # гарантированно отсутствует) — честно пишем "BYE". Но если матч
-            # НЕ является BYE, слот просто ждёт победителя ещё не сыгранного
-            # предыдущего матча — писать "BYE" тут неверно и вводит в
-            # заблуждение (создаёт впечатление, что соперник уже прошёл
-            # автоматически, хотя предыдущий матч ещё не завершён).
             if m["is_bye"]:
                 return "BYE"
             return "— ожидание —"
@@ -3108,13 +3258,15 @@ class BracketWindow(ctk.CTkToplevel):
                 p1_color = "#ff5555"
                 p2_color = "#4dff88"
 
+        # Название раунда («1/4», «1/2», «Финал» и т.п.) здесь больше не
+        # печатаем — оно и так видно один раз общим заголовком над колонкой
+        # (см. _stage_label / _draw_bracket). Так карточка не загромождается
+        # и имена участников никогда не наезжают на служебный текст.
         c.create_line(x + 1, y + h // 2, x + w - 1, y + h // 2, fill="#2a3f55", width=1)
-        c.create_text(x + 6, y + h // 4, text=p1n[:22], fill=p1_color,
-                    font=("Arial", 9, "bold"), anchor="w")
-        c.create_text(x + 6, y + 3 * h // 4, text=p2n[:22], fill=p2_color,
-                    font=("Arial", 9, "bold"), anchor="w")
-        c.create_text(x + w - 4, y + 4, text=m["round_name"],
-                    fill="#556677", font=("Arial", 7), anchor="ne")
+        c.create_text(x + 10, y + h // 4, text=p1n[:28], fill=p1_color,
+                    font=("Arial", 12, "bold"), anchor="w")
+        c.create_text(x + 10, y + 3 * h // 4, text=p2n[:28], fill=p2_color,
+                    font=("Arial", 12, "bold"), anchor="w")
 
         tag = f"match_{m['id']}"
         c.create_rectangle(x, y, x + w, y + h, fill="", outline="", tags=(tag,))
@@ -3178,6 +3330,7 @@ class BracketWindow(ctk.CTkToplevel):
         def set_winner(winner_id):
             self.canvas.delete("popup")
             self.engine.advance_winner(match_id, winner_id)
+            self._invalidate_cache()
             self._load_bracket()
 
         def close_popup(e=None):
@@ -3211,7 +3364,7 @@ class BracketWindow(ctk.CTkToplevel):
     def _render_match_list(self):
         for w in self.match_scroll.winfo_children():
             w.destroy()
-        matches = self.db.get_matches(self.category["id"], self.hand)
+        matches = self._match_cache
         if not matches:
             ctk.CTkLabel(self.match_scroll, text="Сетка не создана",
                     text_color="#445566").pack(pady=20)
@@ -3231,7 +3384,7 @@ class BracketWindow(ctk.CTkToplevel):
 
         def pname(pid, m=None):
             if pid:
-                p = self.db.get_participant(pid)
+                p = self._participant_cache.get(pid)
                 return p["name"] if p else "?"
             if m is not None and m["is_bye"]:
                 return "BYE"
@@ -3285,7 +3438,7 @@ class BracketWindow(ctk.CTkToplevel):
 
         medals = {1: "🥇", 2: "🥈", 3: "🥉"}
         for i, s in enumerate(standings):
-            p = self.db.get_participant(s["pid"])
+            p = self._participant_cache.get(s["pid"])
             if not p:
                 continue
             place = s["place"] if "place" in s.keys() else i + 1

@@ -1,7 +1,8 @@
 import requests, json
 
-TOKEN = "Timowkuss"
-BASE = "https://atyrau-armwrestling-production.up.railway.app/api/v1/sync"
+import os
+TOKEN = os.environ.get("DESKTOP_SYNC_TOKEN", "")
+BASE = os.environ.get("API_BASE_URL", "http://localhost:8000/api/v1/sync")
 HEADERS = {"X-Sync-Token": TOKEN, "Content-Type": "application/json"}
 
 # 1. Check current state of match 295 via public bracket endpoint

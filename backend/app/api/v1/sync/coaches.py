@@ -201,6 +201,8 @@ def update_coach(
         coach.birth_date = _parse_birth_date(data.pop("birth_date"))
 
     for field, value in data.items():
+        if not hasattr(coach, field):
+            continue
         setattr(coach, field, value)
 
     db.commit()

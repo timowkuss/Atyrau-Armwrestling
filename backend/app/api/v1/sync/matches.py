@@ -51,6 +51,8 @@ def update_match(
         raise HTTPException(status_code=404, detail="Матч не найден")
 
     for field, value in payload.model_dump(exclude_unset=True).items():
+        if not hasattr(match, field):
+            continue
         setattr(match, field, value)
 
     # Здесь приходит победитель по ходу турнира (или его исправление) —

@@ -61,6 +61,7 @@ class SyncManager:
         # текущего матча не мог обогнать апдейт следующего) в отдельном
         # потоке, не трогая UI.
         self._sync_queue: "queue.Queue" = queue.Queue()
+        self._bracket_reset_mids: set[int] = set()
         self._sync_worker = threading.Thread(
             target=self._sync_worker_loop, daemon=True, name="sync-match-worker"
         )
@@ -72,6 +73,8 @@ class SyncManager:
             try:
                 if mid == "__call__":
                     payload()
+                elif mid in self._bracket_reset_mids:
+                    self._bracket_reset_mids.discard(mid)
                 else:
                     self.on_match_updated(mid, payload)
             except Exception as e:
@@ -156,13 +159,18 @@ class SyncManager:
         return None
 
     def _trigger_immediate_flush(self):
-        """Дёргает flush_pending() в одноразовом фоновом потоке. flush_pending
-        сам защищён _flush_lock (см. ниже), так что параллельный вызов из
-        периодического таймера или другого места просто тихо выйдет, если
-        флаш уже идёт — дублей не будет."""
-        threading.Thread(
-            target=self.flush_pending, daemon=True, name="sync-immediate-flush"
-        ).start()
+        """Дёргает flush_pending() в фоновом потоке. Механизм coalescing:
+        если поток уже запущен (даже если он ещё ждёт _flush_lock), новый
+        поток не создаётся — один flush обработает все накопившиеся операции."""
+        if getattr(self, "_flush_thread_running", False):
+            return
+        self._flush_thread_running = True
+        def _run():
+            try:
+                self.flush_pending()
+            finally:
+                self._flush_thread_running = False
+        threading.Thread(target=_run, daemon=True, name="sync-immediate-flush").start()
 
     # ── спортсмен: карточка из локальной таблицы athletes ───────
     def on_athlete_created(self, aid, first_name, last_name, birth_date,
@@ -317,6 +325,29 @@ class SyncManager:
             return None
 
     # ── турнир ───────────────────────────────────────────────────
+    def _entity_exists_locally(self, table: str, id_col: str, eid: int) -> bool:
+        """Проверяет, существует ли запись в локальной БД. Если сущность
+        удалена локально — соответствующий update в очереди мёртвый."""
+        try:
+            conn = sqlite3.connect(str(_TOURNAMENT_DB_PATH))
+            try:
+                return conn.execute(
+                    f"SELECT 1 FROM {table} WHERE {id_col}=?", (eid,)
+                ).fetchone() is not None
+            finally:
+                conn.close()
+        except Exception:
+            return True
+
+    def _match_exists_locally(self, mid: int) -> bool:
+        return self._entity_exists_locally("matches", "id", mid)
+
+    def _athlete_exists_locally(self, aid: int) -> bool:
+        return self._entity_exists_locally("athletes", "id", aid)
+
+    def _coach_exists_locally(self, cid: int) -> bool:
+        return self._entity_exists_locally("coaches", "id", cid)
+
     def on_tournament_created(self, tid, name, date, location,
                                weight_tolerance=None, bracket_system=None, format_type=None):
         # Сохраняем снимок ДО попытки отправки — нужен, если позже
@@ -350,15 +381,19 @@ class SyncManager:
         приходилось делать руками через fix_stale_competition.py."""
         if not _TOURNAMENT_DB_PATH.exists():
             return
-        conn = sqlite3.connect(str(_TOURNAMENT_DB_PATH))
-        conn.row_factory = sqlite3.Row
         try:
-            row = conn.execute(
-                "SELECT name, date, location, weight_tolerance, bracket_system, format_type "
-                "FROM tournaments WHERE id=?", (tid,)
-            ).fetchone()
-        finally:
-            conn.close()
+            conn = sqlite3.connect(str(_TOURNAMENT_DB_PATH))
+            conn.row_factory = sqlite3.Row
+            try:
+                row = conn.execute(
+                    "SELECT name, date, location, weight_tolerance, bracket_system, format_type "
+                    "FROM tournaments WHERE id=?", (tid,)
+                ).fetchone()
+            finally:
+                conn.close()
+        except Exception as exc:
+            print(f"[sync] _backfill tid={tid}: {exc}")
+            return
         if row is None:
             return
         self.state.save_competition_source(
@@ -394,7 +429,7 @@ class SyncManager:
         return remote["id"]
 
     def _is_stale_competition_error(self, e: ApiClientError) -> bool:
-        return e.status_code == 404 and "оревнован" in str(e)
+        return e.status_code == 404
 
     def _self_heal_missing_tournament(self, tid) -> None:
         """Вызывается, когда _recreate_competition окончательно не смог
@@ -616,7 +651,7 @@ class SyncManager:
                 winner_id=remote_winner,
                 p1_losses=match.get("p1_losses", 0),
                 p2_losses=match.get("p2_losses", 0),
-                is_bye=bool(match.get("is_bye", 0)),
+                is_bye=int(match.get("is_bye", 0)) > 0,
                 status=match.get("status", "pending"),
                 table_number=match.get("table_number"),
             )
@@ -630,8 +665,21 @@ class SyncManager:
         """Database.clear_matches удаляет матчи из sqlite напрямую, без
         сети — иначе старые матчи (с их p1/p2) остаются висеть на сайте
         и дают дубли пар в живой очереди. Чистим id_map/офлайн-очередь
-        для них и, если категория уже синкана, удаляем матчи на сервере."""
-        for mid in local_mids:
+        для них и, если категория уже синкана, удаляем матчи на сервере.
+
+        ВАЖНО: также чистим thread-очередь _sync_queue от устаревших
+        update_match для этих mid — иначе фоновая нить подхватит старые
+        операции и положит их в офлайн-очередь уже ПОСЛЕ того, как мы
+        purge-нули create_match, и update_match повиснет навсегда
+        с "ждёт create_match mid=..." """
+        reset_mids = set(local_mids)
+
+        # Помечаем mid как stale — _sync_worker_loop пропустит их,
+        # когда достанет из очереди. Это безопаснее drain-режима:
+        # drain мог пропустить элемент, добавленный конкурентно (гонка).
+        self._bracket_reset_mids.update(reset_mids)
+
+        for mid in reset_mids:
             self.state.map_delete("match", mid)
             self.state.purge_pending("create_match", "mid", mid)
             self.state.purge_pending("update_match", "mid", mid)
@@ -660,6 +708,7 @@ class SyncManager:
         payload = {"mid": mid, **match}
 
         if remote_match_id is None:
+            self.state.purge_pending("update_match", "mid", mid)
             self.state.enqueue("update_match", payload)
             return None
 
@@ -698,6 +747,7 @@ class SyncManager:
             remote_match_id = self.state.map_get("match", mid)
             payload = {"mid": mid, "table_number": table_number}
             if remote_match_id is None:
+                self.state.purge_pending("update_match", "mid", mid)
                 self.state.enqueue("update_match", payload)
                 continue
 
@@ -744,34 +794,41 @@ class SyncManager:
           True  — операция выполнена, удаляем из очереди
           None  — ещё не готова (зависит от другой операции), пропускаем
           False — ошибка, стоп и повторим позже
+
+        Многопроходный режим: операции, вернувшие None в первом проходе
+        (например update_match, чей create_match ещё не обработан), будут
+        повторены в следующих проходах — их зависимости уже разрешены.
         """
-        # Не блокируем поток — если другой flush уже идёт (например, фоновый
-        # поток после генерации сетки), просто выходим без работы: тот,
-        # другой вызов доберёт всю текущую очередь сам. Без этой проверки
-        # два одновременных flush_pending() читают одну и ту же очередь и
-        # оба успевают выполнить create_match для одних и тех же матчей до
-        # mark_done() — отсюда дубли матчей на сервере.
+        MAX_RETRY_ATTEMPTS = 50
         if not self._flush_lock.acquire(blocking=False):
             print("[sync] flush_pending: уже выполняется в другом потоке — пропуск")
             return 0, self.state.pending_count()
         try:
             succeeded = 0
-            for row in self.state.pending():
-                if not self.state.exists(row["id"]):
-                    continue
-                op, payload = row["operation"], __import__("json").loads(row["payload"])
-                print(f"[sync] TRY: {op} payload={payload}")
-                ok = self._replay(op, payload)
-                print(f"[sync] RESULT: {op} -> {ok}")
+            for _ in range(10):
+                made_progress = False
+                for row in self.state.pending():
+                    if not self.state.exists(row["id"]):
+                        continue
+                    if row["attempts"] >= MAX_RETRY_ATTEMPTS:
+                        print(f"[sync] PURGE {row['operation']} id={row['id']}: {row['attempts']} попыток — чистим")
+                        self.state.mark_done(row["id"])
+                        continue
+                    op, payload = row["operation"], __import__("json").loads(row["payload"])
+                    print(f"[sync] TRY: {op} payload={payload}")
+                    ok = self._replay(op, payload)
+                    print(f"[sync] RESULT: {op} -> {ok}")
 
-                if ok is True:
-                    self.state.mark_done(row["id"])
-                    succeeded += 1
-                elif ok is None:
-                    # Ещё не готово (create_match не прошёл) — пропускаем,
-                    # оставляем в очереди, НЕ останавливаем flush.
-                    continue
-                else:
+                    if ok is True:
+                        self.state.mark_done(row["id"])
+                        succeeded += 1
+                        made_progress = True
+                    elif ok is None:
+                        continue
+                    else:
+                        self.state.mark_failed(row["id"], "flush_pending: unrecoverable error")
+                        return succeeded, self.state.pending_count()
+                if not made_progress:
                     break
             return succeeded, self.state.pending_count()
         finally:
@@ -901,6 +958,10 @@ class SyncManager:
             if operation == "update_athlete":
                 remote_athlete_id = self.state.map_get("athlete", payload["aid"])
                 if remote_athlete_id is None:
+                    if not self._athlete_exists_locally(payload["aid"]):
+                        print(f"[sync] update_athlete aid={payload['aid']}: спортсмен удалён локально — чистим очередь")
+                        self.state.purge_pending("update_athlete", "aid", payload["aid"])
+                        return True
                     print(f"[sync] DEBUG: update_athlete ждёт create_athlete aid={payload['aid']}")
                     return None
                 try:
@@ -941,6 +1002,10 @@ class SyncManager:
             if operation == "update_coach":
                 remote_coach_id = self.state.map_get("coach", payload["cid"])
                 if remote_coach_id is None:
+                    if not self._coach_exists_locally(payload["cid"]):
+                        print(f"[sync] update_coach cid={payload['cid']}: тренер удалён локально — чистим очередь")
+                        self.state.purge_pending("update_coach", "cid", payload["cid"])
+                        return True
                     print(f"[sync] DEBUG: update_coach ждёт create_coach cid={payload['cid']}")
                     return None
                 try:
@@ -971,11 +1036,16 @@ class SyncManager:
                 if remote_competition_id is None or remote_category_id is None:
                     print(f"[sync] DEBUG: create_participant ждёт tid={payload['tid']}")
                     return None
-                athlete_id = self._find_or_create_athlete(
-                    payload["name"], payload["club"], local_athlete_id=payload.get("athlete_id")
-                )
+                athlete_id = self.state.map_get("athlete_of_participant", payload["pid"])
                 if athlete_id is None:
-                    return False
+                    athlete_id = self._find_or_create_athlete(
+                        payload["name"], payload["club"], local_athlete_id=payload.get("athlete_id")
+                    )
+                if athlete_id is None:
+                    # Не удалось создать спортсмена на сервере (сеть/таймаут) —
+                    # не блокируем всю очередь, вернёмся к нему в следующем проходе.
+                    print(f"[sync] DEBUG: create_participant pid={payload['pid']} ждёт athlete")
+                    return None
                 try:
                     remote = self.api.create_participant(
                         remote_competition_id, payload["pid"], athlete_id,
@@ -1016,16 +1086,16 @@ class SyncManager:
                         match_order=payload.get("match_order", 0), stage=payload.get("stage", 0),
                         p1_id=remote_p1, p2_id=remote_p2, winner_id=remote_winner,
                         p1_losses=payload.get("p1_losses", 0), p2_losses=payload.get("p2_losses", 0),
-                        is_bye=bool(payload.get("is_bye", 0)), status=payload.get("status", "pending"),
+                        is_bye=int(payload.get("is_bye", 0)) > 0, status=payload.get("status", "pending"),
                         table_number=payload.get("table_number"),
                     )
                 except ApiClientError as e:
                     if e.status_code == 404:
-                        # Категория/соревнование удалены на сервере —
-                        # гасим create_match и связанный update_match
+                        # Категория/соревнование удалены на сервере
                         self.state.map_delete("match", payload["mid"])
                         self.state.purge_pending("update_match", "mid", payload["mid"])
-                        print(f"[sync] create_match mid={payload['mid']}: 404 — категория удалена на сервере")
+                        print(f"[sync] create_match mid={payload['mid']}: 404 — категория/соревнование удалены")
+                        self.state.map_delete("category", payload["category_id"])
                         return True
                     raise
                 self.state.map_set("match", payload["mid"], remote["id"])
@@ -1034,6 +1104,11 @@ class SyncManager:
             if operation == "update_match":
                 remote_match_id = self.state.map_get("match", payload["mid"])
                 if remote_match_id is None:
+                    # Может матч был удалён локально (пересоздание сетки)?
+                    if not self._match_exists_locally(payload["mid"]):
+                        print(f"[sync] update_match mid={payload['mid']}: матч удалён локально — чистим очередь")
+                        self.state.purge_pending("update_match", "mid", payload["mid"])
+                        return True
                     # create_match ещё не прошёл — НЕ удаляем из очереди,
                     # чтобы table_number не потерялся. Вернём None: flush
                     # пропустит эту строку и вернётся к ней позже.

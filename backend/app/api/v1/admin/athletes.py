@@ -97,6 +97,8 @@ def update_athlete(
     photo_changed = "photo_path" in data and new_photo_path != old_photo_path
 
     for field, value in data.items():
+        if not hasattr(athlete, field):
+            continue
         setattr(athlete, field, value)
     db.commit()
 

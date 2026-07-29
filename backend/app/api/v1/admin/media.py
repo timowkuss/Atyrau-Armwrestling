@@ -64,6 +64,8 @@ async def upload_photo(
             transformation=[{"width": 1200, "height": 1200, "crop": "limit", "quality": "auto"}],
         )
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Cloudinary: {e}")
+        import logging
+        logging.getLogger("uvicorn.error").error("Cloudinary upload: %s", e)
+        raise HTTPException(status_code=502, detail="Ошибка загрузки файла в облачное хранилище")
 
     return {"url": result["secure_url"]}

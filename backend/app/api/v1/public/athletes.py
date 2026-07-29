@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.db.models.athletes import Athlete
 from app.db.models.categories import Category
@@ -105,39 +105,47 @@ def list_athletes(
 def get_athlete(athlete_id: int, db: Session = Depends(get_db)):
     athlete = (
         db.query(Athlete)
+        .options(
+            joinedload(Athlete.club),
+            joinedload(Athlete.coach),
+            joinedload(Athlete.city),
+            joinedload(Athlete.statistics),
+        )
         .filter(Athlete.id == athlete_id, Athlete.is_hidden.is_(False))
         .first()
     )
     if athlete is None:
         raise HTTPException(status_code=404, detail="Спортсмен не найден")
 
-    stats_row = (
-        db.query(AthleteStatistic).filter(AthleteStatistic.athlete_id == athlete.id).first()
-    )
-    stats = (
-        AthleteStatisticsOut(
-            total_competitions=stats_row.total_competitions,
-            total_wins=stats_row.total_wins,
-            total_losses=stats_row.total_losses,
-            win_rate=stats_row.win_rate,
-            left_hand_wins=stats_row.left_hand_wins,
-            left_hand_losses=stats_row.left_hand_losses,
-            right_hand_wins=stats_row.right_hand_wins,
-            right_hand_losses=stats_row.right_hand_losses,
-            gold_count=stats_row.gold_count,
-            silver_count=stats_row.silver_count,
-            bronze_count=stats_row.bronze_count,
-            elo_left=stats_row.elo_left,
-            elo_right=stats_row.elo_right,
-            elo_combined=elo_combined(stats_row.elo_left, stats_row.elo_right),
+    stats = None
+    if athlete.statistics:
+        s = athlete.statistics
+        stats = AthleteStatisticsOut(
+            total_competitions=s.total_competitions,
+            total_wins=s.total_wins,
+            total_losses=s.total_losses,
+            win_rate=s.win_rate,
+            left_hand_wins=s.left_hand_wins,
+            left_hand_losses=s.left_hand_losses,
+            right_hand_wins=s.right_hand_wins,
+            right_hand_losses=s.right_hand_losses,
+            gold_count=s.gold_count,
+            silver_count=s.silver_count,
+            bronze_count=s.bronze_count,
+            elo_left=s.elo_left,
+            elo_right=s.elo_right,
+            elo_combined=elo_combined(s.elo_left, s.elo_right),
         )
-        if stats_row
-        else None
-    )
 
-    city_name = (
-        db.get(City, athlete.city_id).name if athlete.city_id else None
-    )
+    city_name = athlete.city.name if athlete.city else None
+    region_name = None
+    country_name = None
+    if athlete.region_id:
+        region = db.get(Region, athlete.region_id)
+        region_name = region.name if region else None
+    if athlete.country_id:
+        country = db.get(Country, athlete.country_id)
+        country_name = country.name if country else None
 
     return AthleteDetailOut(
         id=athlete.id,
@@ -147,12 +155,8 @@ def get_athlete(athlete_id: int, db: Session = Depends(get_db)):
         club_name=athlete.club.name if athlete.club else None,
         coach_name=athlete.coach.full_name if athlete.coach else None,
         city_name=city_name,
-        region_name=(
-            db.get(Region, athlete.region_id).name if athlete.region_id else None
-        ),
-        country_name=(
-            db.get(Country, athlete.country_id).name if athlete.country_id else None
-        ),
+        region_name=region_name,
+        country_name=country_name,
         rank=athlete.rank,
         photo_path=athlete.photo_path,
         bio=athlete.bio,
@@ -212,10 +216,29 @@ def get_athlete_matches(athlete_id: int, db: Session = Depends(get_db)):
         .all()
     )
 
+    # Собираем все CompetitionParticipant id и загружаем одним запросом
+    pids = set()
+    for match, _, _ in matches:
+        if match.p1_id:
+            pids.add(match.p1_id)
+        if match.p2_id:
+            pids.add(match.p2_id)
+        if match.winner_id:
+            pids.add(match.winner_id)
+    participants = {
+        cp.id: cp
+        for cp in (
+            db.query(CompetitionParticipant)
+            .options(joinedload(CompetitionParticipant.athlete))
+            .filter(CompetitionParticipant.id.in_(pids))
+            .all()
+        )
+    } if pids else {}
+
     items = []
     for match, competition, category in matches:
-        p1 = db.get(CompetitionParticipant, match.p1_id) if match.p1_id else None
-        p2 = db.get(CompetitionParticipant, match.p2_id) if match.p2_id else None
+        p1 = participants.get(match.p1_id) if match.p1_id else None
+        p2 = participants.get(match.p2_id) if match.p2_id else None
         opponent = None
         if p1 and p1.athlete_id == athlete_id and p2:
             opponent = p2.athlete.full_name
@@ -224,7 +247,7 @@ def get_athlete_matches(athlete_id: int, db: Session = Depends(get_db)):
 
         is_winner = None
         if match.winner_id is not None:
-            winner = db.get(CompetitionParticipant, match.winner_id)
+            winner = participants.get(match.winner_id)
             if winner is not None:
                 is_winner = winner.athlete_id == athlete_id
 

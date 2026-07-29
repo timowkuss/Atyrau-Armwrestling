@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -13,6 +13,10 @@ class Match(Base):
     competition_participants вместо локальных participants."""
 
     __tablename__ = "matches"
+    __table_args__ = (
+        Index("idx_matches_category_hand", "category_id", "hand"),
+        Index("idx_matches_category_hand_status", "category_id", "hand", "status"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     competition_id: Mapped[int] = mapped_column(
