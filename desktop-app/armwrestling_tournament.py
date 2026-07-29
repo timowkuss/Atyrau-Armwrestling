@@ -3957,8 +3957,18 @@ class CoachCard(ctk.CTkFrame):
                         text_color="#556677", width=36).grid(row=0, column=0, rowspan=2, padx=(10, 0), pady=10)
             col = 1
 
-        ctk.CTkLabel(self, text="🧑‍🏫", font=("Arial", 26), width=44).grid(
-            row=0, column=col, rowspan=2, padx=(10, 5), pady=10)
+        photo_label = ctk.CTkLabel(self, text="🧑‍🏫", font=("Arial", 26), width=44)
+        if PIL_AVAILABLE and c["photo_path"]:
+            local_path = resolve_local_photo_path(c["photo_path"])
+            if local_path:
+                try:
+                    img = Image.open(local_path).resize((44, 54))
+                    photo = ctk.CTkImage(light_image=img, dark_image=img, size=(44, 54))
+                    photo_label.configure(image=photo, text="")
+                    photo_label.image = photo  # держим ссылку — иначе GC уберёт картинку
+                except Exception:
+                    pass
+        photo_label.grid(row=0, column=col, rowspan=2, padx=(10, 5), pady=10)
 
         ctk.CTkLabel(self, text=c["full_name"], font=ctk.CTkFont(size=14, weight="bold"),
                     anchor="w").grid(row=0, column=col + 1, sticky="w", padx=5, pady=(10, 0))
