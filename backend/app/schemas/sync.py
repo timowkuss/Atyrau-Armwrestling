@@ -1,4 +1,13 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+
+
+class _StrictModel(BaseModel):
+    """Все sync-схемы, принимающие данные от десктопа, используют
+    extra='forbid'. Если десктоп пошлёт поле, которого нет в схеме,
+    Pydantic вернёт 422 ValidationError — ошибка сразу видна в логах,
+    а не замалчивается (как было с coach_name в AthleteSyncUpdate)."""
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class AthleteSearchResultItem(BaseModel):
@@ -9,7 +18,7 @@ class AthleteSearchResultItem(BaseModel):
     gender: str | None
 
 
-class AthleteSyncCreate(BaseModel):
+class AthleteSyncCreate(_StrictModel):
     """Создание спортсмена из десктопа. gender/birth_date опциональны —
     десктоп-приложение сегодня их не собирает (см. примечание в
     app/db/models/athletes.py и ARCHITECTURE.md §0, находка Этапа 6)."""
@@ -23,7 +32,7 @@ class AthleteSyncCreate(BaseModel):
     coach_name: str | None = None
 
 
-class AthleteSyncUpdate(BaseModel):
+class AthleteSyncUpdate(_StrictModel):
     """PATCH из десктопа: приходят только изменённые поля."""
 
     full_name: str | None = None
@@ -35,7 +44,7 @@ class AthleteSyncUpdate(BaseModel):
     coach_name: str | None = None
 
 
-class CoachSyncCreate(BaseModel):
+class CoachSyncCreate(_StrictModel):
     """Создание тренера из десктопа."""
 
     full_name: str
@@ -52,7 +61,7 @@ class CoachSyncCreate(BaseModel):
     city_name: str | None = None  # best-effort сопоставление с cities.name
 
 
-class CoachSyncUpdate(BaseModel):
+class CoachSyncUpdate(_StrictModel):
     """PATCH из десктопа: приходят только изменённые поля."""
 
     full_name: str | None = None
@@ -67,7 +76,7 @@ class CoachSyncUpdate(BaseModel):
     city_name: str | None = None
 
 
-class CompetitionSyncCreate(BaseModel):
+class CompetitionSyncCreate(_StrictModel):
     name: str
     date: str
     location_name: str | None = None  # текстом из десктопа; сервер best-effort
@@ -77,13 +86,13 @@ class CompetitionSyncCreate(BaseModel):
     format_type: str | None = None  # 'combined' (двоеборье) | 'separate'
 
 
-class CategorySyncCreate(BaseModel):
+class CategorySyncCreate(_StrictModel):
     name: str
     max_weight: float | None = None
     hand: str = "Обе"
 
 
-class CompetitionParticipantSyncCreate(BaseModel):
+class CompetitionParticipantSyncCreate(_StrictModel):
     local_participant_id: int  # для диагностики/логов, не хранится
     athlete_id: int
     category_id: int  # ЦЕНТРАЛЬНЫЙ id категории (из ответа CategorySyncCreate)
@@ -91,7 +100,7 @@ class CompetitionParticipantSyncCreate(BaseModel):
     club_at_event: str | None = None
 
 
-class MatchSyncCreate(BaseModel):
+class MatchSyncCreate(_StrictModel):
     category_id: int  # центральный id
     hand: str = "Правая"
     round_name: str | None = None
@@ -108,7 +117,7 @@ class MatchSyncCreate(BaseModel):
     table_number: int | None = None
 
 
-class MatchSyncUpdate(BaseModel):
+class MatchSyncUpdate(_StrictModel):
     p1_id: int | None = None
     p2_id: int | None = None
     winner_id: int | None = None
