@@ -29,3 +29,12 @@ class ClubRankingOut(BaseModel):
     gold_count: int
     silver_count: int
     bronze_count: int
+
+
+class CoachRankingOut(BaseModel):
+    position: int | None
+    coach_id: int
+    coach_name: str
+    club_name: str | None
+    athletes_count: int
+    points: int

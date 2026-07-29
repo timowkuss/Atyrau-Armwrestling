@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { useAuth } from '@/features/auth/AuthContext'
 import { adminApi } from '@/lib/adminApi'
+import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 
 interface PhotoUploadFieldProps {
   value: string | null | undefined
@@ -9,18 +10,28 @@ interface PhotoUploadFieldProps {
    * из формы ещё пустой, а превью надо брать из уже сохранённой записи). */
   fallbackPreview?: string | null
   size?: number
+  /** 'circle' (по умолчанию, как для спортсменов) или 'square' — мягко
+   * скруглённый квадрат, крупнее подходит для тренерских карточек. */
+  shape?: 'circle' | 'square'
 }
 
 /** Кнопка выбора/съёмки фото + загрузка на Cloudinary через
  * POST /admin/media/upload. На телефоне открывается системный выбор:
  * снять камерой или выбрать существующее фото из галереи. */
-export function PhotoUploadField({ value, onChange, fallbackPreview, size = 56 }: PhotoUploadFieldProps) {
+export function PhotoUploadField({
+  value,
+  onChange,
+  fallbackPreview,
+  size = 56,
+  shape = 'circle',
+}: PhotoUploadFieldProps) {
   const { token } = useAuth()
   const inputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const preview = value || fallbackPreview
+  const preview = cloudinaryThumb(value || fallbackPreview, size)
+  const roundedClass = shape === 'square' ? 'rounded-2xl' : 'rounded-full'
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -45,13 +56,13 @@ export function PhotoUploadField({ value, onChange, fallbackPreview, size = 56 }
           src={preview}
           alt=""
           style={{ height: size, width: size }}
-          className="flex-shrink-0 rounded-full object-cover border border-steel-dim"
+          className={`flex-shrink-0 ${roundedClass} object-cover border border-steel-dim`}
           onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')}
         />
       ) : (
         <div
           style={{ height: size, width: size }}
-          className="flex-shrink-0 rounded-full bg-ink border border-steel-dim"
+          className={`flex-shrink-0 ${roundedClass} bg-ink border border-steel-dim`}
         />
       )}
       <div className="flex flex-col gap-1">

@@ -5,6 +5,7 @@ import { useAdminCoachesList, useCreateCoach, useDeleteCoach, useUpdateCoach } f
 import { LoadingState, ErrorState } from '@/components/ui/States'
 import { FeedbackBanner } from '@/components/admin/FeedbackBanner'
 import { PhotoUploadField } from '@/components/admin/PhotoUploadField'
+import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 import { CityCombobox } from '@/components/admin/CityCombobox'
 import { COACH_QUALIFICATIONS, type CoachInput } from '@/types/api'
 
@@ -185,6 +186,8 @@ export function CoachesAdmin() {
           <PhotoUploadField
             value={form.photo_path}
             onChange={(url) => setForm({ ...form, photo_path: url })}
+            shape="square"
+            size={96}
           />
           <button
             type="submit"
@@ -265,6 +268,8 @@ export function CoachesAdmin() {
                       value={editForm.photo_path}
                       fallbackPreview={coach.photo_path}
                       onChange={(url) => setEditForm({ ...editForm, photo_path: url })}
+                      shape="square"
+                      size={96}
                     />
                     <div className="flex gap-2">
                       <button
@@ -290,13 +295,13 @@ export function CoachesAdmin() {
                     <div className="flex items-center gap-3">
                       {coach.photo_path ? (
                         <img
-                          src={coach.photo_path}
+                          src={cloudinaryThumb(coach.photo_path, 64) ?? undefined}
                           alt=""
-                          className="h-12 w-12 flex-shrink-0 rounded-full object-cover border border-steel-dim"
+                          className="h-16 w-16 flex-shrink-0 rounded-2xl object-cover border border-steel-dim"
                           onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')}
                         />
                       ) : (
-                        <div className="h-12 w-12 flex-shrink-0 rounded-full bg-ink border border-steel-dim" />
+                        <div className="h-16 w-16 flex-shrink-0 rounded-2xl bg-ink border border-steel-dim" />
                       )}
                       <div>
                         <p className="font-display text-base text-bone">{coach.full_name}</p>

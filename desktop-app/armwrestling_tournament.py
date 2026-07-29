@@ -169,6 +169,28 @@ def extract_birth_year(birth_date_str):
         return datetime.now().year
 
 
+def load_photo_thumbnail(path, width, height):
+    """Открывает фото и готовит качественный превью нужного размера:
+    сначала центр-кроп под целевые пропорции (чтобы не растягивать лицо),
+    затем масштабирование фильтром LANCZOS (значительно чётче, чем
+    обычный .resize() по умолчанию — особенно при уменьшении с телефонных
+    фото высокого разрешения)."""
+    img = Image.open(path)
+    img = ImageOps.exif_transpose(img)  # уважаем поворот с камеры телефона
+    src_w, src_h = img.size
+    target_ratio = width / height
+    src_ratio = src_w / src_h
+    if src_ratio > target_ratio:
+        new_w = int(src_h * target_ratio)
+        left = (src_w - new_w) // 2
+        img = img.crop((left, 0, left + new_w, src_h))
+    else:
+        new_h = int(src_w / target_ratio)
+        top = (src_h - new_h) // 2
+        img = img.crop((0, top, src_w, top + new_h))
+    return img.resize((width, height), Image.LANCZOS)
+
+
 def center_toplevel(win, width, height):
     """Центрирует Toplevel-окно (width x height) относительно всего экрана.
     Окно должно быть ещё в withdraw()/не отрисовано — вызываем ДО deiconify(),
@@ -3957,18 +3979,18 @@ class CoachCard(ctk.CTkFrame):
                         text_color="#556677", width=36).grid(row=0, column=0, rowspan=2, padx=(10, 0), pady=10)
             col = 1
 
-        photo_label = ctk.CTkLabel(self, text="🧑‍🏫", font=("Arial", 26), width=44)
+        photo_label = ctk.CTkLabel(self, text="🧑‍🏫", font=("Arial", 30), width=72)
         if PIL_AVAILABLE and c["photo_path"]:
             local_path = resolve_local_photo_path(c["photo_path"])
             if local_path:
                 try:
-                    img = Image.open(local_path).resize((44, 54))
-                    photo = ctk.CTkImage(light_image=img, dark_image=img, size=(44, 54))
+                    img = load_photo_thumbnail(local_path, 72, 88)
+                    photo = ctk.CTkImage(light_image=img, dark_image=img, size=(72, 88))
                     photo_label.configure(image=photo, text="")
                     photo_label.image = photo  # держим ссылку — иначе GC уберёт картинку
                 except Exception:
                     pass
-        photo_label.grid(row=0, column=col, rowspan=2, padx=(10, 5), pady=10)
+        photo_label.grid(row=0, column=col, rowspan=2, padx=(10, 8), pady=10)
 
         ctk.CTkLabel(self, text=c["full_name"], font=ctk.CTkFont(size=14, weight="bold"),
                     anchor="w").grid(row=0, column=col + 1, sticky="w", padx=5, pady=(10, 0))
@@ -4145,7 +4167,7 @@ class CoachesWindow(ctk.CTkToplevel):
         photo_top_row = ctk.CTkFrame(photo_block, fg_color="transparent")
         photo_top_row.pack(anchor="w")
 
-        photo_thumb_lbl = ctk.CTkLabel(photo_top_row, text="", width=54, height=64)
+        photo_thumb_lbl = ctk.CTkLabel(photo_top_row, text="", width=100, height=124)
         photo_thumb_lbl.pack(side="left", padx=(0, 10))
 
         def render_thumb(local_path):
@@ -4153,8 +4175,8 @@ class CoachesWindow(ctk.CTkToplevel):
                 photo_thumb_lbl.configure(image=None, text="")
                 return
             try:
-                img = Image.open(local_path).resize((54, 64))
-                photo_img = ctk.CTkImage(light_image=img, dark_image=img, size=(54, 64))
+                img = load_photo_thumbnail(local_path, 100, 124)
+                photo_img = ctk.CTkImage(light_image=img, dark_image=img, size=(100, 124))
                 photo_thumb_lbl.configure(image=photo_img, text="")
                 photo_thumb_lbl.image = photo_img  # держим ссылку — иначе GC уберёт картинку
             except Exception:

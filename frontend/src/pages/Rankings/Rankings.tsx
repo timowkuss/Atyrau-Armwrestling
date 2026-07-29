@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useAthleteRankings, useClubRankings } from '@/features/rankings/useRankings'
+import { useAthleteRankings, useClubRankings, useCoachRankings } from '@/features/rankings/useRankings'
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/States'
 
 export function Rankings() {
-  const [tab, setTab] = useState<'athletes' | 'clubs'>('athletes')
+  const [tab, setTab] = useState<'athletes' | 'clubs' | 'coaches'>('athletes')
   const athletes = useAthleteRankings()
   const clubs = useClubRankings()
+  const coaches = useCoachRankings()
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-12">
@@ -25,6 +26,12 @@ export function Rankings() {
           className={`text-eyebrow rounded-[var(--radius-rivet)] px-3 py-1.5 ${tab === 'clubs' ? 'bg-petrol-2 text-brass' : 'border border-steel-dim text-steel'}`}
         >
           Клубы
+        </button>
+        <button
+          onClick={() => setTab('coaches')}
+          className={`text-eyebrow rounded-[var(--radius-rivet)] px-3 py-1.5 ${tab === 'coaches' ? 'bg-petrol-2 text-brass' : 'border border-steel-dim text-steel'}`}
+        >
+          Тренеры
         </button>
       </div>
 
@@ -63,6 +70,31 @@ export function Rankings() {
                     <span className="flex-1 truncate text-bone">{r.club_name}</span>
                     <span className="font-mono text-xs text-steel-dim">
                       {r.gold_count}·{r.silver_count}·{r.bronze_count}
+                    </span>
+                    <span className="font-display text-brass">{r.points}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </>
+        )}
+        {tab === 'coaches' && (
+          <>
+            {coaches.isLoading && <LoadingState label="Загрузка рейтинга" />}
+            {coaches.isError && <ErrorState message={(coaches.error as Error).message} onRetry={() => coaches.refetch()} />}
+            {coaches.data && coaches.data.length === 0 && (
+              <EmptyState title="Рейтинг ещё не сформирован" message="Рейтинг тренеров считается по сумме очков их учеников." />
+            )}
+            {coaches.data && coaches.data.length > 0 && (
+              <ol className="flex flex-col divide-y divide-steel-dim/15">
+                {coaches.data.map((r, i) => (
+                  <li key={r.coach_id} className="flex items-center justify-between gap-3 py-2.5">
+                    <span className="font-mono text-sm text-steel">{r.position ?? i + 1}</span>
+                    <Link to={`/coaches/${r.coach_id}`} className="flex-1 truncate text-bone hover:text-brass">
+                      {r.coach_name}
+                    </Link>
+                    <span className="font-mono text-xs text-steel-dim">
+                      {r.club_name ?? '—'} · {r.athletes_count} учен.
                     </span>
                     <span className="font-display text-brass">{r.points}</span>
                   </li>

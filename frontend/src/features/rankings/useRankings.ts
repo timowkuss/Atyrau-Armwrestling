@@ -8,3 +8,7 @@ export function useAthleteRankings() {
 export function useClubRankings() {
   return useQuery({ queryKey: ['rankings', 'clubs'], queryFn: () => api.rankings.clubs() })
 }
+
+export function useCoachRankings() {
+  return useQuery({ queryKey: ['rankings', 'coaches'], queryFn: () => api.rankings.coaches() })
+}

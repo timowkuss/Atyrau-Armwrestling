@@ -14,6 +14,7 @@ import {
 import { LoadingState, ErrorState } from '@/components/ui/States'
 import { FeedbackBanner } from '@/components/admin/FeedbackBanner'
 import { PhotoUploadField } from '@/components/admin/PhotoUploadField'
+import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 import { CityCombobox } from '@/components/admin/CityCombobox'
 import type { AthleteInput, AthleteStatisticsUpdateInput, Gender } from '@/types/api'
 
@@ -158,6 +159,8 @@ export function AthletesAdmin() {
           <PhotoUploadField
             value={form.photo_path}
             onChange={(url) => setForm({ ...form, photo_path: url })}
+            shape="square"
+            size={96}
           />
           <button
             type="submit"
@@ -239,6 +242,8 @@ export function AthletesAdmin() {
                       value={editForm.photo_path}
                       fallbackPreview={a.photo_path}
                       onChange={(url) => setEditForm({ ...editForm, photo_path: url })}
+                      shape="square"
+                      size={96}
                     />
                     <div className="flex gap-2">
                       <button
@@ -265,13 +270,13 @@ export function AthletesAdmin() {
                       <div className="flex items-center gap-3">
                         {a.photo_path ? (
                           <img
-                            src={a.photo_path}
+                            src={cloudinaryThumb(a.photo_path, 64) ?? undefined}
                             alt=""
-                            className="h-12 w-12 flex-shrink-0 rounded-full object-cover border border-steel-dim"
+                            className="h-16 w-16 flex-shrink-0 rounded-2xl object-cover border border-steel-dim"
                             onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')}
                           />
                         ) : (
-                          <div className="h-12 w-12 flex-shrink-0 rounded-full bg-ink border border-steel-dim" />
+                          <div className="h-16 w-16 flex-shrink-0 rounded-2xl bg-ink border border-steel-dim" />
                         )}
                         <div>
                           <p className="flex items-center gap-2 font-display text-base text-bone">

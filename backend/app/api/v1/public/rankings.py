@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.models.athletes import Athlete
 from app.db.models.clubs import Club
+from app.db.models.coaches import Coach
 from app.db.models.rankings import AthleteRanking, ClubRanking
 from app.db.session import get_db
-from app.schemas.common import AthleteRankingOut, ClubRankingOut
+from app.schemas.common import AthleteRankingOut, ClubRankingOut, CoachRankingOut
 
 router = APIRouter(prefix="/rankings", tags=["public:rankings"])
 
@@ -31,6 +33,46 @@ def athlete_rankings(
             club_name=club_name, points=r.points, period=r.period,
         )
         for r, name, club_name in rows
+    ]
+
+
+@router.get("/coaches", response_model=list[CoachRankingOut])
+def coach_rankings(
+    period: str | None = None,
+    limit: int = Query(100, le=500),
+    db: Session = Depends(get_db),
+):
+    # Своей таблицы рейтинга тренеров пока нет — считаем прямо здесь,
+    # суммируя очки уже накопленного рейтинга спортсменов по их тренеру
+    # (Athlete.coach_id). Тренеры без учеников или без очков в выдачу не
+    # попадают — их рейтинг просто пока не из чего считать.
+    query = (
+        db.query(
+            Coach.id,
+            Coach.full_name,
+            Club.name.label("club_name"),
+            func.count(func.distinct(Athlete.id)).label("athletes_count"),
+            func.coalesce(func.sum(AthleteRanking.points), 0).label("points"),
+        )
+        .join(Athlete, Athlete.coach_id == Coach.id)
+        .join(AthleteRanking, AthleteRanking.athlete_id == Athlete.id)
+        .outerjoin(Club, Coach.club_id == Club.id)
+    )
+    if period:
+        query = query.filter(AthleteRanking.period == period)
+    rows = (
+        query.group_by(Coach.id, Coach.full_name, Club.name)
+        .having(func.coalesce(func.sum(AthleteRanking.points), 0) > 0)
+        .order_by(func.sum(AthleteRanking.points).desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        CoachRankingOut(
+            position=i + 1, coach_id=coach_id, coach_name=full_name,
+            club_name=club_name, athletes_count=athletes_count, points=int(points),
+        )
+        for i, (coach_id, full_name, club_name, athletes_count, points) in enumerate(rows)
     ]
 
 

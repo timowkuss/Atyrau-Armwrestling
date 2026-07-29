@@ -11,6 +11,7 @@ import type {
   ClubRankingRow,
   CoachDetail,
   CoachListItem,
+  CoachRankingRow,
   CompetitionDetail,
   CompetitionListItem,
   CompetitionListParams,
@@ -92,6 +93,8 @@ export const api = {
     athletes: (params?: { period?: string; gender?: string }) =>
       request<AthleteRankingRow[]>('/public/rankings/athletes', params),
     clubs: () => request<ClubRankingRow[]>('/public/rankings/clubs'),
+    coaches: (params?: { period?: string }) =>
+      request<CoachRankingRow[]>('/public/rankings/coaches', params),
   },
   clubs: {
     list: (params?: { city_id?: number; page?: number; page_size?: number }) =>
