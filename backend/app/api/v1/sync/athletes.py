@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.api.v1.deps import require_desktop_sync
 from app.db.models.athletes import Athlete
 from app.db.models.clubs import Club
+from app.db.models.coaches import Coach
 from app.db.models.competitions import CompetitionParticipant
 from app.db.models.statistics import AthleteStatistic
 from app.db.models.sync_tombstone import SyncTombstone
@@ -51,6 +52,14 @@ def _find_or_create_club(db: Session, club_name: str | None) -> int | None:
     db.add(club)
     db.flush()
     return club.id
+
+
+def _find_coach(db: Session, coach_name: str | None) -> int | None:
+    if not coach_name or not coach_name.strip():
+        return None
+    name = coach_name.strip()
+    coach = db.query(Coach).filter(Coach.full_name.ilike(name)).first()
+    return coach.id if coach else None
 
 
 def _find_existing_athlete(db: Session, full_name: str, birth_date: date | None) -> Athlete | None:
@@ -175,6 +184,7 @@ def create_athlete(
     _: bool = Depends(require_desktop_sync),
 ):
     club_id = _find_or_create_club(db, payload.club_name)
+    coach_id = _find_coach(db, payload.coach_name)
     birth_date = _parse_birth_date(payload.birth_date) if payload.birth_date else None
     gender = _normalize_gender(payload.gender)
 
@@ -193,6 +203,8 @@ def create_athlete(
             existing.rank = payload.rank
         if not existing.photo_path and payload.photo_path:
             existing.photo_path = payload.photo_path
+        if not existing.coach_id and coach_id:
+            existing.coach_id = coach_id
         db.commit()
         return {"id": existing.id, "status": "existing"}
 
@@ -201,6 +213,7 @@ def create_athlete(
         gender=gender,
         birth_date=birth_date,
         club_id=club_id,
+        coach_id=coach_id,
         rank=payload.rank,
         photo_path=payload.photo_path,
     )
@@ -225,6 +238,8 @@ def update_athlete(
     data = payload.model_dump(exclude_unset=True)
     if "club_name" in data:
         athlete.club_id = _find_or_create_club(db, data.pop("club_name"))
+    if "coach_name" in data:
+        athlete.coach_id = _find_coach(db, data.pop("coach_name"))
     if "birth_date" in data and data["birth_date"]:
         data["birth_date"] = _parse_birth_date(data["birth_date"])
     if "gender" in data and data["gender"]:

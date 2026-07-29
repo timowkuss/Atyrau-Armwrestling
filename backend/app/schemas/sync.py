@@ -20,6 +20,7 @@ class AthleteSyncCreate(BaseModel):
     birth_date: str | None = None
     rank: str | None = None
     photo_path: str | None = None
+    coach_name: str | None = None
 
 
 class AthleteSyncUpdate(BaseModel):
@@ -31,6 +32,7 @@ class AthleteSyncUpdate(BaseModel):
     birth_date: str | None = None
     rank: str | None = None
     photo_path: str | None = None
+    coach_name: str | None = None
 
 
 class CoachSyncCreate(BaseModel):

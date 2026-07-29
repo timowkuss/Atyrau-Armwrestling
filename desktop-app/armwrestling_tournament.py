@@ -4227,37 +4227,105 @@ class CoachesWindow(ctk.CTkToplevel):
     def _add_coach_dialog(self, edit_id=None):
         dlg = tk.Toplevel(self)
         dlg.title("Редактировать тренера" if edit_id else "Добавить тренера")
-        dlg.geometry("620x580" if not edit_id else "660x900")
-        dlg.minsize(560, 560 if not edit_id else 780)
-        dlg.resizable(False, True)
-        dlg.configure(bg="#161b22")
+        scr_w = dlg.winfo_screenwidth()
+        scr_h = dlg.winfo_screenheight()
+        w = min(960, scr_w - 80)
+        h = min(760, scr_h - 120)
+        dlg.geometry(f"{w}x{h}")
+        dlg.minsize(800, 600)
+        dlg.resizable(True, True)
+        dlg.configure(bg="#0d1117")
+        dlg.transient(self)
+        dlg.grab_set()
+        dlg.focus_force()
 
         existing = self.db.get_coach(edit_id) if edit_id else None
         fields = {}
+        photo_path_var = ctk.StringVar(value=(existing["photo_path"] or "") if existing else "")
 
-        def lbl_entry(parent, label, key, default="", row=0, placeholder=""):
-            ctk.CTkLabel(parent, text=label, anchor="e", width=110).grid(
-                row=row, column=0, padx=(15, 8), pady=8, sticky="e")
+        # ─── helpers ────────────────────────────────────────────────
+        def make_card(parent, **kw):
+            card = ctk.CTkFrame(parent, fg_color="#161b22", corner_radius=12,
+                               border_width=1, border_color="#2d333b")
+            card.pack(**kw)
+            return card
+
+        def make_section_label(parent, text):
+            ctk.CTkLabel(parent, text=text, font=ctk.CTkFont(size=13, weight="bold"),
+                        text_color="#8899aa").pack(anchor="w", padx=16, pady=(14, 6))
+
+        def lbl_entry(parent, label, key, default="", row=0, placeholder="", width=240):
+            ctk.CTkLabel(parent, text=label, anchor="e", width=90).grid(
+                row=row, column=0, padx=(14, 6), pady=7, sticky="e")
             var = ctk.StringVar(value=default)
-            ctk.CTkEntry(parent, textvariable=var, width=300, placeholder_text=placeholder).grid(
-                row=row, column=1, padx=(0, 15), pady=8, sticky="w")
+            ctk.CTkEntry(parent, textvariable=var, width=width, placeholder_text=placeholder,
+                        fg_color="#0d1117", border_color="#2d333b").grid(
+                row=row, column=1, padx=(0, 14), pady=7, sticky="w")
             fields[key] = var
             return var
 
-        form = ctk.CTkFrame(dlg, fg_color="transparent")
-        form.pack(fill="x", padx=10, pady=15)
+        # ═══ ВЕРХНЯЯ ПАНЕЛЬ: фото + имя + статус ══════════════════
+        top_card = ctk.CTkFrame(dlg, fg_color="#161b22", corner_radius=12,
+                               border_width=1, border_color="#2d333b")
+        top_card.pack(fill="x", padx=14, pady=(14, 0))
 
-        lbl_entry(form, "Имя*:", "first_name", existing["first_name"] if existing else "", row=0)
-        lbl_entry(form, "Фамилия*:", "last_name", existing["last_name"] if existing else "", row=1)
+        top_inner = ctk.CTkFrame(top_card, fg_color="transparent")
+        top_inner.pack(fill="x", padx=14, pady=12)
 
-        # ─── Дата рождения (возраст) с автоматической маской дд.мм.гггг —
-        # тот же виджет/валидация, что и у спортсмена в _add_athlete_dialog.
-        ctk.CTkLabel(form, text="Дата рожд.*:", anchor="e", width=110).grid(
-            row=2, column=0, padx=(15, 8), pady=8, sticky="e")
+        photo_thumb_lbl = ctk.CTkLabel(top_inner, text="", width=64, height=64,
+                                       corner_radius=32, fg_color="#0d1117")
+        photo_thumb_lbl.pack(side="left", padx=(0, 14))
+
+        name_label = ctk.CTkLabel(top_inner, text="",
+                    font=ctk.CTkFont(size=18, weight="bold"), text_color="#e6edf3")
+        name_label.pack(side="left", anchor="s")
+
+        if existing:
+            name_label.configure(text=f"{existing['first_name']} {existing['last_name']}")
+
+        def render_thumb(local_path):
+            if not (PIL_AVAILABLE and local_path):
+                photo_thumb_lbl.configure(image=None, text="👤", font=("Arial", 24))
+                return
+            try:
+                img = load_photo_thumbnail(local_path, 64, 64)
+                photo_img = ctk.CTkImage(light_image=img, dark_image=img, size=(64, 64))
+                photo_thumb_lbl.configure(image=photo_img, text="")
+                photo_thumb_lbl.image = photo_img
+            except Exception:
+                photo_thumb_lbl.configure(image=None, text="👤", font=("Arial", 24))
+
+        if photo_path_var.get():
+            render_thumb(resolve_local_photo_path(photo_path_var.get()))
+        else:
+            photo_thumb_lbl.configure(text="👤", font=("Arial", 24))
+
+        # ═══ ОСНОВНАЯ ЧАСТЬ: две колонки ═══════════════════════════
+        body = ctk.CTkFrame(dlg, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=14, pady=(10, 0))
+        body.grid_columnconfigure(0, weight=2, minsize=340)
+        body.grid_columnconfigure(1, weight=3)
+        body.grid_rowconfigure(0, weight=1)
+
+        # ─── Левая колонка: анкета тренера ────────────────────────
+        left_col = ScrollableFrame(body, fg_color="transparent")
+        left_col.grid(row=0, column=0, sticky="nsew", padx=(0, 7))
+
+        form_card = make_card(left_col, fill="x")
+        make_section_label(form_card, "📋 Основная информация")
+
+        form_grid = ctk.CTkFrame(form_card, fg_color="transparent")
+        form_grid.pack(fill="x", padx=4, pady=(0, 12))
+
+        lbl_entry(form_grid, "Имя*:", "first_name", existing["first_name"] if existing else "", row=0)
+        lbl_entry(form_grid, "Фамилия*:", "last_name", existing["last_name"] if existing else "", row=1)
+
+        ctk.CTkLabel(form_grid, text="Дата рожд.*:", anchor="e", width=90).grid(
+            row=2, column=0, padx=(14, 6), pady=7, sticky="e")
         birth_date_var = ctk.StringVar(value=existing["birth_date"] if existing else "")
-        birth_entry = ctk.CTkEntry(form, textvariable=birth_date_var, width=300,
-                    placeholder_text="  .  .    ")
-        birth_entry.grid(row=2, column=1, padx=(0, 15), pady=8, sticky="w")
+        birth_entry = ctk.CTkEntry(form_grid, textvariable=birth_date_var, width=240,
+                    placeholder_text="  .  .    ", fg_color="#0d1117", border_color="#2d333b")
+        birth_entry.grid(row=2, column=1, padx=(0, 14), pady=7, sticky="w")
 
         def format_birthdate(event=None):
             value = "".join(ch for ch in birth_entry.get() if ch.isdigit())[:8]
@@ -4275,13 +4343,12 @@ class CoachesWindow(ctk.CTkToplevel):
 
         birth_entry.bind("<KeyRelease>", format_birthdate)
 
-        # ─── ИИН — ровно 12 цифр, маска не даёт ввести больше/нецифры ───
-        ctk.CTkLabel(form, text="ИИН*:", anchor="e", width=110).grid(
-            row=3, column=0, padx=(15, 8), pady=8, sticky="e")
+        ctk.CTkLabel(form_grid, text="ИИН*:", anchor="e", width=90).grid(
+            row=3, column=0, padx=(14, 6), pady=7, sticky="e")
         iin_var = ctk.StringVar(value=existing["iin"] if existing else "")
-        iin_entry = ctk.CTkEntry(form, textvariable=iin_var, width=300,
-                    placeholder_text="12 цифр")
-        iin_entry.grid(row=3, column=1, padx=(0, 15), pady=8, sticky="w")
+        iin_entry = ctk.CTkEntry(form_grid, textvariable=iin_var, width=240,
+                    placeholder_text="12 цифр", fg_color="#0d1117", border_color="#2d333b")
+        iin_entry.grid(row=3, column=1, padx=(0, 14), pady=7, sticky="w")
 
         def format_iin(event=None):
             value = "".join(ch for ch in iin_entry.get() if ch.isdigit())[:12]
@@ -4291,49 +4358,27 @@ class CoachesWindow(ctk.CTkToplevel):
 
         iin_entry.bind("<KeyRelease>", format_iin)
 
-        # ─── Тренерское звание ───
-        ctk.CTkLabel(form, text="Звание:", anchor="e", width=110).grid(
-            row=4, column=0, padx=(15, 8), pady=8, sticky="e")
+        ctk.CTkLabel(form_grid, text="Звание:", anchor="e", width=90).grid(
+            row=4, column=0, padx=(14, 6), pady=7, sticky="e")
         qualification_var = ctk.StringVar(
             value=existing["qualification"] if existing and existing["qualification"] in COACH_QUALIFICATIONS
             else COACH_QUALIFICATIONS[0])
-        ctk.CTkOptionMenu(form, variable=qualification_var,
-                    values=COACH_QUALIFICATIONS, width=300
-                    ).grid(row=4, column=1, padx=(0, 15), pady=8, sticky="w")
+        qualification_menu = ctk.CTkOptionMenu(form_grid,
+                    variable=qualification_var,
+                    values=COACH_QUALIFICATIONS, width=240,
+                    fg_color="#0d1117", button_color="#2d333b",
+                    dropdown_fg_color="#161b22")
+        qualification_menu.grid(row=4, column=1, padx=(0, 14), pady=7, sticky="w")
 
-        lbl_entry(form, "Клуб:", "club", (existing["club"] or "") if existing else "", row=5)
-        lbl_entry(form, "Город/Район:", "city", (existing["city"] or "") if existing else "", row=6)
+        lbl_entry(form_grid, "Клуб:", "club", (existing["club"] or "") if existing else "", row=5)
+        lbl_entry(form_grid, "Город/Район:", "city", (existing["city"] or "") if existing else "", row=6)
 
-        # ─── Фото — загружается СРАЗУ в Cloudinary при выборе файла (не при
-        # сохранении формы), чтобы photo_path всегда был готовой ссылкой
-        # https://res.cloudinary.com/..., одинаково доступной и десктопу, и
-        # сайту (см. sync/cloudinary_client.py). Локальный путь в БД больше
-        # не сохраняется — иначе фото было бы видно только на этом компьютере.
-        ctk.CTkLabel(form, text="Фото:", anchor="e", width=110).grid(
-            row=7, column=0, padx=(15, 8), pady=8, sticky="ne")
+        # ─── Фото ───
+        photo_card = make_card(left_col, fill="x", pady=(8, 0))
+        make_section_label(photo_card, "🖼 Фотография")
 
-        photo_path_var = ctk.StringVar(value=(existing["photo_path"] or "") if existing else "")
-
-        photo_block = ctk.CTkFrame(form, fg_color="transparent")
-        photo_block.grid(row=7, column=1, padx=(0, 15), pady=8, sticky="w")
-
-        photo_top_row = ctk.CTkFrame(photo_block, fg_color="transparent")
-        photo_top_row.pack(anchor="w")
-
-        photo_thumb_lbl = ctk.CTkLabel(photo_top_row, text="", width=100, height=124)
-        photo_thumb_lbl.pack(side="left", padx=(0, 10))
-
-        def render_thumb(local_path):
-            if not (PIL_AVAILABLE and local_path):
-                photo_thumb_lbl.configure(image=None, text="")
-                return
-            try:
-                img = load_photo_thumbnail(local_path, 100, 124)
-                photo_img = ctk.CTkImage(light_image=img, dark_image=img, size=(100, 124))
-                photo_thumb_lbl.configure(image=photo_img, text="")
-                photo_thumb_lbl.image = photo_img  # держим ссылку — иначе GC уберёт картинку
-            except Exception:
-                photo_thumb_lbl.configure(image=None, text="")
+        photo_row = ctk.CTkFrame(photo_card, fg_color="transparent")
+        photo_row.pack(fill="x", padx=14, pady=(0, 14))
 
         def choose_photo():
             p = filedialog.askopenfilename(
@@ -4344,12 +4389,13 @@ class CoachesWindow(ctk.CTkToplevel):
                 messagebox.showwarning(
                     "Cloudinary не настроен",
                     "Загрузка фото недоступна: на этом компьютере не заданы "
+
                     "переменные окружения CLOUDINARY_CLOUD_NAME / "
                     "CLOUDINARY_UPLOAD_PRESET.\n\nТренер будет сохранён без фото.")
                 return
 
-            render_thumb(p)  # мгновенный локальный превью, пока идёт загрузка
-            photo_status_lbl.configure(text="Загрузка в Cloudinary…", text_color="#c9a227")
+            render_thumb(p)
+            photo_status_lbl.configure(text="Загружаем…", text_color="#c9a227")
             upload_btn.configure(state="disabled")
 
             def worker():
@@ -4357,108 +4403,192 @@ class CoachesWindow(ctk.CTkToplevel):
                     url = upload_photo(p, folder="coaches")
                 except CloudinaryUploadError as e:
                     def on_error():
-                        photo_status_lbl.configure(text=f"Ошибка: {e}", text_color="#d05050")
+                        photo_status_lbl.configure(text=f"Ошибка: {e}", text_color="#f85149")
                         upload_btn.configure(state="normal")
                     dlg.after(0, on_error)
                     return
 
                 def on_success():
                     photo_path_var.set(url)
-                    photo_status_lbl.configure(text="Загружено ✓", text_color="#3fa34d")
+                    photo_status_lbl.configure(text="✓ Загружено", text_color="#3fb950")
                     upload_btn.configure(state="normal")
                 dlg.after(0, on_success)
 
             Thread(target=worker, daemon=True).start()
 
-        upload_btn = ctk.CTkButton(photo_top_row, text="📷 Выбрать", width=90, height=28,
+        upload_btn = ctk.CTkButton(photo_row, text="📷 Выбрать фото", width=120, height=32,
+                    fg_color="#1f6feb", hover_color="#388bfd",
                     command=choose_photo)
         upload_btn.pack(side="left")
 
-        photo_status_lbl = ctk.CTkLabel(photo_block, text="", text_color="#8899aa",
-                    anchor="w", justify="left", wraplength=260)
-        photo_status_lbl.pack(anchor="w", pady=(6, 0))
+        photo_status_lbl = ctk.CTkLabel(photo_row, text="не выбрано", text_color="#6e7681",
+                    anchor="w", padx=10)
+        photo_status_lbl.pack(side="left")
 
         if photo_path_var.get():
-            photo_status_lbl.configure(text="Загружено ✓", text_color="#3fa34d")
-            render_thumb(resolve_local_photo_path(photo_path_var.get()))
-        else:
-            photo_status_lbl.configure(text="не выбрано")
+            photo_status_lbl.configure(text="✓ Загружено", text_color="#3fb950")
 
-        # ─── Ученики (только при редактировании существующего тренера;
-        # во время создания привязка учеников не делается — её выполняют
-        # отдельно, после сохранения, через десктоп или админку) ───
+        # ─── Правая колонка: ученики ────────────────────────────
         if existing:
-            ctk.CTkLabel(dlg, text="Ученики", font=ctk.CTkFont(size=13, weight="bold"),
-                        text_color="#8899aa").pack(anchor="w", padx=20, pady=(8, 4))
+            right_col = ctk.CTkFrame(body, fg_color="transparent")
+            right_col.grid(row=0, column=1, sticky="nsew", padx=(7, 0))
+            right_col.grid_rowconfigure(1, weight=1)
+            right_col.grid_columnconfigure(0, weight=1)
 
-            athletes_card = ctk.CTkFrame(dlg, fg_color="#0d1117", corner_radius=10,
-                        border_width=1, border_color="#232b36")
-            athletes_card.pack(fill="both", expand=True, padx=20, pady=(0, 8))
+            # ── Поиск спортсмена (попап, как в диалоге участника) ──
+            search_card = make_card(right_col, fill="x")
+            make_section_label(search_card, "🔗 Привязать спортсмена")
+
+            search_row = ctk.CTkFrame(search_card, fg_color="transparent")
+            search_row.pack(fill="x", padx=14, pady=(0, 14))
+
+            assigned_ids = {a["id"] for a in self.db.get_athletes_by_coach(edit_id)}
+
+            def open_athlete_picker():
+                picker = tk.Toplevel(dlg)
+                picker.title("Выбрать спортсмена")
+                sw, sh = picker.winfo_screenwidth(), picker.winfo_screenheight()
+                picker.geometry(f"480x540+{(sw-480)//2}+{(sh-540)//2}")
+                picker.configure(bg="#0d1117")
+                picker.transient(dlg)
+                picker.grab_set()
+                picker.focus_force()
+
+                search_var = ctk.StringVar()
+                ctk.CTkEntry(picker, textvariable=search_var, width=440,
+                            placeholder_text="🔍 Поиск по имени или фамилии...",
+                            fg_color="#0d1117", border_color="#2d333b"
+                            ).pack(padx=14, pady=(14, 6))
+
+                results_frame = ScrollableFrame(picker, fg_color="#0d1117")
+                results_frame.pack(fill="both", expand=True, padx=14, pady=(0, 14))
+
+                def refresh_picker():
+                    for w in results_frame.winfo_children():
+                        w.destroy()
+                    q = search_var.get().strip()
+                    if len(q) < 1:
+                        ctk.CTkLabel(results_frame, text="Введите имя для поиска",
+                                    text_color="#6e7681").pack(pady=30)
+                        return
+                    try:
+                        found = self.db.search_athletes(q)
+                    except Exception:
+                        found = []
+                    if not found:
+                        ctk.CTkLabel(results_frame, text="Спортсмены не найдены",
+                                    text_color="#6e7681").pack(pady=30)
+                        return
+                    for a in found:
+                        if a["id"] in assigned_ids:
+                            continue
+                        age = datetime.now().year - extract_birth_year(a["birth_date"])
+                        club = a["club"] or "—"
+                        label = f"{a['last_name']} {a['first_name']}  ·  {age} лет  ·  {club}"
+
+                        def pick(a=a):
+                            try:
+                                self.db.update_athlete(
+                                    a["id"], a["first_name"], a["last_name"],
+                                    a["birth_date"], a["gender"], a["club"],
+                                    a["rank"], a["photo_path"], edit_id,
+                                )
+                                assigned_ids.add(a["id"])
+                                refresh_athletes_list()
+                                picker.destroy()
+                            except Exception as e:
+                                messagebox.showerror("Ошибка", f"Не удалось привязать:\n{e}")
+
+                        ctk.CTkButton(results_frame, text=label, anchor="w",
+                                    fg_color="#151b23", hover_color="#1c2333",
+                                    border_width=1, border_color="#2d333b",
+                                    command=pick, height=36
+                                    ).pack(fill="x", padx=4, pady=3)
+
+                search_var.trace_add("write", lambda *_: refresh_picker())
+                refresh_picker()
+
+            ctk.CTkButton(search_row, text="🔍 Выбрать спортсмена",
+                        fg_color="#1f6feb", hover_color="#388bfd",
+                        height=36, command=open_athlete_picker
+                        ).pack(fill="x")
+
+            # ── Список учеников ──
+            students_card = make_card(right_col, fill="both", expand=True, pady=(8, 0))
+
+            students_header = ctk.CTkFrame(students_card, fg_color="transparent")
+            students_header.pack(fill="x", padx=16, pady=(14, 6))
+            ctk.CTkLabel(students_header, text="👥 Ученики",
+                        font=ctk.CTkFont(size=13, weight="bold"),
+                        text_color="#8899aa").pack(side="left")
+
+            count_lbl = ctk.CTkLabel(students_header, text="0",
+                        fg_color="#2d333b", corner_radius=8,
+                        padx=6, text_color="#6e7681",
+                        font=ctk.CTkFont(size=11))
+            count_lbl.pack(side="left", padx=(8, 0))
+
+            athletes_card = ctk.CTkFrame(students_card, fg_color="#0d1117",
+                        corner_radius=10, border_width=1, border_color="#2d333b")
+            athletes_card.pack(fill="both", expand=True, padx=14, pady=(0, 14))
+            athletes_card.grid_rowconfigure(0, weight=1)
+            athletes_card.grid_columnconfigure(0, weight=1)
 
             athletes_frame = ScrollableFrame(athletes_card, fg_color="transparent")
-            athletes_frame.pack(fill="both", expand=True, padx=4, pady=4)
+            athletes_frame.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
 
             def refresh_athletes_list():
                 for w in athletes_frame.winfo_children():
                     w.destroy()
+                nonlocal assigned_ids
                 assigned = self.db.get_athletes_by_coach(edit_id)
+                assigned_ids = {a["id"] for a in assigned}
+                count_lbl.configure(text=str(len(assigned)))
                 if not assigned:
                     empty = ctk.CTkFrame(athletes_frame, fg_color="transparent")
                     empty.pack(fill="both", expand=True, pady=30)
-                    ctk.CTkLabel(empty, text="🤷", font=("Arial", 26)).pack()
-                    ctk.CTkLabel(empty, text="Пока нет учеников",
-                            text_color="#445566").pack(pady=(4, 0))
-                for a in assigned:
-                    row = ctk.CTkFrame(athletes_frame, fg_color="#161b22", corner_radius=8)
+                    ctk.CTkLabel(empty, text="🤷", font=("Arial", 28)).pack()
+                    ctk.CTkLabel(empty, text="Нет привязанных спортсменов",
+                                text_color="#6e7681").pack(pady=(4, 0))
+                for i, a in enumerate(assigned, 1):
+                    row = ctk.CTkFrame(athletes_frame, fg_color="#151b23",
+                                       corner_radius=8, border_width=1, border_color="#2d333b")
                     row.pack(fill="x", padx=6, pady=3)
-                    ctk.CTkLabel(row, text=f"{a['last_name']} {a['first_name']}",
-                            anchor="w").pack(side="left", padx=10, pady=6)
+                    age = datetime.now().year - extract_birth_year(a["birth_date"])
+                    club = a["club"] or ""
+                    num_lbl = ctk.CTkLabel(row, text=f"{i}.", width=28, anchor="e",
+                                           text_color="#6e7681", font=ctk.CTkFont(size=12))
+                    num_lbl.pack(side="left", padx=(8, 2), pady=8)
+                    info = f"{a['last_name']} {a['first_name']}  ·  {age} лет"
+                    if club:
+                        info += f"  ·  {club}"
+                    ctk.CTkLabel(row, text=info, anchor="w",
+                                font=ctk.CTkFont(size=12)).pack(side="left", padx=4, pady=8)
 
                     def unassign(aid=a["id"]):
-                        row_data = self.db.get_athlete(aid)
-                        self.db.update_athlete(
-                            aid, row_data["first_name"], row_data["last_name"],
-                            row_data["birth_date"], row_data["gender"], row_data["club"],
-                            row_data["rank"], row_data["photo_path"], None,
-                        )
-                        refresh_athletes_list()
+                        try:
+                            row_data = self.db.get_athlete(aid)
+                            self.db.update_athlete(
+                                aid, row_data["first_name"], row_data["last_name"],
+                                row_data["birth_date"], row_data["gender"],
+                                row_data["club"], row_data["rank"],
+                                row_data["photo_path"], None,
+                            )
+                            assigned_ids.discard(aid)
+                            refresh_athletes_list()
+                        except Exception as e:
+                            messagebox.showerror("Ошибка", f"Не удалось отвязать:\n{e}")
 
-                    ctk.CTkButton(row, text="✕ отвязать", width=90, height=26,
-                            fg_color="#3a1010", hover_color="#5a2020",
-                            command=unassign).pack(side="right", padx=8, pady=6)
+                    ctk.CTkButton(row, text="✕", width=32, height=26,
+                                fg_color="#3a1010", hover_color="#5a2020",
+                                corner_radius=6,
+                                command=unassign).pack(side="right", padx=(4, 8), pady=6)
 
             refresh_athletes_list()
 
-            add_row = ctk.CTkFrame(dlg, fg_color="transparent")
-            add_row.pack(fill="x", padx=20, pady=(0, 10))
-            assign_search_var = ctk.StringVar()
-            ctk.CTkEntry(add_row, textvariable=assign_search_var,
-                        placeholder_text="🔍 Найти спортсмена, чтобы привязать..."
-                        ).pack(side="left", fill="x", expand=True, ipady=2)
-
-            def do_assign():
-                q = assign_search_var.get().strip()
-                if not q:
-                    return
-                matches = self.db.search_athletes(q)
-                if not matches:
-                    messagebox.showinfo("Не найдено", "Спортсмен с таким именем не найден.")
-                    return
-                if len(matches) > 1:
-                    names = "\n".join(f"— {m['last_name']} {m['first_name']}" for m in matches[:10])
-                    messagebox.showwarning("Уточните запрос",
-                            f"Найдено несколько совпадений, уточните имя:\n{names}")
-                    return
-                a = matches[0]
-                self.db.update_athlete(
-                    a["id"], a["first_name"], a["last_name"], a["birth_date"],
-                    a["gender"], a["club"], a["rank"], a["photo_path"], edit_id,
-                )
-                assign_search_var.set("")
-                refresh_athletes_list()
-
-            ctk.CTkButton(add_row, text="➕ Привязать", width=110, height=32,
-                        command=do_assign).pack(side="left", padx=(10, 0))
+        # ═══ КНОПКИ ═══════════════════════════════════════════════
+        btn_bar = ctk.CTkFrame(dlg, fg_color="#0d1117")
+        btn_bar.pack(fill="x", padx=14, pady=(10, 14))
 
         def save():
             first_name = fields["first_name"].get().strip()
@@ -4470,7 +4600,8 @@ class CoachesWindow(ctk.CTkToplevel):
             try:
                 datetime.strptime(birth_date, "%d.%m.%Y")
             except ValueError:
-                messagebox.showwarning("Ошибка", "Дата рождения в формате дд.мм.гггг (например, 25062002).")
+                messagebox.showwarning("Ошибка",
+                    "Дата рождения в формате дд.мм.гггг (например, 25.06.2002).")
                 return
             iin = iin_var.get().strip()
             if len(iin) != 12 or not iin.isdigit():
@@ -4488,17 +4619,17 @@ class CoachesWindow(ctk.CTkToplevel):
             else:
                 edit_id = self.db.add_coach(full_name, club, photo_path, "",
                         first_name, last_name, birth_date, iin, qualification, city)
-            dlg.title("Редактировать тренера")
             self._refresh_list()
             dlg.destroy()
 
-        btn_frame = ctk.CTkFrame(dlg, fg_color="transparent")
-        btn_frame.pack(fill="x", padx=20, pady=15)
-        ctk.CTkButton(btn_frame, text="💾 Сохранить", fg_color="#1a4a2a",
-                    hover_color="#2a6a3a", height=40, command=save).pack(side="right", padx=5)
-        ctk.CTkButton(btn_frame, text="Закрыть", fg_color="#2a2a2a",
-                    height=40, command=lambda: (self._refresh_list(), dlg.destroy())
-                    ).pack(side="right", padx=5)
+        ctk.CTkButton(btn_bar, text="💾 Сохранить", fg_color="#238636",
+                    hover_color="#2ea043", height=38, width=120,
+                    corner_radius=8, command=save).pack(side="right", padx=(6, 0))
+        ctk.CTkButton(btn_bar, text="Отмена", fg_color="#21262d",
+                    hover_color="#30363d", height=38, width=100,
+                    corner_radius=8,
+                    command=lambda: (self._refresh_list(), dlg.destroy())
+                    ).pack(side="right", padx=(0, 6))
 
 
 # ════
