@@ -441,12 +441,12 @@ class Database:
         for r in rows:
             if r["birth_date"]:
                 try:
-                    bd = datetime.datetime.strptime(r["birth_date"], "%d.%m.%Y")
+                    bd = datetime.strptime(r["birth_date"], "%d.%m.%Y")
                     prefix = bd.strftime("%y%m%d")
                 except:
-                    prefix = datetime.datetime.now().strftime("%y%m%d")
+                    prefix = datetime.now().strftime("%y%m%d")
             else:
-                prefix = datetime.datetime.now().strftime("%y%m%d")
+                prefix = datetime.now().strftime("%y%m%d")
             suffix = f"{random.randint(0, 999999):06d}"
             iin = prefix + suffix
             self.conn.execute("UPDATE athletes SET iin=? WHERE id=?", (iin, r["id"]))
