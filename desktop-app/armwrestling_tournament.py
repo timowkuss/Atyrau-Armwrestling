@@ -1948,7 +1948,7 @@ class ParticipantCard(ctk.CTkFrame):
         p = participant
 
         photo_label = ctk.CTkLabel(self, text="👤", font=("Arial", 28), width=50)
-        local_photo = resolve_local_photo_path(p["photo_path"]) if PIL_AVAILABLE and p["photo_path"] else None
+        local_photo = resolve_local_photo_path(p["photo_path"], only_cached=True) if PIL_AVAILABLE and p["photo_path"] else None
         if local_photo:
             try:
                 img = Image.open(local_photo).resize((50, 60))
@@ -3812,7 +3812,7 @@ class AthleteCard(ctk.CTkFrame):
             col = 1
 
         photo_label = ctk.CTkLabel(self, text="👤", font=("Arial", 28), width=50)
-        local_photo = resolve_local_photo_path(a["photo_path"]) if PIL_AVAILABLE and a["photo_path"] else None
+        local_photo = resolve_local_photo_path(a["photo_path"], only_cached=True) if PIL_AVAILABLE and a["photo_path"] else None
         if local_photo:
             try:
                 img = Image.open(local_photo).resize((50, 60))
@@ -4183,7 +4183,7 @@ class CoachCard(ctk.CTkFrame):
 
         photo_label = ctk.CTkLabel(self, text="🧑‍🏫", font=("Arial", 30), width=72)
         if PIL_AVAILABLE and c["photo_path"]:
-            local_path = resolve_local_photo_path(c["photo_path"])
+            local_path = resolve_local_photo_path(c["photo_path"], only_cached=True)
             if local_path:
                 try:
                     img = load_photo_thumbnail(local_path, 72, 88)

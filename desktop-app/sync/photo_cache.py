@@ -24,24 +24,30 @@ CACHE_DIR.mkdir(exist_ok=True)
 _TIMEOUT_SECONDS = 15
 
 
-def resolve_local_photo_path(photo_path):
+def resolve_local_photo_path(photo_path, only_cached=False):
     """Возвращает pathlib.Path к файлу на диске, готовому для
-    PIL.Image.open(...), либо None, если фото нет или недоступно."""
+    PIL.Image.open(...), либо None, если фото нет или недоступно.
+
+    Если only_cached=True, облачные фото не скачиваются — возвращается
+    None, если файл ещё не в локальном кэше.
+    """
     if not photo_path:
         return None
     s = str(photo_path)
     if s.startswith("http://") or s.startswith("https://"):
-        return _get_cached(s)
+        return _get_cached(s, only_cached=only_cached)
     p = Path(s)
     return p if p.exists() else None
 
 
-def _get_cached(url: str):
+def _get_cached(url: str, only_cached=False):
     suffix = Path(url.split("?")[0]).suffix or ".jpg"
     cache_key = hashlib.sha1(url.encode("utf-8")).hexdigest()
     local_path = CACHE_DIR / f"{cache_key}{suffix}"
     if local_path.exists():
         return local_path
+    if only_cached:
+        return None
     try:
         resp = requests.get(url, timeout=_TIMEOUT_SECONDS)
         resp.raise_for_status()
