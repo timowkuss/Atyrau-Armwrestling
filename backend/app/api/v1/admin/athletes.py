@@ -13,6 +13,7 @@ from app.db.models.statistics import AthleteStatistic
 from app.db.models.users import User
 from app.db.session import get_db
 from app.schemas.athletes import (
+    AthleteAdminDetailOut,
     AthleteAdminListOut,
     AthleteCreate,
     AthleteStatisticsAdminOut,
@@ -174,6 +175,38 @@ def delete_athlete(
         delete_cloudinary_photo(old_photo_path)
 
     return {"status": "deleted"}
+
+
+@router.get("/{athlete_id}", response_model=AthleteAdminDetailOut)
+def get_athlete_admin(
+    athlete_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(*WRITE_ROLES)),
+):
+    athlete = db.get(Athlete, athlete_id)
+    if not athlete:
+        raise HTTPException(status_code=404, detail="Спортсмен не найден")
+    club_name = athlete.club.name if athlete.club else None
+    coach_name = athlete.coach.full_name if athlete.coach else None
+    city_name = athlete.city.name if athlete.city else None
+    region_name = athlete.city.region.name if athlete.city and athlete.city.region else None
+    country_name = athlete.city.region.country.name if athlete.city and athlete.city.region and athlete.city.region.country else None
+    return AthleteAdminDetailOut(
+        id=athlete.id,
+        full_name=athlete.full_name,
+        birth_date=athlete.birth_date,
+        gender=athlete.gender,
+        club_name=club_name,
+        coach_name=coach_name,
+        city_name=city_name,
+        region_name=region_name,
+        country_name=country_name,
+        rank=athlete.rank,
+        photo_path=athlete.photo_path,
+        bio=athlete.bio,
+        iin=athlete.iin,
+        phone=athlete.phone,
+    )
 
 
 @router.get("/{athlete_id}/statistics", response_model=AthleteStatisticsAdminOut)

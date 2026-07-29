@@ -57,6 +57,9 @@ class AthleteDetailOut(BaseModel):
     photo_path: str | None
     bio: str | None
     statistics: AthleteStatisticsOut | None
+
+
+class AthleteAdminDetailOut(AthleteDetailOut):
     iin: str | None = None
     phone: str | None = None
 
