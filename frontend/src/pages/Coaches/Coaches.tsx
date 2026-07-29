@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useCoaches } from '@/features/coaches/useCoaches'
 import { CoachCard } from '@/components/ui/CoachCard'
@@ -6,6 +6,7 @@ import { LoadingState, ErrorState, EmptyState } from '@/components/ui/States'
 import { Pagination } from '@/components/ui/Pagination'
 
 const PAGE_SIZE = 12
+const SEARCH_DEBOUNCE_MS = 350
 
 export function Coaches() {
   const [params, setParams] = useSearchParams()
@@ -28,10 +29,17 @@ export function Coaches() {
     setParams(next)
   }
 
-  function submitName(e: React.FormEvent) {
-    e.preventDefault()
-    updateParam('name', nameInput.trim() || null)
-  }
+  // Живой поиск: применяем введённое имя в URL с небольшой задержкой после
+  // того, как пользователь перестал печатать, без кнопки "Применить".
+  useEffect(() => {
+    const trimmed = nameInput.trim()
+    if (trimmed === (name ?? '')) return
+    const timer = setTimeout(() => {
+      updateParam('name', trimmed || null)
+    }, SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nameInput])
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-12">
@@ -42,7 +50,7 @@ export function Coaches() {
       </p>
 
       <div className="plate mt-8 flex flex-col gap-4 rounded-[var(--radius-rivet)] p-4 sm:flex-row sm:flex-wrap sm:items-end">
-        <form onSubmit={submitName} className="flex flex-1 flex-col gap-1 min-w-[200px]">
+        <div className="flex flex-1 flex-col gap-1 min-w-[200px]">
           <label htmlFor="coach-name" className="text-eyebrow text-steel">
             Имя
           </label>
@@ -51,19 +59,12 @@ export function Coaches() {
             value={nameInput}
             onChange={(e) => setNameInput(e.target.value)}
             placeholder="Поиск по имени…"
+            autoComplete="off"
             className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone placeholder:text-steel-dim focus:border-brass focus:outline-none"
           />
-        </form>
+        </div>
 
-        <button
-          type="button"
-          onClick={submitName}
-          className="rounded-[var(--radius-rivet)] bg-rust px-4 py-2 text-sm font-semibold text-bone transition-colors hover:bg-rust-dim"
-        >
-          Применить
-        </button>
-
-        {name && (
+        {nameInput && (
           <button
             type="button"
             onClick={() => {
