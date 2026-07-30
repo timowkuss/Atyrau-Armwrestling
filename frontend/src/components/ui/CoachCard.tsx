@@ -17,10 +17,10 @@ export function CoachCard({ coach }: { coach: CoachListItem }) {
       className="plate group flex flex-col rounded-[var(--radius-rivet)] p-5 transition-transform hover:-translate-y-0.5 hover:border-brass/50"
     >
       <div className="flex items-start justify-between">
-        <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border border-steel-dim bg-ink font-display text-xl text-steel sm:h-24 sm:w-24 sm:text-2xl">
+        <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-steel-dim bg-ink font-display text-xl text-steel sm:h-28 sm:w-28 sm:text-2xl">
           {coach.photo_path ? (
             <img
-              src={cloudinaryThumb(coach.photo_path, 96) ?? coach.photo_path}
+              src={cloudinaryThumb(coach.photo_path, 112) ?? coach.photo_path}
               alt=""
               className="h-full w-full object-cover"
               loading="lazy"

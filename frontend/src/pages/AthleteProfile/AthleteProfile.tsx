@@ -67,10 +67,10 @@ export function AthleteProfile() {
               {/* Фото */}
               <div className="group relative flex-shrink-0">
                 <div className="absolute -inset-1 rounded-2xl bg-gradient-to-br from-brass/30 to-rust/30 opacity-0 blur transition-opacity duration-500 group-hover:opacity-100" />
-                <div className="relative flex h-32 w-32 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-brass/30 bg-ink sm:h-44 sm:w-44">
+                <div className="relative flex h-40 w-40 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-brass/30 bg-ink sm:h-56 sm:w-56">
                   {a.photo_path ? (
                     <img
-                      src={cloudinaryThumb(a.photo_path, 192) ?? a.photo_path}
+                      src={cloudinaryThumb(a.photo_path, 224) ?? a.photo_path}
                       alt=""
                       className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
                     />

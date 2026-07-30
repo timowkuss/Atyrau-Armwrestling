@@ -18,10 +18,10 @@ export function AthleteCard({ athlete }: { athlete: AthleteListItem }) {
     >
       <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-brass/5 blur-3xl transition-all duration-500 group-hover:bg-brass/10" />
       <div className="flex items-start justify-between">
-        <div className="relative flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border border-steel-dim/20 bg-ink font-display text-xl text-steel transition-all duration-300 group-hover:border-brass/30 sm:h-24 sm:w-24 sm:text-2xl">
+        <div className="relative flex h-24 w-24 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-steel-dim/20 bg-ink font-display text-xl text-steel transition-all duration-300 group-hover:border-brass/30 sm:h-28 sm:w-28 sm:text-2xl">
           {athlete.photo_path ? (
             <img
-              src={cloudinaryThumb(athlete.photo_path, 96) ?? athlete.photo_path}
+              src={cloudinaryThumb(athlete.photo_path, 112) ?? athlete.photo_path}
               alt=""
               className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
               loading="lazy"
