@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useAthleteRankings, useClubRankings, useCoachRankings } from '@/features/rankings/useRankings'
+import { useAthleteRankings, useClubRankings, useCoachRankings, useEloRankings } from '@/features/rankings/useRankings'
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/States'
 
 export function Rankings() {
-  const [tab, setTab] = useState<'athletes' | 'clubs' | 'coaches'>('athletes')
+  const [tab, setTab] = useState<'athletes' | 'clubs' | 'coaches' | 'elo'>('athletes')
   const athletes = useAthleteRankings()
   const clubs = useClubRankings()
   const coaches = useCoachRankings()
+  const elo = useEloRankings()
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-12">
@@ -32,6 +33,12 @@ export function Rankings() {
           className={`text-eyebrow rounded-[var(--radius-rivet)] px-3 py-1.5 ${tab === 'coaches' ? 'bg-petrol-2 text-brass' : 'border border-steel-dim text-steel'}`}
         >
           Тренеры
+        </button>
+        <button
+          onClick={() => setTab('elo')}
+          className={`text-eyebrow rounded-[var(--radius-rivet)] px-3 py-1.5 ${tab === 'elo' ? 'bg-petrol-2 text-brass' : 'border border-steel-dim text-steel'}`}
+        >
+          Rating
         </button>
       </div>
 
@@ -97,6 +104,27 @@ export function Rankings() {
                       {r.club_name ?? '—'} · {r.athletes_count} учен.
                     </span>
                     <span className="font-display text-brass">{r.points}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </>
+        )}
+        {tab === 'elo' && (
+          <>
+            {elo.isLoading && <LoadingState label="Загрузка рейтинга" />}
+            {elo.isError && <ErrorState message={(elo.error as Error).message} onRetry={() => elo.refetch()} />}
+            {elo.data && elo.data.length === 0 && <EmptyState title="Рейтинг ещё не сформирован" />}
+            {elo.data && elo.data.length > 0 && (
+              <ol className="flex flex-col divide-y divide-steel-dim/15">
+                {elo.data.map((r) => (
+                  <li key={r.athlete_id} className="flex items-center justify-between gap-3 py-2.5">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-petrol-2 font-mono text-xs font-bold text-brass">{r.position}</span>
+                    <Link to={`/athletes/${r.athlete_id}`} className="flex-1 truncate text-bone hover:text-brass">
+                      {r.athlete_name}
+                    </Link>
+                    <span className="font-mono text-xs text-steel-dim">{r.club_name ?? '—'}</span>
+                    <span className="font-display text-lg font-bold text-rust">{r.elo_combined}</span>
                   </li>
                 ))}
               </ol>

@@ -241,6 +241,14 @@ export interface AthleteRankingRow {
   period: string | null
 }
 
+export interface EloRankingRow {
+  position: number
+  athlete_id: number
+  athlete_name: string
+  club_name: string | null
+  elo_combined: number
+}
+
 export interface ClubRankingRow {
   position: number | null
   club_id: number

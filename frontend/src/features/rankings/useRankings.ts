@@ -12,3 +12,7 @@ export function useClubRankings() {
 export function useCoachRankings() {
   return useQuery({ queryKey: ['rankings', 'coaches'], queryFn: () => api.rankings.coaches() })
 }
+
+export function useEloRankings() {
+  return useQuery({ queryKey: ['rankings', 'elo'], queryFn: () => api.rankings.elo() })
+}

@@ -38,3 +38,11 @@ class CoachRankingOut(BaseModel):
     club_name: str | None
     athletes_count: int
     points: int
+
+
+class EloRankingOut(BaseModel):
+    position: int
+    athlete_id: int
+    athlete_name: str
+    club_name: str | None
+    elo_combined: int

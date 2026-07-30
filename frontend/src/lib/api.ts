@@ -15,6 +15,7 @@ import type {
   CompetitionDetail,
   CompetitionListItem,
   CompetitionListParams,
+  EloRankingRow,
   NewsDetail,
   NewsListItem,
   Page,
@@ -95,6 +96,8 @@ export const api = {
     clubs: () => request<ClubRankingRow[]>('/public/rankings/clubs'),
     coaches: (params?: { period?: string }) =>
       request<CoachRankingRow[]>('/public/rankings/coaches', params),
+    elo: (params?: { gender?: string }) =>
+      request<EloRankingRow[]>('/public/rankings/elo', params),
   },
   clubs: {
     list: (params?: { city_id?: number; page?: number; page_size?: number }) =>
