@@ -23,7 +23,7 @@ export function EloRating({ eloLeft, eloRight, eloCombined }: EloRatingProps) {
         className="flex w-full items-center justify-between gap-4 p-4 text-left transition-colors hover:bg-bone/[0.03]"
       >
         <div>
-          <div className="text-eyebrow text-brass">Общий рейтинг Эло</div>
+          <div className="text-eyebrow text-brass">Общий рейтинг</div>
           <div className="font-display text-3xl leading-tight text-bone">{eloCombined}</div>
         </div>
         <div className="flex flex-col items-center gap-1 text-steel-dim">
