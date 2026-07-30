@@ -48,14 +48,13 @@ def coach_rankings(
     rankings = []
     for c, club_name in coaches:
         r = calculate_coach_rating(db, c.id)
-        if r["student_count"] > 0:
-            rankings.append({
-                "coach_id": c.id,
-                "coach_name": c.full_name,
-                "club_name": club_name,
-                "athletes_count": r["student_count"],
-                "points": r["rating"],
-            })
+        rankings.append({
+            "coach_id": c.id,
+            "coach_name": c.full_name,
+            "club_name": club_name,
+            "athletes_count": r["student_count"],
+            "points": r["rating"],
+        })
     rankings.sort(key=lambda x: x["points"], reverse=True)
     return [
         CoachRankingOut(position=i + 1, **r)

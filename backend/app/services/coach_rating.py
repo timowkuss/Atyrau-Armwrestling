@@ -61,7 +61,7 @@ def calculate_coach_rating(
 
     if not athletes:
         return {
-            "rating": 0,
+            "rating": BASE_RATING,
             "development_score": 0,
             "result_score": 0,
             "scale_score": 0,
