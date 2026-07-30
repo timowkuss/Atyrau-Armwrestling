@@ -121,8 +121,8 @@ export function AthleteProfile() {
                     </span>
                   )}
                   {stats && (
-                    <span className="ml-auto inline-flex items-center gap-2">
-                      <span className="font-mono text-[10px] font-medium uppercase tracking-widest text-rust/60">ELO</span>
+                    <span className="ml-4 inline-flex items-center gap-2">
+                      <span className="font-mono text-[10px] font-medium uppercase tracking-widest text-rust/60">Rating</span>
                       <span className="font-display text-3xl font-bold leading-none text-rust">{stats.elo_combined}</span>
                     </span>
                   )}

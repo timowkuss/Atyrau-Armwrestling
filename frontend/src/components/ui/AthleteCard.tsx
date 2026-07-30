@@ -42,7 +42,7 @@ export function AthleteCard({ athlete }: { athlete: AthleteListItem }) {
             </span>
           )}
           <div className="flex flex-col items-end">
-            <span className="font-mono text-[10px] font-medium uppercase tracking-wider text-rust/60">ELO</span>
+            <span className="font-mono text-[10px] font-medium uppercase tracking-wider text-rust/60">Rating</span>
             <span className="font-display text-xl font-bold leading-none text-rust">{athlete.elo_combined}</span>
           </div>
         </div>
