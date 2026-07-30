@@ -110,12 +110,6 @@ export function Athletes() {
                 className="rounded-lg border border-steel-dim/20 bg-ink/80 px-3.5 py-2.5 text-sm text-bone backdrop-blur transition-colors focus:border-brass/50 focus:bg-ink focus:outline-none"
               >
                 <option value="">Все</option>
-                <option value="3 юношеский">3 юношеский</option>
-                <option value="2 юношеский">2 юношеский</option>
-                <option value="1 юношеский">1 юношеский</option>
-                <option value="3 разряд">3 разряд</option>
-                <option value="2 разряд">2 разряд</option>
-                <option value="1 разряд">1 разряд</option>
                 <option value="КМС">КМС</option>
                 <option value="МС">МС</option>
                 <option value="МСМК">МСМК</option>
