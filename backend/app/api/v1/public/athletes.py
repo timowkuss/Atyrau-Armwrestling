@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session, joinedload
 
 from app.db.models.athletes import Athlete
 from app.db.models.categories import Category
@@ -45,7 +44,10 @@ def list_athletes(
             Club.name.label("club_name"),
             Coach.full_name.label("coach_name"),
             City.name.label("city_name"),
-            AthleteStatistic.elo_combined,
+            func.coalesce(
+                (AthleteStatistic.elo_left + AthleteStatistic.elo_right) / 2,
+                0
+            ).label("elo_combined"),
         )
         .outerjoin(Club, Athlete.club_id == Club.id)
         .outerjoin(Coach, Athlete.coach_id == Coach.id)
@@ -97,7 +99,7 @@ def list_athletes(
             city_name=city_name,
             rank=athlete.rank,
             photo_path=athlete.photo_path,
-            elo_combined=elo_combined or 0,
+            elo_combined=round(elo_combined or 0),
         )
         for athlete, club_name, coach_name, city_name, elo_combined in rows
     ]
