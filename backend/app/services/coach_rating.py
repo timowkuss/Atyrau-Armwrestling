@@ -56,7 +56,7 @@ def calculate_coach_rating(
 ) -> dict:
     athletes = (
         db.query(Athlete)
-        .filter(Athlete.coach_id == coach_id, Athlete.is_hidden.is_(False))
+        .filter(Athlete.coach_id == coach_id)
         .all()
     )
 
