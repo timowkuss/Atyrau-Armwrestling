@@ -74,6 +74,7 @@ class Athlete(Base):
 
     club: Mapped["Club"] = relationship(back_populates="athletes")
     coach: Mapped["Coach"] = relationship(back_populates="athletes")
+    city: Mapped["City | None"] = relationship()
     statistics: Mapped["AthleteStatistic"] = relationship(
         back_populates="athlete", uselist=False, cascade="all, delete-orphan"
     )
