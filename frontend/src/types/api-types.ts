@@ -51,6 +51,7 @@ export interface AthleteDetail {
   gender: Gender
   club_name: string | null
   coach_name: string | null
+  coach_id: number | null
   city_name: string | null
   region_name: string | null
   country_name: string | null

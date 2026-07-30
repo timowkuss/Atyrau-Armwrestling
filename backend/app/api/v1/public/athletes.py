@@ -154,6 +154,7 @@ def get_athlete(athlete_id: int, db: Session = Depends(get_db)):
         gender=athlete.gender,
         club_name=athlete.club.name if athlete.club else None,
         coach_name=athlete.coach.full_name if athlete.coach else None,
+        coach_id=athlete.coach_id,
         city_name=city_name,
         region_name=region_name,
         country_name=country_name,

@@ -50,6 +50,7 @@ class AthleteDetailOut(BaseModel):
     gender: str | None
     club_name: str | None
     coach_name: str | None
+    coach_id: int | None = None
     city_name: str | None
     region_name: str | None
     country_name: str | None

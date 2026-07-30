@@ -147,7 +147,13 @@ export function AthleteProfile() {
                       </div>
                       <div>
                         <div className="text-eyebrow text-steel-dim">Тренер</div>
-                        <div className="text-sm font-medium text-bone">{a.coach_name}</div>
+                        {a.coach_id ? (
+                          <Link to={`/coaches/${a.coach_id}`} className="text-sm font-medium text-bone transition-colors hover:text-brass">
+                            {a.coach_name}
+                          </Link>
+                        ) : (
+                          <div className="text-sm font-medium text-bone">{a.coach_name}</div>
+                        )}
                       </div>
                     </div>
                   )}
