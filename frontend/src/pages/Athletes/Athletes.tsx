@@ -38,11 +38,7 @@ export function Athletes() {
   }
 
   function applyFilters() {
-    const rankEl = document.getElementById('athlete-rank') as HTMLInputElement
-    const genderEl = document.getElementById('athlete-gender') as HTMLSelectElement
     updateParam('name', nameInput.trim() || null)
-    updateParam('rank', rankEl?.value.trim() || null)
-    updateParam('gender', genderEl?.value || null)
   }
 
   return (
@@ -107,13 +103,24 @@ export function Athletes() {
               <label htmlFor="athlete-rank" className="font-mono text-[11px] font-medium uppercase tracking-widest text-steel-dim">
                 Разряд
               </label>
-              <input
+              <select
                 id="athlete-rank"
-                defaultValue={rank ?? ''}
-                onBlur={(e) => updateParam('rank', e.target.value.trim() || null)}
-                placeholder="напр. КМС"
-                className="w-32 rounded-lg border border-steel-dim/20 bg-ink/80 px-3.5 py-2.5 text-sm text-bone placeholder:text-steel-dim/50 backdrop-blur transition-colors focus:border-brass/50 focus:bg-ink focus:outline-none"
-              />
+                value={rank ?? ''}
+                onChange={(e) => updateParam('rank', e.target.value || null)}
+                className="rounded-lg border border-steel-dim/20 bg-ink/80 px-3.5 py-2.5 text-sm text-bone backdrop-blur transition-colors focus:border-brass/50 focus:bg-ink focus:outline-none"
+              >
+                <option value="">Все</option>
+                <option value="3 юношеский">3 юношеский</option>
+                <option value="2 юношеский">2 юношеский</option>
+                <option value="1 юношеский">1 юношеский</option>
+                <option value="3 разряд">3 разряд</option>
+                <option value="2 разряд">2 разряд</option>
+                <option value="1 разряд">1 разряд</option>
+                <option value="КМС">КМС</option>
+                <option value="МС">МС</option>
+                <option value="МСМК">МСМК</option>
+                <option value="ЗМС">ЗМС</option>
+              </select>
             </div>
 
             <button
