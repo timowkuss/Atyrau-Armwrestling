@@ -246,6 +246,7 @@ export interface EloRankingRow {
   athlete_id: number
   athlete_name: string
   club_name: string | null
+  photo_path: string | null
   elo_combined: number
   elo_left: number
   elo_right: number
@@ -266,6 +267,7 @@ export interface CoachRankingRow {
   coach_id: number
   coach_name: string
   club_name: string | null
+  photo_path: string | null
   athletes_count: number
   points: number
 }

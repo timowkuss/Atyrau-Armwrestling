@@ -52,6 +52,7 @@ def coach_rankings(
             "coach_id": c.id,
             "coach_name": c.full_name,
             "club_name": club_name,
+            "photo_path": c.photo_path,
             "athletes_count": r["student_count"],
             "points": r["rating"],
         })
@@ -93,6 +94,7 @@ def elo_rankings(
             Athlete.id,
             Athlete.full_name,
             Club.name.label("club_name"),
+            Athlete.photo_path,
             AthleteStatistic.elo_left,
             AthleteStatistic.elo_right,
         )
@@ -118,11 +120,12 @@ def elo_rankings(
             athlete_id=athlete_id,
             athlete_name=full_name,
             club_name=club_name,
+            photo_path=photo_path,
             elo_combined=round((elo_left + elo_right) / 2) if elo_left is not None and elo_right is not None else 0,
             elo_left=elo_left or 0,
             elo_right=elo_right or 0,
         )
-        for i, (athlete_id, full_name, club_name, elo_left, elo_right) in enumerate(ranked)
+        for i, (athlete_id, full_name, club_name, photo_path, elo_left, elo_right) in enumerate(ranked)
     ]
 
 

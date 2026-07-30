@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useEloRankings, useClubRankings, useCoachRankings } from '@/features/rankings/useRankings'
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/States'
+import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 
 type Tab = 'athletes' | 'coaches' | 'clubs'
 
@@ -110,8 +111,12 @@ export function Rankings() {
                         }`}>
                           {r.position}
                         </div>
-                        <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border border-steel-dim/15 bg-ink font-display text-xs text-steel-dim transition-all duration-300 group-hover:border-brass/30">
-                          <span className="text-lg">{r.athlete_name.charAt(0)}</span>
+                        <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border border-steel-dim/15 bg-ink transition-all duration-300 group-hover:border-brass/30">
+                          {r.photo_path ? (
+                            <img src={cloudinaryThumb(r.photo_path, 44) ?? r.photo_path} alt="" className="h-full w-full object-cover" loading="lazy" />
+                          ) : (
+                            <span className="font-display text-lg text-steel-dim">{r.athlete_name.charAt(0)}</span>
+                          )}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="truncate font-display text-base font-semibold text-bone transition-colors group-hover:text-brass sm:text-lg">
@@ -160,8 +165,12 @@ export function Rankings() {
                               : 'bg-gradient-to-br from-amber-700/20 to-amber-800/10 text-amber-600'
                           : 'bg-ink/60 text-steel-dim'
                       }`}>{r.position ?? 0}</div>
-                      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border border-steel-dim/15 bg-ink font-display text-sm text-steel-dim transition-all group-hover:border-brass/30">
-                        {r.coach_name.charAt(0)}
+                      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border border-steel-dim/15 bg-ink transition-all group-hover:border-brass/30">
+                        {r.photo_path ? (
+                          <img src={cloudinaryThumb(r.photo_path, 44) ?? r.photo_path} alt="" className="h-full w-full object-cover" loading="lazy" />
+                        ) : (
+                          <span className="font-display text-sm text-steel-dim">{r.coach_name.charAt(0)}</span>
+                        )}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-display text-base font-semibold text-bone transition-colors group-hover:text-brass sm:text-lg">

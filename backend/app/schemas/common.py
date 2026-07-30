@@ -36,6 +36,7 @@ class CoachRankingOut(BaseModel):
     coach_id: int
     coach_name: str
     club_name: str | None
+    photo_path: str | None = None
     athletes_count: int
     points: int
 
@@ -45,6 +46,7 @@ class EloRankingOut(BaseModel):
     athlete_id: int
     athlete_name: str
     club_name: str | None
+    photo_path: str | None = None
     elo_combined: int
     elo_left: int
     elo_right: int

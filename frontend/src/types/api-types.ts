@@ -255,6 +255,7 @@ export interface CoachRankingRow {
   coach_id: number
   coach_name: string
   club_name: string | null
+  photo_path: string | null
   athletes_count: number
   points: number
 }
