@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.models.athletes import Athlete
@@ -8,7 +7,7 @@ from app.db.models.coaches import Coach
 from app.db.models.rankings import AthleteRanking, ClubRanking
 from app.db.models.statistics import AthleteStatistic
 from app.db.session import get_db
-from app.schemas.common import AthleteRankingOut, ClubRankingOut, CoachRankingOut, CoachRatingOut, EloRankingOut
+from app.schemas.common import AthleteRankingOut, ClubRankingOut, CoachRankingOut, EloRankingOut
 from app.services.coach_rating import calculate_coach_rating
 
 router = APIRouter(prefix="/rankings", tags=["public:rankings"])
@@ -40,41 +39,27 @@ def athlete_rankings(
 
 @router.get("/coaches", response_model=list[CoachRankingOut])
 def coach_rankings(
-    period: str | None = None,
     limit: int = Query(100, le=500),
     db: Session = Depends(get_db),
 ):
-    # Своей таблицы рейтинга тренеров пока нет — считаем прямо здесь,
-    # суммируя очки уже накопленного рейтинга спортсменов по их тренеру
-    # (Athlete.coach_id). Тренеры без учеников или без очков в выдачу не
-    # попадают — их рейтинг просто пока не из чего считать.
-    query = (
-        db.query(
-            Coach.id,
-            Coach.full_name,
-            Club.name.label("club_name"),
-            func.count(func.distinct(Athlete.id)).label("athletes_count"),
-            func.coalesce(func.sum(AthleteRanking.points), 0).label("points"),
-        )
-        .join(Athlete, Athlete.coach_id == Coach.id)
-        .join(AthleteRanking, AthleteRanking.athlete_id == Athlete.id)
-        .outerjoin(Club, Coach.club_id == Club.id)
-    )
-    if period:
-        query = query.filter(AthleteRanking.period == period)
-    rows = (
-        query.group_by(Coach.id, Coach.full_name, Club.name)
-        .having(func.coalesce(func.sum(AthleteRanking.points), 0) > 0)
-        .order_by(func.sum(AthleteRanking.points).desc())
-        .limit(limit)
-        .all()
-    )
+    coaches = db.query(Coach).outerjoin(Club, Coach.club_id == Club.id).add_columns(
+        Club.name.label("club_name"),
+    ).all()
+    rankings = []
+    for c, club_name in coaches:
+        r = calculate_coach_rating(db, c.id)
+        if r["student_count"] > 0:
+            rankings.append({
+                "coach_id": c.id,
+                "coach_name": c.full_name,
+                "club_name": club_name,
+                "athletes_count": r["student_count"],
+                "points": r["rating"],
+            })
+    rankings.sort(key=lambda x: x["points"], reverse=True)
     return [
-        CoachRankingOut(
-            position=i + 1, coach_id=coach_id, coach_name=full_name,
-            club_name=club_name, athletes_count=athletes_count, points=int(points),
-        )
-        for i, (coach_id, full_name, club_name, athletes_count, points) in enumerate(rows)
+        CoachRankingOut(position=i + 1, **r)
+        for i, r in enumerate(rankings[:limit])
     ]
 
 
@@ -142,16 +127,4 @@ def elo_rankings(
     ]
 
 
-@router.get("/coaches/rating", response_model=list[CoachRatingOut])
-def coach_rating_list(
-    limit: int = Query(100, le=500),
-    db: Session = Depends(get_db),
-):
-    coaches = db.query(Coach).all()
-    ratings = []
-    for c in coaches:
-        r = calculate_coach_rating(db, c.id)
-        if r["student_count"] > 0:
-            ratings.append(r)
-    ratings.sort(key=lambda x: x["rating"], reverse=True)
-    return ratings[:limit]
+
