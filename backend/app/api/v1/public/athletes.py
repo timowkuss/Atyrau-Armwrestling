@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, or_
+from sqlalchemy.orm import Session, joinedload
 
 from app.db.models.athletes import Athlete
 from app.db.models.categories import Category
