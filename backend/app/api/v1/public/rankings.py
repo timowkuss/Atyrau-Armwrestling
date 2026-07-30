@@ -147,7 +147,7 @@ def coach_rating_list(
     limit: int = Query(100, le=500),
     db: Session = Depends(get_db),
 ):
-    coaches = db.query(Coach).filter(Coach.is_hidden.is_(False)).all()
+    coaches = db.query(Coach).all()
     ratings = []
     for c in coaches:
         r = calculate_coach_rating(db, c.id)
