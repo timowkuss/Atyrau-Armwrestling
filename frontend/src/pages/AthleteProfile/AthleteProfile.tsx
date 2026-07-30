@@ -4,6 +4,7 @@ import { LoadingState, ErrorState, EmptyState } from '@/components/ui/States'
 import { Gauge } from '@/components/ui/Gauge'
 import { EloRating } from '@/components/ui/EloRating'
 import { MedalBadge } from '@/components/ui/Medal'
+import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -42,9 +43,13 @@ export function AthleteProfile() {
 
       {/* Заголовок профиля */}
       <div className="plate mt-4 flex flex-col gap-6 rounded-[var(--radius-rivet)] p-6 sm:flex-row sm:items-center">
-        <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-brass/50 bg-ink font-display text-2xl text-steel">
+        <div className="flex h-28 w-28 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-brass/50 bg-ink font-display text-2xl text-steel sm:h-36 sm:w-36 sm:text-3xl">
           {a.photo_path ? (
-            <img src={a.photo_path} alt="" className="h-full w-full object-cover" />
+            <img
+              src={cloudinaryThumb(a.photo_path, 144) ?? a.photo_path}
+              alt=""
+              className="h-full w-full object-cover"
+            />
           ) : (
             a.full_name
               .split(' ')

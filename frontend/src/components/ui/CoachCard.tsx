@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { CoachListItem } from '@/types/api'
+import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 
 function age(birthDate: string | null): number | null {
   if (!birthDate) return null
@@ -16,9 +17,14 @@ export function CoachCard({ coach }: { coach: CoachListItem }) {
       className="plate group flex flex-col rounded-[var(--radius-rivet)] p-5 transition-transform hover:-translate-y-0.5 hover:border-brass/50"
     >
       <div className="flex items-start justify-between">
-        <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-[var(--radius-rivet)] border border-steel-dim bg-ink font-display text-lg text-steel">
+        <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border border-steel-dim bg-ink font-display text-xl text-steel sm:h-24 sm:w-24 sm:text-2xl">
           {coach.photo_path ? (
-            <img src={coach.photo_path} alt="" className="h-full w-full object-cover" />
+            <img
+              src={cloudinaryThumb(coach.photo_path, 96) ?? coach.photo_path}
+              alt=""
+              className="h-full w-full object-cover"
+              loading="lazy"
+            />
           ) : (
             coach.full_name
               .split(' ')
