@@ -66,7 +66,7 @@ def list_athletes(
     if coach_id is not None:
         query = query.filter(Athlete.coach_id == coach_id)
     if rank:
-        query = query.filter(Athlete.rank == rank)
+        query = query.filter(Athlete.rank.ilike(f"%{rank}%"))
     if gender:
         query = query.filter(Athlete.gender == gender)
     if age is not None:
