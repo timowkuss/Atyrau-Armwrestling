@@ -48,3 +48,11 @@ class EloRankingOut(BaseModel):
     elo_combined: int
     elo_left: int
     elo_right: int
+
+
+class CoachRatingOut(BaseModel):
+    rating: int
+    development_score: int
+    result_score: int
+    scale_score: int
+    student_count: int

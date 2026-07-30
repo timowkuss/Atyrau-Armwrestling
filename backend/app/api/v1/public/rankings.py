@@ -8,7 +8,8 @@ from app.db.models.coaches import Coach
 from app.db.models.rankings import AthleteRanking, ClubRanking
 from app.db.models.statistics import AthleteStatistic
 from app.db.session import get_db
-from app.schemas.common import AthleteRankingOut, ClubRankingOut, CoachRankingOut, EloRankingOut
+from app.schemas.common import AthleteRankingOut, ClubRankingOut, CoachRankingOut, CoachRatingOut, EloRankingOut
+from app.services.coach_rating import calculate_coach_rating
 
 router = APIRouter(prefix="/rankings", tags=["public:rankings"])
 
@@ -139,3 +140,18 @@ def elo_rankings(
         )
         for i, (athlete_id, full_name, club_name, elo_left, elo_right) in enumerate(ranked)
     ]
+
+
+@router.get("/coaches/rating", response_model=list[CoachRatingOut])
+def coach_rating_list(
+    limit: int = Query(100, le=500),
+    db: Session = Depends(get_db),
+):
+    coaches = db.query(Coach).filter(Coach.is_hidden.is_(False)).all()
+    ratings = []
+    for c in coaches:
+        r = calculate_coach_rating(db, c.id)
+        if r["student_count"] > 0:
+            ratings.append(r)
+    ratings.sort(key=lambda x: x["rating"], reverse=True)
+    return ratings[:limit]
