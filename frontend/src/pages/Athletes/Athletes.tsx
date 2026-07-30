@@ -37,6 +37,14 @@ export function Athletes() {
     updateParam('name', nameInput.trim() || null)
   }
 
+  function applyFilters() {
+    const rankEl = document.getElementById('athlete-rank') as HTMLInputElement
+    const genderEl = document.getElementById('athlete-gender') as HTMLSelectElement
+    updateParam('name', nameInput.trim() || null)
+    updateParam('rank', rankEl?.value.trim() || null)
+    updateParam('gender', genderEl?.value || null)
+  }
+
   return (
     <div className="relative">
       {/* Hero-секция страницы */}
@@ -110,7 +118,7 @@ export function Athletes() {
 
             <button
               type="button"
-              onClick={submitName}
+              onClick={applyFilters}
               className="h-[42px] rounded-lg bg-rust px-5 text-sm font-semibold text-bone transition-all hover:bg-rust-dim hover:shadow-[0_4px_20px_-4px_rgba(193,85,44,0.4)]"
             >
               Применить
