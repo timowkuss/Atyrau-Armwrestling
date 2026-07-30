@@ -46,3 +46,5 @@ class EloRankingOut(BaseModel):
     athlete_name: str
     club_name: str | None
     elo_combined: int
+    elo_left: int
+    elo_right: int

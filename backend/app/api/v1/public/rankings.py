@@ -98,6 +98,8 @@ def club_rankings(limit: int = Query(100, le=500), db: Session = Depends(get_db)
 @router.get("/elo", response_model=list[EloRankingOut])
 def elo_rankings(
     gender: str | None = None,
+    hand: str | None = None,
+    name: str | None = None,
     limit: int = Query(100, le=500),
     db: Session = Depends(get_db),
 ):
@@ -115,12 +117,16 @@ def elo_rankings(
     )
     if gender:
         query = query.filter(Athlete.gender == gender)
+    if name:
+        query = query.filter(Athlete.full_name.ilike(f"%{name}%"))
     rows = query.all()
-    ranked = sorted(
-        rows,
-        key=lambda r: (r.elo_left + r.elo_right) / 2 if r.elo_left is not None and r.elo_right is not None else 0,
-        reverse=True,
-    )[:limit]
+    if hand == "left":
+        key_fn = lambda r: r.elo_left or 0
+    elif hand == "right":
+        key_fn = lambda r: r.elo_right or 0
+    else:
+        key_fn = lambda r: (r.elo_left + r.elo_right) / 2 if r.elo_left is not None and r.elo_right is not None else 0
+    ranked = sorted(rows, key=key_fn, reverse=True)[:limit]
     return [
         EloRankingOut(
             position=i + 1,
@@ -128,6 +134,8 @@ def elo_rankings(
             athlete_name=full_name,
             club_name=club_name,
             elo_combined=round((elo_left + elo_right) / 2) if elo_left is not None and elo_right is not None else 0,
+            elo_left=elo_left or 0,
+            elo_right=elo_right or 0,
         )
         for i, (athlete_id, full_name, club_name, elo_left, elo_right) in enumerate(ranked)
     ]

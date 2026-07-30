@@ -96,7 +96,7 @@ export const api = {
     clubs: () => request<ClubRankingRow[]>('/public/rankings/clubs'),
     coaches: (params?: { period?: string }) =>
       request<CoachRankingRow[]>('/public/rankings/coaches', params),
-    elo: (params?: { gender?: string }) =>
+    elo: (params?: { gender?: string; hand?: string; name?: string }) =>
       request<EloRankingRow[]>('/public/rankings/elo', params),
   },
   clubs: {

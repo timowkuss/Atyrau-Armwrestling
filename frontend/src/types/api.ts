@@ -247,6 +247,8 @@ export interface EloRankingRow {
   athlete_name: string
   club_name: string | null
   elo_combined: number
+  elo_left: number
+  elo_right: number
 }
 
 export interface ClubRankingRow {

@@ -13,6 +13,9 @@ export function useCoachRankings() {
   return useQuery({ queryKey: ['rankings', 'coaches'], queryFn: () => api.rankings.coaches() })
 }
 
-export function useEloRankings() {
-  return useQuery({ queryKey: ['rankings', 'elo'], queryFn: () => api.rankings.elo() })
+export function useEloRankings(params?: { gender?: string; hand?: string; name?: string }) {
+  return useQuery({
+    queryKey: ['rankings', 'elo', params],
+    queryFn: () => api.rankings.elo(params),
+  })
 }
