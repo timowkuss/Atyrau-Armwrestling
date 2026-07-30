@@ -49,21 +49,21 @@ export function Athletes() {
             `
           }}
         />
-        <div className="mx-auto max-w-6xl px-5 py-14 sm:py-20">
-          <p className="font-mono text-xs font-medium uppercase tracking-[0.25em] text-rust/80">База спортсменов</p>
-          <h1 className="mt-3 font-display text-4xl font-bold leading-tight text-bone sm:text-5xl">
+        <div className="mx-auto max-w-6xl px-5 py-6 sm:py-8">
+          <p className="font-mono text-[10px] font-medium uppercase tracking-[0.25em] text-rust/80">База спортсменов</p>
+          <h1 className="mt-2 font-display text-2xl font-bold leading-tight text-bone sm:text-3xl">
             Спортсмены
           </h1>
-          <p className="mt-3 max-w-2xl leading-relaxed text-steel">
+          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-steel">
             Единая база федерации: карточка появляется здесь сразу после регистрации спортсмена
             в судейском приложении на турнире.
           </p>
         </div>
       </div>
 
-      <div className="mx-auto max-w-6xl px-5 py-10">
+      <div className="mx-auto max-w-6xl px-5 py-6">
         {/* Фильтры */}
-        <div className="relative overflow-hidden rounded-xl border border-steel-dim/15 bg-gradient-to-br from-petrol/30 to-ink-soft/60 p-5">
+        <div className="relative overflow-hidden rounded-xl border border-steel-dim/15 bg-gradient-to-br from-petrol/30 to-ink-soft/60 p-4">
           <div className="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-brass/5 blur-2xl" />
           <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
             <form onSubmit={submitName} className="flex flex-1 flex-col gap-1.5 min-w-[200px]">
@@ -132,7 +132,7 @@ export function Athletes() {
         </div>
 
         {/* Сетка */}
-        <div className="mt-8">
+        <div className="mt-5">
           {isLoading && <LoadingState label="Загрузка спортсменов" />}
           {isError && <ErrorState message={(error as Error).message} onRetry={() => refetch()} />}
           {data && data.items.length === 0 && (
