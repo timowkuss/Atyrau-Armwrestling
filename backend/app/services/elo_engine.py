@@ -1,24 +1,6 @@
-"""Рейтинг Эло по руке для армрестлинга.
-
-Логика, как договаривались: у каждого спортсмена два независимых
-рейтинга — elo_left и elo_right (хранятся в AthleteStatistic). Общий
-рейтинг, который видно на сайте одной цифрой, нигде не хранится и
-считается на лету как (elo_left + elo_right) / 2 — см.
-app/schemas/athletes.py: AthleteStatisticsOut.elo_combined.
-
-Обновление происходит в момент, когда десктоп присылает winner_id матча
-через PATCH /sync/matches/{id} (app/api/v1/sync/matches.py), т.е. в
-реальном времени по ходу турнира, а не пакетом после публикации —
-тем же способом, что и остальная синхронизация (см. ARCHITECTURE.md §5).
-
-Идемпотентность: у матча есть elo_applied/elo_delta_p1/elo_delta_p2.
-Если десктоп присылает исправленного победителя повторным PATCH
-(бывает — см. историю правок стадии офлайн-очереди), сначала откатывается
-старая дельта, потом считается и применяется новая. Один и тот же
-результат не проведёт по рейтингу дважды.
-"""
-
 from __future__ import annotations
+
+import random
 
 from sqlalchemy.orm import Session
 
@@ -26,16 +8,20 @@ from app.db.models.competitions import CompetitionParticipant
 from app.db.models.matches import Match
 from app.db.models.statistics import AthleteStatistic
 
-K_FACTOR = 32
 DEFAULT_ELO = 1000
+MAX_DELTA = 40
+
+HIGH_RATING_COEFFS = [
+    (1400, 1.00),
+    (1600, 1.05),
+    (1800, 1.10),
+    (2000, 1.20),
+    (2200, 1.35),
+    (float("inf"), 1.50),
+]
 
 
 def _hand_field(hand: str) -> str | None:
-    """'Левая' -> 'elo_left', 'Правая' -> 'elo_right'. Категории/матчи
-    двоеборья создают отдельный матч на каждую руку (см.
-    app/db/models/matches.py), так что на уровне матча рука всегда
-    конкретна — 'Обе' сюда не долетает; если долетело что-то незнакомое,
-    считаем это ошибкой данных и пропускаем пересчёт, а не гадаем."""
     normalized = (hand or "").strip().lower()
     if normalized.startswith("лев"):
         return "elo_left"
@@ -44,8 +30,47 @@ def _hand_field(hand: str) -> str | None:
     return None
 
 
-def _expected_score(rating_a: int, rating_b: int) -> float:
-    return 1.0 / (1.0 + 10 ** ((rating_b - rating_a) / 400.0))
+def _high_rating_coeff(rating: int) -> float:
+    for threshold, coeff in HIGH_RATING_COEFFS:
+        if rating < threshold:
+            return coeff
+    return 1.50
+
+
+def _clamp(delta: int) -> int:
+    return max(-MAX_DELTA, min(MAX_DELTA, delta))
+
+
+def _calculate_deltas(rating_winner: int, rating_loser: int) -> tuple[int, int]:
+    diff = abs(rating_winner - rating_loser)
+    higher_won = rating_winner > rating_loser
+
+    if diff <= 99:
+        base_gain = 10
+        base_loss = -15
+    elif diff <= 299:
+        if higher_won:
+            base_gain = random.randint(5, 8)
+            base_loss = -random.randint(5, 8)
+        else:
+            base_gain = random.randint(15, 20)
+            base_loss = -random.randint(15, 20)
+    elif diff <= 499:
+        if higher_won:
+            base_gain = random.randint(3, 5)
+            base_loss = -random.randint(3, 5)
+        else:
+            base_gain = random.randint(25, 35)
+            base_loss = -random.randint(25, 35)
+    else:
+        if higher_won:
+            base_gain = random.randint(1, 3)
+            base_loss = -random.randint(1, 3)
+        else:
+            base_gain = random.randint(35, 40)
+            base_loss = -random.randint(35, 40)
+
+    return base_gain, base_loss
 
 
 def _get_or_create_stats(db: Session, athlete_id: int) -> AthleteStatistic:
@@ -55,9 +80,6 @@ def _get_or_create_stats(db: Session, athlete_id: int) -> AthleteStatistic:
         .first()
     )
     if stats is None:
-        # На практике строка создаётся сразу при создании атлета (см.
-        # sync/athletes.py, admin/athletes.py), это подстраховка на случай
-        # более старых записей, заведённых до появления AthleteStatistic.
         stats = AthleteStatistic(athlete_id=athlete_id)
         db.add(stats)
         db.flush()
@@ -65,10 +87,6 @@ def _get_or_create_stats(db: Session, athlete_id: int) -> AthleteStatistic:
 
 
 def apply_match_result(db: Session, match: Match) -> None:
-    """Пересчитывает Эло по итогам матча. Вызывается из
-    sync/matches.py после того, как в матче появился winner_id.
-    Ничего не коммитит — коммит делает вызывающий код."""
-
     if match.is_bye or match.winner_id is None or match.p1_id is None or match.p2_id is None:
         return
 
@@ -84,17 +102,9 @@ def apply_match_result(db: Session, match: Match) -> None:
     stats1 = _get_or_create_stats(db, p1.athlete_id)
     stats2 = _get_or_create_stats(db, p2.athlete_id)
 
-    # Рейтинг, зафиксированный админом вручную (через
-    # PATCH /admin/athletes/{id}/statistics), не трогаем автоматическим
-    # пересчётом ни для кого из пары — иначе один зафиксированный и один
-    # живой рейтинг разъедутся и Эло перестанет быть игрой с нулевой
-    # суммой (см. is_manual_override, тот же принцип, что и для
-    # win/loss статистики).
     if stats1.is_manual_override or stats2.is_manual_override:
         return
 
-    # Если этот матч уже когда-то учитывался (пришло исправление
-    # winner_id) — сначала откатываем прошлую дельту.
     if match.elo_applied:
         if match.elo_delta_p1:
             setattr(stats1, field, getattr(stats1, field) - match.elo_delta_p1)
@@ -104,23 +114,34 @@ def apply_match_result(db: Session, match: Match) -> None:
     rating1 = getattr(stats1, field)
     rating2 = getattr(stats2, field)
 
-    score1 = 1.0 if match.winner_id == p1.id else 0.0
-    score2 = 1.0 - score1
+    if match.winner_id == p1.id:
+        winner_stats, loser_stats = stats1, stats2
+        winner_rating, loser_rating = rating1, rating2
+    else:
+        winner_stats, loser_stats = stats2, stats1
+        winner_rating, loser_rating = rating2, rating1
 
-    expected1 = _expected_score(rating1, rating2)
-    expected2 = 1.0 - expected1
+    raw_win_delta, raw_loss_delta = _calculate_deltas(winner_rating, loser_rating)
 
-    delta1 = round(K_FACTOR * (score1 - expected1))
-    delta2 = round(K_FACTOR * (score2 - expected2))
+    loss_coeff = _high_rating_coeff(loser_rating)
+    loser_raw = round(raw_loss_delta * loss_coeff)
 
-    setattr(stats1, field, rating1 + delta1)
-    setattr(stats2, field, rating2 + delta2)
+    win_delta = _clamp(raw_win_delta)
+    loss_delta = _clamp(loser_raw)
 
-    match.elo_delta_p1 = delta1
-    match.elo_delta_p2 = delta2
+    if match.winner_id == p1.id:
+        setattr(stats1, field, rating1 + win_delta)
+        setattr(stats2, field, rating2 + loss_delta)
+        match.elo_delta_p1 = win_delta
+        match.elo_delta_p2 = loss_delta
+    else:
+        setattr(stats1, field, rating1 + loss_delta)
+        setattr(stats2, field, rating2 + win_delta)
+        match.elo_delta_p1 = loss_delta
+        match.elo_delta_p2 = win_delta
+
     match.elo_applied = True
 
 
 def elo_combined(elo_left: int, elo_right: int) -> int:
-    """Общий рейтинг для сайта: среднее по двум рукам, как договаривались."""
     return round((elo_left + elo_right) / 2)
