@@ -172,8 +172,8 @@ export function Rankings() {
                         </div>
                       </div>
                       <div className="flex flex-col items-end">
-                        <span className="font-mono text-[10px] font-medium uppercase tracking-widest text-brass/60">Очки</span>
-                        <span className="font-display text-xl font-bold text-brass sm:text-2xl">{r.points}</span>
+                        <span className="font-mono text-[10px] font-medium uppercase tracking-widest text-rust/60">Рейтинг</span>
+                        <span className="font-display text-xl font-bold text-rust sm:text-2xl">{r.points}</span>
                       </div>
                     </div>
                   </Link>

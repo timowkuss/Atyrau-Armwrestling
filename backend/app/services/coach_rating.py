@@ -8,24 +8,23 @@ from app.db.models.competitions import CompetitionParticipant
 from app.db.models.results import Result
 from app.db.models.statistics import AthleteStatistic
 
+BASE_RATING = 1000
 DEFAULT_OLD_ELO = 1000
 
 
-def _growth_to_score(avg_growth: float) -> int:
-    if avg_growth >= 41:
-        return 50
-    if avg_growth >= 31:
-        return 40
-    if avg_growth >= 21:
-        return 30
-    if avg_growth >= 11:
-        return 20
+def _growth_bonus(avg_growth: float) -> int:
+    if avg_growth >= 50:
+        return 200
+    if avg_growth >= 30:
+        return 150
+    if avg_growth >= 10:
+        return 100
     if avg_growth >= 0:
-        return 10
+        return 50
     return 0
 
 
-def _student_count_coeff(count: int) -> float:
+def _student_coeff(count: int) -> float:
     if count >= 10:
         return 1.0
     if count >= 6:
@@ -37,15 +36,15 @@ def _student_count_coeff(count: int) -> float:
     return 0.0
 
 
-def _scale_score(count: int) -> int:
+def _scale_bonus(count: int) -> int:
     if count >= 11:
-        return 20
+        return 50
     if count >= 6:
-        return 15
+        return 35
     if count >= 3:
-        return 10
+        return 20
     if count >= 1:
-        return 5
+        return 10
     return 0
 
 
@@ -97,28 +96,26 @@ def calculate_coach_rating(
     else:
         avg_growth = total_growth / valid_growth_count
 
-    raw_development = _growth_to_score(avg_growth)
-    development_score = round(raw_development * _student_count_coeff(student_count))
+    development_bonus = round(_growth_bonus(avg_growth) * _student_coeff(student_count))
 
     result_points_agg = (
         db.query(
-            func.sum(case((Result.place == 1, 10), else_=0)).label("points")
+            func.sum(case((Result.place == 1, 10), (Result.place == 2, 6), (Result.place == 3, 3), else_=0)).label("points")
         )
         .join(CompetitionParticipant, Result.competition_participant_id == CompetitionParticipant.id)
         .filter(CompetitionParticipant.athlete_id.in_(athlete_ids))
         .scalar()
     ) or 0
 
-    result_score = min(result_points_agg, 30)
+    result_bonus = min(result_points_agg, 100)
+    scale = _scale_bonus(student_count)
 
-    scale = _scale_score(student_count)
-
-    final_rating = round(development_score * 0.5 + result_score * 0.3 + scale * 0.2)
+    final_rating = BASE_RATING + development_bonus + result_bonus + scale
 
     return {
         "rating": final_rating,
-        "development_score": development_score,
-        "result_score": result_score,
+        "development_score": development_bonus,
+        "result_score": result_bonus,
         "scale_score": scale,
         "student_count": student_count,
     }
