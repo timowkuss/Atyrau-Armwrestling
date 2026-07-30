@@ -94,6 +94,12 @@ export function AthleteProfile() {
                       {a.rank}
                     </span>
                   )}
+                  {stats && (
+                    <div className="flex flex-col items-end sm:ml-auto">
+                      <span className="font-mono text-[10px] font-medium uppercase tracking-widest text-rust/60">ELO</span>
+                      <span className="font-display text-2xl font-bold leading-none text-rust sm:text-3xl">{stats.elo_combined}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-sm">
