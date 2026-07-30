@@ -7,19 +7,11 @@ interface EloRatingProps {
   eloCombined: number
 }
 
-// Диапазон циферблата для Эло. У новых спортсменов рейтинг стартует с
-// 1000 (см. backend/app/db/models/statistics.py), 700..1900 даёт запас
-// с обеих сторон и не прижимает стрелку к упору на старте.
 const ELO_MIN = 700
 const ELO_MAX = 1900
 
-/**
- * Карточка рейтинга Эло спортсмена. Свёрнуто показывает общий рейтинг
- * — (elo_left + elo_right) / 2 — крупной цифрой. По клику раскрывается
- * в два отдельных циферблата, левая и правая рука, как договаривались.
- */
 export function EloRating({ eloLeft, eloRight, eloCombined }: EloRatingProps) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
   const diff = eloLeft - eloRight
 
   return (

@@ -34,12 +34,18 @@ export function AthleteCard({ athlete }: { athlete: AthleteListItem }) {
               .join('')
           )}
         </div>
-        {athlete.rank && (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-brass/20 bg-brass/5 px-2.5 py-1 font-mono text-[10px] font-medium tracking-wider text-brass/80">
-            <span className="h-1.5 w-1.5 rounded-full bg-brass/40" />
-            {athlete.rank}
-          </span>
-        )}
+        <div className="flex flex-col items-end gap-2">
+          {athlete.rank && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-brass/20 bg-brass/5 px-2.5 py-1 font-mono text-[10px] font-medium tracking-wider text-brass/80">
+              <span className="h-1.5 w-1.5 rounded-full bg-brass/40" />
+              {athlete.rank}
+            </span>
+          )}
+          <div className="flex flex-col items-end">
+            <span className="font-mono text-[10px] font-medium uppercase tracking-wider text-rust/60">ELO</span>
+            <span className="font-display text-xl font-bold leading-none text-rust">{athlete.elo_combined}</span>
+          </div>
+        </div>
       </div>
       <h3 className="mt-4 font-display text-lg font-semibold leading-snug text-bone transition-colors group-hover:text-brass">
         {athlete.full_name}

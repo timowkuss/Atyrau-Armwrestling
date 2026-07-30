@@ -23,6 +23,7 @@ export interface AthleteListItem {
   city_name: string | null
   rank: string | null
   photo_path: string | null
+  elo_combined: number
 }
 
 export interface AthleteStatistics {

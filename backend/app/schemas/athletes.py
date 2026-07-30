@@ -13,6 +13,7 @@ class AthleteListOut(BaseModel):
     city_name: str | None
     rank: str | None
     photo_path: str | None
+    elo_combined: int = 0
 
 
 class AthleteAdminListOut(AthleteListOut):

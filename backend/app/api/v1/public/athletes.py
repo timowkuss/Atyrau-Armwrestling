@@ -45,10 +45,12 @@ def list_athletes(
             Club.name.label("club_name"),
             Coach.full_name.label("coach_name"),
             City.name.label("city_name"),
+            AthleteStatistic.elo_combined,
         )
         .outerjoin(Club, Athlete.club_id == Club.id)
         .outerjoin(Coach, Athlete.coach_id == Coach.id)
         .outerjoin(City, Athlete.city_id == City.id)
+        .outerjoin(AthleteStatistic, Athlete.id == AthleteStatistic.athlete_id)
         .filter(Athlete.is_hidden.is_(False))
     )
 
@@ -95,8 +97,9 @@ def list_athletes(
             city_name=city_name,
             rank=athlete.rank,
             photo_path=athlete.photo_path,
+            elo_combined=elo_combined or 0,
         )
-        for athlete, club_name, coach_name, city_name in rows
+        for athlete, club_name, coach_name, city_name, elo_combined in rows
     ]
     return Page(items=items, total=total, page=page, page_size=page_size)
 
