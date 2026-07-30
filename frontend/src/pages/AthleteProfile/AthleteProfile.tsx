@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useAthlete, useAthleteHistory, useAthleteMatches } from '@/features/athletes/useAthletes'
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/States'
