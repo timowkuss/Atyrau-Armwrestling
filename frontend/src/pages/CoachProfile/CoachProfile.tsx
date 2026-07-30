@@ -3,6 +3,7 @@ import { useCoach } from '@/features/coaches/useCoaches'
 import { useAthletes } from '@/features/athletes/useAthletes'
 import { AthleteCard } from '@/components/ui/AthleteCard'
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/States'
+import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 
 function age(birthDate: string | null): number | null {
   if (!birthDate) return null
@@ -44,7 +45,7 @@ export function CoachProfile() {
       <div className="plate mt-4 flex flex-col gap-6 rounded-[var(--radius-rivet)] p-6 sm:flex-row sm:items-center">
         <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-rivet)] border-2 border-brass/50 bg-ink font-display text-2xl text-steel">
           {c.photo_path ? (
-            <img src={c.photo_path} alt="" className="h-full w-full object-cover" />
+            <img src={cloudinaryThumb(c.photo_path, 96) ?? c.photo_path} alt="" className="h-full w-full object-cover" loading="lazy" />
           ) : (
             c.full_name
               .split(' ')

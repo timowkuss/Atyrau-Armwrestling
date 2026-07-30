@@ -13,8 +13,8 @@ export function cloudinaryThumb(url: string | null | undefined, size: number): s
   if (!url) return null
   const marker = '/upload/'
   const idx = url.indexOf(marker)
-  if (idx === -1) return url // не Cloudinary URL (старый локальный путь и т.п.) — отдаём как есть
+  if (idx === -1) return url
   const px = Math.round(size * 2)
-  const transform = `c_fill,g_face,w_${px},h_${px},q_auto,f_auto`
+  const transform = `c_fill,g_face,w_${px},h_${px},q_auto:best,f_auto`
   return url.slice(0, idx + marker.length) + transform + '/' + url.slice(idx + marker.length)
 }
