@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from datetime import date
+
 from pydantic import BaseModel
 
 
@@ -18,7 +22,7 @@ class ClubDetailOut(BaseModel):
     description: str | None
     address: str | None = None
     city_name: str | None
-    founded_year: int | None
+    founded_date: date | None
     rating_points: int
     athletes_count: int
     coaches_count: int
@@ -32,7 +36,7 @@ class ClubCreate(BaseModel):
     description: str | None = None
     address: str | None = None
     city_id: int | None = None
-    founded_year: int | None = None
+    founded_date: date | None = None
 
 
 class ClubUpdate(BaseModel):
@@ -41,7 +45,7 @@ class ClubUpdate(BaseModel):
     description: str | None = None
     address: str | None = None
     city_id: int | None = None
-    founded_year: int | None = None
+    founded_date: date | None = None
     # rating_points НЕ включён намеренно: это агрегат, который должен
     # считаться от результатов турниров, а не править руками напрямую.
 
@@ -60,7 +64,7 @@ class ClubAdminListOut(BaseModel):
     address: str | None = None
     city_id: int | None
     city_name: str | None
-    founded_year: int | None
+    founded_date: date | None
     rating_points: int
     athletes_count: int
     coaches_count: int

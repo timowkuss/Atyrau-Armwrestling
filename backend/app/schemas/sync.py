@@ -186,7 +186,7 @@ class ClubSyncItem(BaseModel):
     name: str
     address: str | None = None
     city_name: str | None = None
-    founded_year: int | None = None
+    founded_date: str | None = None
     logo_path: str | None = None
 
 
@@ -196,7 +196,7 @@ class ClubSyncCreate(_StrictModel):
     name: str
     address: str | None = None
     city_name: str | None = None
-    founded_year: int | None = None
+    founded_date: str | None = None
     logo_path: str | None = None
 
 
@@ -206,5 +206,5 @@ class ClubSyncUpdate(_StrictModel):
     name: str | None = None
     address: str | None = None
     city_name: str | None = None
-    founded_year: int | None = None
+    founded_date: str | None = None
     logo_path: str | None = None

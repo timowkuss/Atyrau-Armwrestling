@@ -40,14 +40,14 @@ def seed_demo_data():
             name="Батыр Атырау",
             description="Клуб армрестлинга при СДЮШОР Атырау",
             city_id=atyrau.id,
-            founded_year=2015,
+            founded_date=date(2015, 1, 1),
             rating_points=340,
         )
         club_2 = Club(
             name=" Altyn Alqa",
             description="Клуб силовых единоборств Алматы",
             city_id=almaty.id,
-            founded_year=2018,
+            founded_date=date(2018, 1, 1),
             rating_points=210,
         )
         db.add_all([club_1, club_2])

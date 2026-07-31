@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -19,7 +19,7 @@ class Club(Base):
     city_id: Mapped[int | None] = mapped_column(
         ForeignKey("cities.id", ondelete="SET NULL")
     )
-    founded_year: Mapped[int | None] = mapped_column(Integer)
+    founded_date: Mapped[date | None] = mapped_column(Date)
     rating_points: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

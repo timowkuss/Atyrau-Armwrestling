@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.v1.deps import require_desktop_sync
+from app.api.v1.sync._common import parse_flexible_date
 from app.db.models.clubs import Club
 from app.db.models.geo import City
 from app.db.session import get_db
@@ -15,6 +16,12 @@ def _find_city_id(db: Session, city_name: str | None) -> int | None:
         return None
     city = db.query(City).filter(City.name.ilike(city_name.strip())).first()
     return city.id if city else None
+
+
+def _parse_founded_date(value: str | None):
+    if not value:
+        return None
+    return parse_flexible_date(value)
 
 
 @router.get("", response_model=list[ClubSyncItem])
@@ -36,7 +43,7 @@ def list_clubs(
             name=club.name,
             address=club.address,
             city_name=city_name,
-            founded_year=club.founded_year,
+            founded_date=club.founded_date.isoformat() if club.founded_date else None,
             logo_path=club.logo_path,
         )
         for club, city_name in rows
@@ -55,7 +62,7 @@ def create_club(
         name=payload.name.strip(),
         address=payload.address,
         city_id=_find_city_id(db, payload.city_name),
-        founded_year=payload.founded_year,
+        founded_date=_parse_founded_date(payload.founded_date),
         logo_path=payload.logo_path,
     )
     db.add(club)
@@ -77,6 +84,8 @@ def update_club(
     data = payload.model_dump(exclude_unset=True)
     if "city_name" in data:
         club.city_id = _find_city_id(db, data.pop("city_name"))
+    if "founded_date" in data:
+        data["founded_date"] = _parse_founded_date(data["founded_date"])
 
     for field, value in data.items():
         if not hasattr(club, field):
