@@ -7,8 +7,15 @@ from app.db.models.clubs import Club
 from app.db.models.coaches import Coach
 from app.db.models.geo import City
 from app.db.session import get_db
-from app.schemas.clubs import ClubDetailOut, ClubListOut, ClubMemberOut
+from app.schemas.clubs import (
+    ClubDetailOut,
+    ClubListOut,
+    ClubMemberOut,
+    ClubRatingHistoryItemOut,
+    ClubRatingOut,
+)
 from app.schemas.common import Page
+from app.services.club_rating import check_inactive_athletes, get_club_rating, get_club_rating_history
 
 router = APIRouter(prefix="/clubs", tags=["public:clubs"])
 
@@ -64,6 +71,11 @@ def get_club(club_id: int, db: Session = Depends(get_db)):
     if club is None:
         raise HTTPException(status_code=404, detail="Клуб не найден")
 
+    # Ленивая проверка активности: штрафы за неактивность (6 месяцев)
+    # применяются точечным запросом при открытии профиля клуба — без
+    # перебора всех спортсменов. См. app/services/club_rating.py.
+    check_inactive_athletes(db)
+
     city_name = club.city.name if club.city else None
     athletes = (
         db.query(Athlete)
@@ -96,5 +108,37 @@ def get_club(club_id: int, db: Session = Depends(get_db)):
         coaches=[
             ClubMemberOut(id=c.id, full_name=c.full_name, photo_path=c.photo_path)
             for c in coaches
+        ],
+    )
+
+
+@router.get("/{club_id}/rating", response_model=ClubRatingOut)
+def get_club_rating_endpoint(club_id: int, db: Session = Depends(get_db)):
+    """Текущий рейтинг клуба и журнал изменений (для профиля клуба).
+
+    Перед чтением применяется ленивая проверка активности спортсменов
+    клуба (штраф -5 за простой более 6 месяцев).
+    """
+    club = db.query(Club).filter(Club.id == club_id).first()
+    if club is None:
+        raise HTTPException(status_code=404, detail="Клуб не найден")
+
+    check_inactive_athletes(db)
+
+    rating = get_club_rating(db, club_id)
+    history = get_club_rating_history(db, club_id)
+    return ClubRatingOut(
+        rating=rating,
+        history=[
+            ClubRatingHistoryItemOut(
+                id=h.id,
+                created_at=h.created_at,
+                points=h.points,
+                reason=h.reason,
+                description=h.description,
+                athlete_name=h.athlete.full_name if h.athlete else None,
+                tournament_name=h.tournament.name if h.tournament else None,
+            )
+            for h in history
         ],
     )

@@ -21,6 +21,7 @@ from app.schemas.athletes import (
     AthleteUpdate,
 )
 from app.services.cloudinary_photos import delete_cloudinary_photo
+from app.services.club_rating import apply_athlete_removed
 from app.services.elo_engine import elo_combined
 
 router = APIRouter(prefix="/athletes", tags=["admin:athletes"])
@@ -76,6 +77,11 @@ def create_athlete(
         athlete.iin = payload.iin
     if payload.phone:
         athlete.phone = payload.phone
+    if athlete.club_id is not None:
+        # вступление в клуб: фиксируем дату; активность появится после
+        # первого участия в турнире (см. app/services/club_rating.py)
+        athlete.join_club_date = datetime.now(timezone.utc).date()
+        athlete.club_active = False
     db.add(athlete)
     db.flush()
     db.add(AthleteStatistic(athlete_id=athlete.id))
@@ -95,6 +101,25 @@ def update_athlete(
         raise HTTPException(status_code=404, detail="Спортсмен не найден")
 
     data = payload.model_dump(exclude_unset=True)
+
+    # ── смена клуба / выход из клуба: рейтинг клубов ───────────
+    # - выход из клуба (club_id → None)          : штраф -10 старому клубу
+    # - перевод (club_id A → B)                  : штраф -10 A, вступление в B
+    # - вступление (None → B)                    : фиксация даты вступления
+    if "club_id" in data:
+        old_club_id = athlete.club_id
+        new_club_id = data["club_id"]
+        if old_club_id != new_club_id:
+            if old_club_id is not None:
+                apply_athlete_removed(db, athlete.id, old_club_id)
+                if new_club_id is None:
+                    athlete.club_active = False
+                    athlete.join_club_date = None
+                    athlete.next_inactive_date = None
+            if new_club_id is not None:
+                athlete.join_club_date = datetime.now(timezone.utc).date()
+                athlete.club_active = False
+                athlete.next_inactive_date = None
 
     # ── фото: та же логика, что и в sync/athletes.py update_athlete —
     # старое фото в Cloudinary удаляем только ПОСЛЕ успешного сохранения

@@ -16,6 +16,7 @@ from app.schemas.sync import (
     CompetitionParticipantSyncCreate,
     CompetitionSyncCreate,
 )
+from app.services.club_rating import check_inactive_athletes, finalize_competition
 
 router = APIRouter(prefix="/competitions", tags=["sync:competitions"])
 
@@ -149,6 +150,14 @@ def update_competition_status(
     if payload.status == "published" and not competition.published_at:
         competition.published_at = datetime.now(timezone.utc)
     db.commit()
+
+    if payload.status == "completed":
+        # Турнир завершён: применяем штрафы за неактивность и начисляем
+        # клубам рейтинг по итогам (места 1-3 и первое участие). Повторный
+        # вызов идемпотентен — двойных начислений не будет.
+        check_inactive_athletes(db)
+        finalize_competition(db, competition)
+
     return {"status": competition.status}
 
 @router.delete("/{competition_id}")

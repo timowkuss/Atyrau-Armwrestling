@@ -65,6 +65,22 @@ class Athlete(Base):
     phone: Mapped[str | None] = mapped_column(String(30))
 
     is_hidden: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # ── Клубная активность (система рейтинга клубов) ────────────
+    # join_club_date — дата вступления спортсмена в текущий клуб,
+    # проставляется автоматически при привязке клуба.
+    # last_competition_date — дата последнего участия в турнире.
+    # next_inactive_date — дата, после которой спортсмен считается
+    # неактивным (дата турнира + 6 месяцев). Хранится, чтобы проверять
+    # активность точечным запросом, а не перебором всех спортсменов.
+    # club_active — флаг «спортсмен активен за клуб» (выступал за него
+    # в течение последних 6 месяцев). Новый член клуба неактивен до
+    # первого участия в турнире.
+    join_club_date: Mapped[date | None] = mapped_column(Date)
+    last_competition_date: Mapped[date | None] = mapped_column(Date)
+    next_inactive_date: Mapped[date | None] = mapped_column(Date)
+    club_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

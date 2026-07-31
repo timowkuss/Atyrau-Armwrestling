@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from datetime import date
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -17,6 +18,7 @@ from app.schemas.clubs import (
     ClubMembersAdd,
     ClubUpdate,
 )
+from app.services.club_rating import apply_athlete_removed
 
 router = APIRouter(prefix="/clubs", tags=["admin:clubs"])
 
@@ -153,15 +155,29 @@ def add_club_members(
 ):
     """Добавляет спортсменов и/или тренеров в клуб — присваивает им
     club_id. Тот, кто уже состоял в другом клубе, автоматически переводится
-    в этот."""
+    в этот (старому клубу начисляется штраф -10 за удаление спортсмена)."""
     club = db.query(Club).filter(Club.id == club_id).first()
     if club is None:
         raise HTTPException(status_code=404, detail="Клуб не найден")
 
     if payload.athlete_ids:
-        db.query(Athlete).filter(Athlete.id.in_(payload.athlete_ids)).update(
-            {"club_id": club.id}, synchronize_session=False
+        athletes = (
+            db.query(Athlete)
+            .filter(Athlete.id.in_(payload.athlete_ids))
+            .all()
         )
+        for athlete in athletes:
+            old_club_id = athlete.club_id
+            if old_club_id is not None and old_club_id != club.id:
+                # перевод из другого клуба = удаление из него (штраф -10)
+                apply_athlete_removed(db, athlete.id, old_club_id)
+            athlete.club_id = club.id
+            # вступление в (новый) клуб: с этого момента спортсмен — член
+            # клуба, но неактивен до первого участия в турнире
+            if athlete.join_club_date is None or old_club_id != club.id:
+                athlete.join_club_date = date.today()
+            athlete.club_active = False
+            athlete.next_inactive_date = None
     if payload.coach_ids:
         db.query(Coach).filter(Coach.id.in_(payload.coach_ids)).update(
             {"club_id": club.id}, synchronize_session=False
@@ -177,15 +193,24 @@ def remove_club_members(
     db: Session = Depends(get_db),
     _: User = Depends(require_role(*WRITE_ROLES)),
 ):
-    """Убирает спортсменов/тренеров из клуба — обнуляет их club_id."""
+    """Убирает спортсменов/тренеров из клуба — обнуляет их club_id.
+    Клубу начисляется штраф -10 за каждого удалённого спортсмена."""
     club = db.query(Club).filter(Club.id == club_id).first()
     if club is None:
         raise HTTPException(status_code=404, detail="Клуб не найден")
 
     if payload.athlete_ids:
-        db.query(Athlete).filter(
-            Athlete.id.in_(payload.athlete_ids), Athlete.club_id == club.id
-        ).update({"club_id": None}, synchronize_session=False)
+        athletes = (
+            db.query(Athlete)
+            .filter(Athlete.id.in_(payload.athlete_ids), Athlete.club_id == club.id)
+            .all()
+        )
+        for athlete in athletes:
+            apply_athlete_removed(db, athlete.id, club.id)
+            athlete.club_id = None
+            athlete.club_active = False
+            athlete.join_club_date = None
+            athlete.next_inactive_date = None
     if payload.coach_ids:
         db.query(Coach).filter(
             Coach.id.in_(payload.coach_ids), Coach.club_id == club.id

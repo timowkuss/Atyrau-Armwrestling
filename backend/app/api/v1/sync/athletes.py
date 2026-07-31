@@ -18,6 +18,7 @@ from app.schemas.sync import (
     AthleteSyncCreate,
     AthleteSyncUpdate,
 )
+from app.services.club_rating import apply_athlete_removed, mark_joined
 from datetime import date, datetime, timezone
 
 router = APIRouter(prefix="/athletes", tags=["sync:athletes"])
@@ -200,6 +201,8 @@ def create_athlete(
         # уже есть, чтобы не потерять ранее внесённые данные.
         if not existing.club_id and club_id:
             existing.club_id = club_id
+            existing.join_club_date = datetime.now(timezone.utc).date()
+            existing.club_active = False
         if not existing.gender and gender:
             existing.gender = gender
         if not existing.rank and payload.rank:
@@ -222,6 +225,9 @@ def create_athlete(
         iin=payload.iin,
         phone=payload.phone,
     )
+    if club_id is not None:
+        athlete.join_club_date = datetime.now(timezone.utc).date()
+        athlete.club_active = False
     db.add(athlete)
     db.flush()
     db.add(AthleteStatistic(athlete_id=athlete.id))
@@ -240,6 +246,7 @@ def update_athlete(
     if athlete is None:
         return {"error": "not_found"}, 404
 
+    old_club_id = athlete.club_id
     data = payload.model_dump(exclude_unset=True)
     if "club_name" in data:
         athlete.club_id = _find_or_create_club(db, data.pop("club_name"))
@@ -253,6 +260,19 @@ def update_athlete(
         data["birth_date"] = _parse_birth_date(data["birth_date"])
     if "gender" in data and data["gender"]:
         data["gender"] = _normalize_gender(data["gender"])
+
+    # ── смена клуба: рейтинг клубов (штраф старому, вступление в новый) ──
+    if athlete.club_id != old_club_id:
+        if old_club_id is not None:
+            apply_athlete_removed(db, athlete.id, old_club_id)
+            if athlete.club_id is None:
+                athlete.club_active = False
+                athlete.join_club_date = None
+                athlete.next_inactive_date = None
+        if athlete.club_id is not None:
+            mark_joined(db, athlete.id)
+            athlete.club_active = False
+            athlete.next_inactive_date = None
 
     for field, value in data.items():
         setattr(athlete, field, value)

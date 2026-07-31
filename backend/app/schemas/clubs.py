@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel
 
@@ -78,3 +78,22 @@ class ClubAdminDetailOut(ClubAdminListOut):
 class ClubMembersAdd(BaseModel):
     athlete_ids: list[int] = []
     coach_ids: list[int] = []
+
+
+class ClubRatingHistoryItemOut(BaseModel):
+    """Одна запись истории изменения рейтинга клуба."""
+
+    id: int
+    created_at: datetime
+    points: int
+    reason: str
+    description: str
+    athlete_name: str | None = None
+    tournament_name: str | None = None
+
+
+class ClubRatingOut(BaseModel):
+    """Текущий рейтинг клуба + журнал изменений."""
+
+    rating: int
+    history: list[ClubRatingHistoryItemOut] = []
