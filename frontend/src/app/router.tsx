@@ -5,6 +5,8 @@ import { Athletes } from '@/pages/Athletes/Athletes'
 import { AthleteProfile } from '@/pages/AthleteProfile/AthleteProfile'
 import { Coaches } from '@/pages/Coaches/Coaches'
 import { CoachProfile } from '@/pages/CoachProfile/CoachProfile'
+import { Clubs } from '@/pages/Clubs/Clubs'
+import { ClubProfile } from '@/pages/ClubProfile/ClubProfile'
 import { Competitions } from '@/pages/Competitions/Competitions'
 import { CompetitionDetail } from '@/pages/Competitions/CompetitionDetail'
 import { CompetitionBoard } from '@/pages/Competitions/CompetitionBoard'
@@ -34,6 +36,8 @@ export const router = createBrowserRouter([
       { path: 'athletes/:id', element: <AthleteProfile /> },
       { path: 'coaches', element: <Coaches /> },
       { path: 'coaches/:id', element: <CoachProfile /> },
+      { path: 'clubs', element: <Clubs /> },
+      { path: 'clubs/:id', element: <ClubProfile /> },
       { path: 'competitions', element: <Competitions /> },
       { path: 'competitions/:id', element: <CompetitionDetail /> },
       { path: 'news', element: <News /> },

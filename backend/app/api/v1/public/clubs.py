@@ -7,7 +7,7 @@ from app.db.models.clubs import Club
 from app.db.models.coaches import Coach
 from app.db.models.geo import City
 from app.db.session import get_db
-from app.schemas.clubs import ClubDetailOut, ClubListOut
+from app.schemas.clubs import ClubDetailOut, ClubListOut, ClubMemberOut
 from app.schemas.common import Page
 
 router = APIRouter(prefix="/clubs", tags=["public:clubs"])
@@ -15,6 +15,7 @@ router = APIRouter(prefix="/clubs", tags=["public:clubs"])
 
 @router.get("", response_model=Page[ClubListOut])
 def list_clubs(
+    name: str | None = None,
     city_id: int | None = None,
     page: int = 1,
     page_size: int = 20,
@@ -32,6 +33,8 @@ def list_clubs(
     )
     if city_id is not None:
         query = query.filter(Club.city_id == city_id)
+    if name:
+        query = query.filter(Club.name.ilike(f"%{name}%"))
 
     total = query.count()
     rows = (
@@ -62,8 +65,18 @@ def get_club(club_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Клуб не найден")
 
     city_name = club.city.name if club.city else None
-    athletes_count = db.query(Athlete).filter(Athlete.club_id == club.id).count()
-    coaches_count = db.query(Coach).filter(Coach.club_id == club.id).count()
+    athletes = (
+        db.query(Athlete)
+        .filter(Athlete.club_id == club.id)
+        .order_by(Athlete.full_name)
+        .all()
+    )
+    coaches = (
+        db.query(Coach)
+        .filter(Coach.club_id == club.id)
+        .order_by(Coach.full_name)
+        .all()
+    )
 
     return ClubDetailOut(
         id=club.id,
@@ -74,6 +87,14 @@ def get_club(club_id: int, db: Session = Depends(get_db)):
         city_name=city_name,
         founded_year=club.founded_year,
         rating_points=club.rating_points,
-        athletes_count=athletes_count,
-        coaches_count=coaches_count,
+        athletes_count=len(athletes),
+        coaches_count=len(coaches),
+        athletes=[
+            ClubMemberOut(id=a.id, full_name=a.full_name, photo_path=a.photo_path)
+            for a in athletes
+        ],
+        coaches=[
+            ClubMemberOut(id=c.id, full_name=c.full_name, photo_path=c.photo_path)
+            for c in coaches
+        ],
     )

@@ -22,6 +22,8 @@ class ClubDetailOut(BaseModel):
     rating_points: int
     athletes_count: int
     coaches_count: int
+    athletes: list[ClubMemberOut] = []
+    coaches: list[ClubMemberOut] = []
 
 
 class ClubCreate(BaseModel):

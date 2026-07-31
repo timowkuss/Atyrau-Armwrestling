@@ -5,6 +5,7 @@ const NAV_ITEMS = [
   { to: '/', label: 'Главная', end: true },
   { to: '/athletes', label: 'Спортсмены' },
   { to: '/coaches', label: 'Тренеры' },
+  { to: '/clubs', label: 'Клубы' },
   { to: '/competitions', label: 'Соревнования' },
   { to: '/rankings', label: 'Рейтинги' },
   { to: '/news', label: 'Новости' },

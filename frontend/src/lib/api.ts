@@ -7,6 +7,7 @@ import type {
   AthleteRankingRow,
   BracketMatchOut,
   City,
+  ClubDetail,
   ClubListItem,
   ClubRankingRow,
   CoachDetail,
@@ -100,8 +101,9 @@ export const api = {
       request<EloRankingRow[]>('/public/rankings/elo', params),
   },
   clubs: {
-    list: (params?: { city_id?: number; page?: number; page_size?: number }) =>
+    list: (params?: { name?: string; city_id?: number; page?: number; page_size?: number }) =>
       request<Page<ClubListItem>>('/public/clubs', params),
+    get: (id: number) => request<ClubDetail>(`/public/clubs/${id}`),
   },
   coaches: {
     list: (params?: { name?: string; club_id?: number; page?: number; page_size?: number }) =>

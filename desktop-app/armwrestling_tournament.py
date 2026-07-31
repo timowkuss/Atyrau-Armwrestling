@@ -4947,8 +4947,8 @@ class ClubsWindow(ctk.CTkToplevel):
     def _add_club_dialog(self, edit_id=None):
         dlg = tk.Toplevel(self)
         dlg.title("Редактировать клуб" if edit_id else "Добавить клуб")
-        dlg.geometry("1000x700")
-        dlg.minsize(800, 500)
+        dlg.geometry("1160x740")
+        dlg.minsize(920, 560)
         dlg.configure(bg="#0d1117")
         dlg.transient(self)
         dlg.grab_set()
@@ -4978,6 +4978,24 @@ class ClubsWindow(ctk.CTkToplevel):
             return var
 
         fields = {}
+
+        # ─── Акценты: спортсмены — синий, тренеры — латунь ─────
+        ATH_ACCENT = "#1f6feb"
+        COACH_ACCENT = "#c9a227"
+
+        # ─── Шапка диалога ──────────────────────────────────────
+        header = ctk.CTkFrame(dlg, fg_color="#161b22", corner_radius=0, height=62)
+        header.pack(fill="x")
+        header.pack_propagate(False)
+        ctk.CTkLabel(header, text="🏛", font=("Arial", 24)).pack(side="left", padx=(16, 10))
+        title_col = ctk.CTkFrame(header, fg_color="transparent")
+        title_col.pack(side="left")
+        ctk.CTkLabel(title_col, text="Клуб",
+                    font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w")
+        ctk.CTkLabel(title_col,
+                    text="Новый клуб в реестре" if not existing else "Карточка клуба в реестре",
+                    font=ctk.CTkFont(size=11), text_color="#6e7681").pack(anchor="w")
+        ctk.CTkFrame(header, fg_color=ATH_ACCENT, height=2).pack(fill="x", side="bottom")
 
         # ─── Левая колонка: анкета клуба ───────────────────────
         left_col = ctk.CTkFrame(dlg, fg_color="transparent")
@@ -5040,51 +5058,101 @@ class ClubsWindow(ctk.CTkToplevel):
             logo_status_lbl.configure(text="✓ Загружено", text_color="#3fb950")
 
         # ─── Правая колонка: спортсмены и тренеры клуба ────────
-        if existing:
-            right_col = ctk.CTkFrame(dlg, fg_color="transparent")
-            right_col.pack(side="right", fill="both", expand=True, padx=(7, 14), pady=14)
+        right_col = ctk.CTkFrame(dlg, fg_color="transparent")
+        right_col.pack(side="right", fill="both", expand=True, padx=(7, 14), pady=14)
 
-            members_frame = ScrollableFrame(right_col, fg_color="#0d1117")
-            members_frame.pack(fill="both", expand=True)
+        members_scroll = ScrollableFrame(right_col, fg_color="#0d1117")
+        members_scroll.pack(fill="both", expand=True)
 
-            def render_members():
-                for w in members_frame.winfo_children():
-                    w.destroy()
-                athletes = self.db.get_athletes_by_club(edit_id)
-                coaches = self.db.get_coaches_by_club(edit_id)
+        def member_row(parent, text, accent, on_remove):
+            row = ctk.CTkFrame(parent, fg_color="#151b23", corner_radius=8)
+            row.pack(fill="x", padx=2, pady=3)
+            ctk.CTkFrame(row, fg_color=accent, width=3, height=30,
+                        corner_radius=0).pack(side="left", padx=(0, 8), fill="y")
+            ctk.CTkLabel(row, text=text, anchor="w",
+                        font=ctk.CTkFont(size=12)).pack(side="left", padx=(6, 6),
+                                                        pady=7, fill="x", expand=True)
+            ctk.CTkButton(row, text="✕", width=30, height=26, fg_color="#8b1a1a",
+                        hover_color="#a03030", command=on_remove).pack(side="right", padx=6)
+            return row
 
-                if not athletes and not coaches:
-                    ctk.CTkLabel(members_frame, text="Пока нет спортсменов и тренеров.",
-                                text_color="#6e7681").pack(pady=30)
+        def make_members_card(kind):
+            """Отдельная секция с заголовком, счётчиком и кнопкой «Добавить»."""
+            is_ath = kind == "athletes"
+            accent = ATH_ACCENT if is_ath else COACH_ACCENT
+            icon = "👤" if is_ath else "🧑‍🏫"
+            title = "Спортсмены" if is_ath else "Тренеры"
+            empty_text = ("Пока нет спортсменов в клубе" if is_ath
+                          else "Пока нет тренеров в клубе")
 
-                for a in athletes:
-                    row_f = ctk.CTkFrame(members_frame, fg_color="#1e2a3a", corner_radius=8)
-                    row_f.pack(fill="x", padx=5, pady=3)
-                    ctk.CTkLabel(row_f, text=f"👤 {a['last_name']} {a['first_name']}",
-                                anchor="w").pack(side="left", padx=10, pady=6, fill="x", expand=True)
-                    ctk.CTkButton(row_f, text="✕", width=30, height=26, fg_color="#8b1a1a",
-                                hover_color="#a03030",
-                                command=lambda aid=a["id"]: self._remove_athlete_from_club(
-                                    aid, render_members)).pack(side="right", padx=6)
+            card = ctk.CTkFrame(members_scroll, fg_color="#161b22", corner_radius=12,
+                                border_width=1, border_color="#2d333b")
+            card.pack(fill="x", pady=(0, 10))
 
-                for c in coaches:
-                    row_f = ctk.CTkFrame(members_frame, fg_color="#1e2a3a", corner_radius=8)
-                    row_f.pack(fill="x", padx=5, pady=3)
-                    ctk.CTkLabel(row_f, text=f"🧑‍🏫 {c['full_name']}",
-                                anchor="w").pack(side="left", padx=10, pady=6, fill="x", expand=True)
-                    ctk.CTkButton(row_f, text="✕", width=30, height=26, fg_color="#8b1a1a",
-                                hover_color="#a03030",
-                                command=lambda cid=c["id"]: self._remove_coach_from_club(
-                                    cid, render_members)).pack(side="right", padx=6)
+            head = ctk.CTkFrame(card, fg_color="transparent")
+            head.pack(fill="x", padx=14, pady=(12, 4))
+            ctk.CTkLabel(head, text=f"{icon} {title}",
+                        font=ctk.CTkFont(size=13, weight="bold")).pack(side="left")
+            count_badge = ctk.CTkLabel(head, text="0", text_color="#0d1117",
+                        corner_radius=6, font=ctk.CTkFont(size=11, weight="bold"),
+                        fg_color=accent, width=26, height=20)
+            count_badge.pack(side="left", padx=(8, 0))
 
-            add_btns = ctk.CTkFrame(right_col, fg_color="transparent")
-            add_btns.pack(fill="x", pady=(10, 0))
-            ctk.CTkButton(add_btns, text="➕ Спортсмена", width=130, height=32,
-                        command=lambda: self._add_athlete_to_club(edit_id, render_members)).pack(side="left", padx=(0, 6))
-            ctk.CTkButton(add_btns, text="➕ Тренера", width=130, height=32,
-                        command=lambda: self._add_coach_to_club(edit_id, render_members)).pack(side="left")
+            list_frame = ctk.CTkFrame(card, fg_color="transparent")
+            list_frame.pack(fill="x", padx=10, pady=(2, 8))
 
-            render_members()
+            def add_member():
+                if is_ath:
+                    self._add_athlete_to_club(edit_id, render_all)
+                else:
+                    self._add_coach_to_club(edit_id, render_all)
+
+            ctk.CTkButton(card, text="➕ Добавить", width=120, height=30,
+                        fg_color=accent, hover_color=accent,
+                        command=add_member).pack(anchor="w", padx=14, pady=(0, 12))
+
+            return card, list_frame, count_badge, empty_text
+
+        def render_all():
+            for w in members_scroll.winfo_children():
+                w.destroy()
+
+            if not existing:
+                hint = ctk.CTkFrame(members_scroll, fg_color="transparent",
+                                    border_width=1, border_color="#2d333b",
+                                    corner_radius=12)
+                hint.pack(fill="x", padx=2, pady=20)
+                ctk.CTkLabel(hint, text="🏛 Новый клуб",
+                            font=ctk.CTkFont(size=14, weight="bold"),
+                            text_color="#8899aa").pack(pady=(26, 4))
+                ctk.CTkLabel(hint,
+                            text="Сохраните клуб, чтобы привязывать к нему\nспортсменов и тренеров.",
+                            text_color="#6e7681").pack(pady=(0, 26))
+                return
+
+            athletes = self.db.get_athletes_by_club(edit_id)
+            coaches = self.db.get_coaches_by_club(edit_id)
+
+            ath_card, ath_list, ath_badge, ath_empty = make_members_card("athletes")
+            ath_badge.configure(text=str(len(athletes)))
+            if not athletes:
+                ctk.CTkLabel(ath_list, text=ath_empty, text_color="#6e7681",
+                            font=ctk.CTkFont(size=11)).pack(pady=10)
+            for a in athletes:
+                name = f"{a['last_name']} {a['first_name']}".strip()
+                member_row(ath_list, name, ATH_ACCENT,
+                           lambda aid=a["id"]: self._remove_athlete_from_club(aid, render_all))
+
+            coach_card, coach_list, coach_badge, coach_empty = make_members_card("coaches")
+            coach_badge.configure(text=str(len(coaches)))
+            if not coaches:
+                ctk.CTkLabel(coach_list, text=coach_empty, text_color="#6e7681",
+                            font=ctk.CTkFont(size=11)).pack(pady=10)
+            for c in coaches:
+                member_row(coach_list, c["full_name"], COACH_ACCENT,
+                           lambda cid=c["id"]: self._remove_coach_from_club(cid, render_all))
+
+        render_all()
 
         # ─── Кнопки сохранения ─────────────────────────────────
         btn_bar = ctk.CTkFrame(dlg, fg_color="#0d1117")

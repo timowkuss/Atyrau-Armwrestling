@@ -198,6 +198,27 @@ export interface ClubListItem {
   athletes_count: number
 }
 
+export interface ClubMember {
+  id: number
+  full_name: string
+  photo_path: string | null
+}
+
+export interface ClubDetail {
+  id: number
+  name: string
+  logo_path: string | null
+  description: string | null
+  address: string | null
+  city_name: string | null
+  founded_year: number | null
+  rating_points: number
+  athletes_count: number
+  coaches_count: number
+  athletes: ClubMember[]
+  coaches: ClubMember[]
+}
+
 export interface CoachListItem {
   id: number
   full_name: string
