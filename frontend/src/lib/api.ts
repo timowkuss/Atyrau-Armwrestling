@@ -10,6 +10,7 @@ import type {
   ClubDetail,
   ClubListItem,
   ClubRankingRow,
+  ClubRating,
   CoachDetail,
   CoachListItem,
   CoachRankingRow,
@@ -104,6 +105,7 @@ export const api = {
     list: (params?: { name?: string; city_id?: number; page?: number; page_size?: number }) =>
       request<Page<ClubListItem>>('/public/clubs', params),
     get: (id: number) => request<ClubDetail>(`/public/clubs/${id}`),
+    rating: (id: number) => request<ClubRating>(`/public/clubs/${id}/rating`),
   },
   coaches: {
     list: (params?: { name?: string; club_id?: number; page?: number; page_size?: number }) =>

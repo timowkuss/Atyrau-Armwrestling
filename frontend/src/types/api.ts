@@ -219,6 +219,21 @@ export interface ClubDetail {
   coaches: ClubMember[]
 }
 
+export interface ClubRatingHistoryItem {
+  id: number
+  created_at: string
+  points: number
+  reason: string
+  description: string
+  athlete_name: string | null
+  tournament_name: string | null
+}
+
+export interface ClubRating {
+  rating: number
+  history: ClubRatingHistoryItem[]
+}
+
 export interface CoachListItem {
   id: number
   full_name: string

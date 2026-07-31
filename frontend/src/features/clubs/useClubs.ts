@@ -21,3 +21,11 @@ export function useClub(id: number) {
     enabled: Number.isFinite(id),
   })
 }
+
+export function useClubRating(id: number) {
+  return useQuery({
+    queryKey: ['club-rating', id],
+    queryFn: () => api.clubs.rating(id),
+    enabled: Number.isFinite(id),
+  })
+}
