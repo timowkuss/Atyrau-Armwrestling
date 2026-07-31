@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { ClubListItem } from '@/types/api'
-import { cloudinaryThumb } from '@/lib/cloudinaryImage'
+import { cloudinaryLogo } from '@/lib/cloudinaryImage'
 
 function initials(name: string): string {
   return name
@@ -20,12 +20,12 @@ export function ClubCard({ club }: { club: ClubListItem }) {
       className="plate group flex flex-col rounded-[var(--radius-rivet)] p-5 transition-transform hover:-translate-y-0.5 hover:border-brass/50"
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-steel-dim bg-ink font-display text-xl text-steel sm:h-24 sm:w-24 sm:text-2xl">
+        <div className="flex h-32 w-32 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-steel-dim bg-ink font-display text-xl text-steel sm:h-32 sm:w-32 sm:text-2xl">
           {club.logo_path ? (
             <img
-              src={cloudinaryThumb(club.logo_path, 96) ?? club.logo_path}
+              src={cloudinaryLogo(club.logo_path, 128) ?? club.logo_path}
               alt=""
-              className="h-full w-full object-cover"
+              className="h-full w-full object-contain p-2"
               loading="lazy"
             />
           ) : (

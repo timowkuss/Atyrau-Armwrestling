@@ -15,21 +15,28 @@ import { LoadingState, ErrorState } from '@/components/ui/States'
 import { FeedbackBanner } from '@/components/admin/FeedbackBanner'
 import { CityCombobox } from '@/components/admin/CityCombobox'
 import { PhotoUploadField } from '@/components/admin/PhotoUploadField'
-import { cloudinaryThumb } from '@/lib/cloudinaryImage'
+import { cloudinaryLogo } from '@/lib/cloudinaryImage'
 import type { ClubInput } from '@/types/api'
 
-const EMPTY_FORM: ClubInput = { name: '', description: '', address: '', city_id: undefined, founded_year: undefined, logo_path: '' }
+const EMPTY_FORM: ClubInput = { name: '', description: '', address: '', city_id: undefined, founded_date: undefined, logo_path: '' }
 
 function LogoThumb({ url, name }: { url: string | null; name: string }) {
   return (
     <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border border-steel-dim/20 bg-ink font-display text-sm text-steel">
       {url ? (
-        <img src={cloudinaryThumb(url, 40) ?? url} alt="" className="h-full w-full object-cover" />
+        <img src={cloudinaryLogo(url, 48) ?? url} alt="" className="h-full w-full object-contain p-0.5" />
       ) : (
         name.charAt(0)
       )}
     </div>
   )
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return ''
+  const [y, m, d] = iso.split('-')
+  if (!y || !m || !d) return iso
+  return `${d}.${m}.${y}`
 }
 
 export function ClubsAdmin() {
@@ -64,7 +71,7 @@ export function ClubsAdmin() {
       await createClub.mutateAsync({
         ...form,
         city_id: form.city_id || undefined,
-        founded_year: form.founded_year || undefined,
+        founded_date: form.founded_date || undefined,
       })
       setFeedback({ kind: 'success', message: `Клуб «${form.name}» создан.` })
       setForm(EMPTY_FORM)
@@ -185,11 +192,11 @@ export function ClubsAdmin() {
               onChange={(cityId) => setForm({ ...form, city_id: cityId })}
             />
             <input
-              type="number"
-              placeholder="Год основания"
-              value={form.founded_year ?? ''}
-              onChange={(e) => setForm({ ...form, founded_year: e.target.value ? Number(e.target.value) : undefined })}
-              className="w-40 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+              type="date"
+              placeholder="Дата основания"
+              value={form.founded_date ?? ''}
+              onChange={(e) => setForm({ ...form, founded_date: e.target.value || undefined })}
+              className="w-44 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
             />
           </div>
           <textarea
@@ -246,11 +253,11 @@ export function ClubsAdmin() {
                         onChange={(cityId) => setEditForm({ ...editForm, city_id: cityId })}
                       />
                       <input
-                        type="number"
-                        placeholder="Год основания"
-                        defaultValue={club.founded_year ?? ''}
-                        onChange={(e) => setEditForm({ ...editForm, founded_year: e.target.value ? Number(e.target.value) : undefined })}
-                        className="w-40 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+                        type="date"
+                        placeholder="Дата основания"
+                        defaultValue={club.founded_date ?? ''}
+                        onChange={(e) => setEditForm({ ...editForm, founded_date: e.target.value || undefined })}
+                        className="w-44 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
                       />
                     </div>
                     <div>
@@ -299,6 +306,9 @@ export function ClubsAdmin() {
                             {club.city_name ?? 'город не указан'} · {club.athletes_count} спортсменов · {club.coaches_count} тренеров · рейтинг {club.rating_points}
                           </p>
                           {club.address && <p className="font-mono text-xs text-steel-dim">📍 {club.address}</p>}
+                          {formatDate(club.founded_date) && (
+                            <p className="font-mono text-xs text-steel-dim">📅 осн. {formatDate(club.founded_date)}</p>
+                          )}
                         </div>
                       </div>
                       <div className="flex flex-shrink-0 gap-2">

@@ -211,7 +211,7 @@ export interface ClubDetail {
   description: string | null
   address: string | null
   city_name: string | null
-  founded_year: number | null
+  founded_date: string | null
   rating_points: number
   athletes_count: number
   coaches_count: number
@@ -335,7 +335,7 @@ export interface ClubInput {
   description?: string | null
   address?: string | null
   city_id?: number | null
-  founded_year?: number | null
+  founded_date?: string | null
 }
 
 export interface ClubMember {
@@ -352,7 +352,7 @@ export interface ClubAdminListItem {
   address: string | null
   city_id: number | null
   city_name: string | null
-  founded_year: number | null
+  founded_date: string | null
   rating_points: number
   athletes_count: number
   coaches_count: number

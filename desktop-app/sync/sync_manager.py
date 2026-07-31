@@ -306,24 +306,24 @@ class SyncManager:
             print(f"[sync] delete_coach -> в офлайн-очередь: {e}")
 
     # ── клуб ───────────────────────────────────────────────────
-    def on_club_created(self, cid, name, city=None, address=None, founded_year=None, logo_path=None):
+    def on_club_created(self, cid, name, city=None, address=None, founded_date=None, logo_path=None):
         payload = {"cid": cid, "name": name, "city": city, "address": address,
-                   "founded_year": founded_year, "logo_path": logo_path}
+                   "founded_date": founded_date, "logo_path": logo_path}
 
         def go():
             remote = self.api.create_club(
                 name=name, city_name=city or None, address=address or None,
-                founded_year=founded_year, logo_path=logo_path or None,
+                founded_date=founded_date, logo_path=logo_path or None,
             )
             self.state.map_set("club", cid, remote["id"])
             return remote["id"]
 
         return self._try("create_club", payload, go)
 
-    def on_club_updated(self, cid, name=None, city=None, address=None, founded_year=None, logo_path=None):
+    def on_club_updated(self, cid, name=None, city=None, address=None, founded_date=None, logo_path=None):
         remote_club_id = self.state.map_get("club", cid)
         payload = {"cid": cid, "name": name, "city": city, "address": address,
-                   "founded_year": founded_year, "logo_path": logo_path}
+                   "founded_date": founded_date, "logo_path": logo_path}
         if remote_club_id is None:
             self.state.enqueue("update_club", payload)
             return None
@@ -332,7 +332,7 @@ class SyncManager:
             self.api.update_club(
                 remote_club_id,
                 name=name, city_name=city or None, address=address or None,
-                founded_year=founded_year, logo_path=logo_path or None,
+                founded_date=founded_date, logo_path=logo_path or None,
             )
             return remote_club_id
 
@@ -971,7 +971,7 @@ class SyncManager:
                     name=payload["name"],
                     city_name=payload.get("city") or None,
                     address=payload.get("address") or None,
-                    founded_year=payload.get("founded_year"),
+                    founded_date=payload.get("founded_date"),
                     logo_path=payload.get("logo_path") or None,
                 )
                 self.state.map_set("club", payload["cid"], remote["id"])
@@ -992,7 +992,7 @@ class SyncManager:
                         name=payload.get("name"),
                         city_name=payload.get("city") or None,
                         address=payload.get("address") or None,
-                        founded_year=payload.get("founded_year"),
+                        founded_date=payload.get("founded_date"),
                         logo_path=payload.get("logo_path") or None,
                     )
                 except ApiClientError as e:

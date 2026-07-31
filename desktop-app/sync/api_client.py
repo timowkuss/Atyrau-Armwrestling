@@ -145,14 +145,14 @@ class SyncApiClient:
     def get_clubs(self):
         return self._request("GET", "/clubs")
 
-    def create_club(self, name, city_name=None, address=None, founded_year=None, logo_path=None):
+    def create_club(self, name, city_name=None, address=None, founded_date=None, logo_path=None):
         return self._request("POST", "/clubs", json_body={
             "name": name, "city_name": city_name, "address": address,
-            "founded_year": founded_year, "logo_path": logo_path,
+            "founded_date": founded_date, "logo_path": logo_path,
         })
 
     def update_club(self, remote_club_id, name=None, city_name=None,
-                    address=None, founded_year=None, logo_path=None):
+                    address=None, founded_date=None, logo_path=None):
         body = {}
         if name is not None:
             body["name"] = name
@@ -160,8 +160,8 @@ class SyncApiClient:
             body["city_name"] = city_name
         if address is not None:
             body["address"] = address
-        if founded_year is not None:
-            body["founded_year"] = founded_year
+        if founded_date is not None:
+            body["founded_date"] = founded_date
         if logo_path is not None:
             body["logo_path"] = logo_path
         return self._request("PATCH", f"/clubs/{remote_club_id}", json_body=body)

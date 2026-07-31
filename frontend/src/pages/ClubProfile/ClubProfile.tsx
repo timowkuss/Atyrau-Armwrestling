@@ -1,7 +1,7 @@
 import { Link, useParams } from 'react-router-dom'
 import { useClub } from '@/features/clubs/useClubs'
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/States'
-import { cloudinaryThumb } from '@/lib/cloudinaryImage'
+import { cloudinaryLogo } from '@/lib/cloudinaryImage'
 import type { ClubMember } from '@/types/api'
 
 function initials(name: string): string {
@@ -11,6 +11,13 @@ function initials(name: string): string {
     .slice(0, 2)
     .join('')
     .toUpperCase()
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return ''
+  const [y, m, d] = iso.split('-')
+  if (!y || !m || !d) return iso
+  return `${d}.${m}.${y}`
 }
 
 function MemberAvatar({ member }: { member: ClubMember }) {
@@ -101,12 +108,12 @@ export function ClubProfile() {
       </Link>
 
       <div className="plate mt-4 flex flex-col gap-6 rounded-[var(--radius-rivet)] p-6 sm:flex-row sm:items-center">
-        <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-rivet)] border-2 border-brass/50 bg-ink font-display text-2xl text-steel">
+        <div className="flex h-32 w-32 flex-shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-rivet)] border-2 border-brass/50 bg-ink font-display text-2xl text-steel sm:h-36 sm:w-36">
           {c.logo_path ? (
             <img
-              src={cloudinaryThumb(c.logo_path, 96) ?? c.logo_path}
+              src={cloudinaryLogo(c.logo_path, 144) ?? c.logo_path}
               alt=""
-              className="h-full w-full object-cover"
+              className="h-full w-full object-contain p-2"
               loading="lazy"
             />
           ) : (
@@ -122,7 +129,7 @@ export function ClubProfile() {
           </div>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-sm text-steel">
             {c.city_name && <span>{c.city_name}</span>}
-            {c.founded_year && <span>с {c.founded_year}</span>}
+            {formatDate(c.founded_date) && <span>осн. {formatDate(c.founded_date)}</span>}
             <span>{c.athletes_count} спортсменов</span>
             <span>{c.coaches_count} тренеров</span>
           </div>

@@ -299,8 +299,9 @@ export interface ClubInput {
   name: string
   logo_path?: string | null
   description?: string | null
+  address?: string | null
   city_id?: number | null
-  founded_year?: number | null
+  founded_date?: string | null
 }
 
 // Список тренерских званий — синхронизирован с COACH_QUALIFICATIONS в

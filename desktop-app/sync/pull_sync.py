@@ -24,8 +24,6 @@ from .api_client import ApiClientError
 
 _CURSOR_ATHLETES = "athletes"
 _CURSOR_COACHES = "coaches"
-
-
 def _to_desktop_date(value: str | None) -> str:
     """Центральная база отдаёт birth_date в ISO (ГГГГ-ММ-ДД —
     a.birth_date.isoformat() на сервере), а вся остальная десктоп-логика
@@ -106,15 +104,19 @@ class PullSyncManager:
 
     def poll_once(self) -> int:
         """Один цикл опроса. Возвращает число применённых изменений
-        (обновления + удаления, спортсмены + тренеры) — удобно для
+        (обновления + удаления, спортсмены + тренеры + клубы) — удобно для
         ручного вызова из UI/тестов."""
         if not config.SYNC_ENABLED:
             return 0
 
         applied = 0
         conn = sqlite3.connect(str(self.db_path), timeout=5)
+        conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA busy_timeout = 5000")
         try:
+            # Клубы — ПЕРЕД спортсменами: при upsert'е спортсмена по имени
+            # клуба он может понадобиться уже существующим локально.
+            applied += self._poll_clubs(conn)
             # Тренеры — ПЕРЕД спортсменами (см. docstring модуля).
             applied += self._poll_coaches(conn)
             applied += self._poll_athletes(conn)
@@ -128,6 +130,75 @@ class PullSyncManager:
                 print(f"[pull-sync] on_changes_applied упал: {e}")
 
         return applied
+
+    # ── клубы ────────────────────────────────────────────────
+    def _poll_clubs(self, conn: sqlite3.Connection) -> int:
+        """Клубов немного — сервер отдаёт весь список целиком (GET /sync/clubs),
+        без курсора. Апдейтим локальные клубы, которых у нас нет — заводим.
+        Логотип/город/дата основания, изменённые в админке сайта, доезжают
+        до десктопа именно так (раньше клубы вообще не подтягивались)."""
+        try:
+            clubs = self.api.get_clubs()
+        except ApiClientError as e:
+            print(f"[pull-sync] клубы: нет связи с сервером: {e}")
+            return 0
+
+        applied = 0
+        for item in clubs or []:
+            if self._upsert_club(conn, item):
+                applied += 1
+        if applied:
+            conn.commit()
+        return applied
+
+    def _upsert_club(self, conn: sqlite3.Connection, item: dict) -> bool:
+        remote_id = item["id"]
+        name = (item.get("name") or "").strip()
+        city = item.get("city_name")
+        address = item.get("address")
+        founded_date = _to_desktop_date(item.get("founded_date")) if item.get("founded_date") else None
+        logo_path = item.get("logo_path")
+
+        local_id = self.state.map_get_local("club", remote_id)
+        if local_id is not None:
+            return self._apply_club(conn, local_id, name, city, address,
+                                    founded_date, logo_path, remote_id=remote_id)
+
+        # Клуб мог уже существовать локально под этим же именем (создан в
+        # десктопе и ещё не успел уйти на сервер) — сопоставляем по имени,
+        # чтобы не наплодить дублей.
+        row = conn.execute(
+            "SELECT id FROM clubs WHERE name = ? COLLATE NOCASE", (name,)
+        ).fetchone()
+        if row is not None:
+            return self._apply_club(conn, row[0], name, city, address,
+                                    founded_date, logo_path, remote_id=remote_id)
+
+        cur = conn.execute(
+            "INSERT INTO clubs (name, city, address, founded_date, logo_path) "
+            "VALUES (?,?,?,?,?)",
+            (name, city, address, founded_date, logo_path),
+        )
+        self.state.map_set("club", cur.lastrowid, remote_id)
+        return True
+
+    def _apply_club(self, conn: sqlite3.Connection, local_id: int, name, city,
+                    address, founded_date, logo_path, remote_id: int) -> bool:
+        row = conn.execute(
+            "SELECT name, city, address, founded_date, logo_path FROM clubs WHERE id=?",
+            (local_id,),
+        ).fetchone()
+        current = (row["name"], row["city"], row["address"], row["founded_date"], row["logo_path"])
+        new = (name, city, address, founded_date, logo_path)
+        if current == new:
+            self.state.map_set("club", local_id, remote_id)
+            return False
+        conn.execute(
+            "UPDATE clubs SET name=?, city=?, address=?, founded_date=?, logo_path=? WHERE id=?",
+            (name, city, address, founded_date, logo_path, local_id),
+        )
+        self.state.map_set("club", local_id, remote_id)
+        return True
 
     # ── тренеры ───────────────────────────────────────────────
     def _poll_coaches(self, conn: sqlite3.Connection) -> int:
