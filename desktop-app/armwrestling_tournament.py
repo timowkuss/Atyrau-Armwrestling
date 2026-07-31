@@ -76,8 +76,8 @@ from ui_theme import (theme, BG, PANEL, PANEL_LIGHT, CARD, CARD_ALT, INPUT_BG,
                       BORDER, CARD_BORDER, SELECTED, TEXT, TEXT_DIM, TEXT_FAINT,
                       TEXT_BRIGHT, ACCENT, ACCENT_HOVER, ACCENT_DIM, SUCCESS,
                       SUCCESS_HOVER, WARNING, WARNING_HOVER, DANGER, DANGER_HOVER,
-                      OK, ERR, WARN, GOLD, DROPDOWN_BG, DROPDOWN_HOVER,
-                      OptionMenu)
+                       OK, ERR, WARN, GOLD, DROPDOWN_BG, DROPDOWN_HOVER,
+                       INFO_HOVER, OptionMenu)
 theme.apply_global(ctk)
 
 DB_PATH = Path(__file__).resolve().parent / "armwrestling.db"
@@ -465,6 +465,45 @@ class Database:
             self.conn.execute("ALTER TABLE athletes ADD COLUMN iin TEXT")
         if "phone" not in a_cols:
             self.conn.execute("ALTER TABLE athletes ADD COLUMN phone TEXT")
+        for col in ("join_club_date", "last_competition_date", "next_inactive_date"):
+            if col not in a_cols:
+                self.conn.execute(f"ALTER TABLE athletes ADD COLUMN {col} TEXT")
+        if "club_active" not in a_cols:
+            self.conn.execute("ALTER TABLE athletes ADD COLUMN club_active INTEGER DEFAULT 0")
+        self.conn.commit()
+
+        # ─── Система рейтинга клубов: таблица баллов и журнал изменений ───
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS club_rating (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            club_id INTEGER NOT NULL UNIQUE REFERENCES clubs(id) ON DELETE CASCADE,
+            rating INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+        """)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS club_rating_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+            athlete_id INTEGER REFERENCES athletes(id) ON DELETE SET NULL,
+            tournament_id INTEGER REFERENCES tournaments(id) ON DELETE CASCADE,
+            points INTEGER NOT NULL,
+            reason TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+        """)
+        crh_cols = [r[1] for r in self.conn.execute("PRAGMA table_info(club_rating_history)").fetchall()]
+        if "reason" not in crh_cols:
+            self.conn.execute("ALTER TABLE club_rating_history ADD COLUMN description TEXT DEFAULT ''")
+        self.conn.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_club_rating_history
+            ON club_rating_history (club_id, athlete_id, tournament_id, reason, description)
+        """)
+        self.conn.execute("""
+        CREATE INDEX IF NOT EXISTS ix_club_rating_history_club
+            ON club_rating_history (club_id, created_at)
+        """)
         self.conn.commit()
 
         rows = self.conn.execute("SELECT id, birth_date FROM athletes WHERE iin IS NULL OR iin=''").fetchall()
@@ -1020,7 +1059,8 @@ def _synced_add_club(self, name, city="", address="", founded_year=None, logo_pa
     cid = _original_add_club(self, name, city, address, founded_year, logo_path)
     try:
         sync_manager.on_club_created(cid, name, city=city, address=address,
-                                     founded_year=founded_year, logo_path=logo_path)
+                                     founded_date=_founded_date(founded_year),
+                                     logo_path=logo_path)
     except Exception as e:
         print(f"[sync] add_club: {e}")
     return cid
@@ -1029,9 +1069,19 @@ def _synced_update_club(self, cid, name, city="", address="", founded_year=None,
     _original_update_club(self, cid, name, city, address, founded_year, logo_path)
     try:
         sync_manager.on_club_updated(cid, name, city=city, address=address,
-                                     founded_year=founded_year, logo_path=logo_path)
+                                     founded_date=_founded_date(founded_year),
+                                     logo_path=logo_path)
     except Exception as e:
         print(f"[sync] update_club: {e}")
+
+def _founded_date(founded_year):
+    """Год основания (int, как в локальном реестре) → дата для сервера."""
+    if not founded_year:
+        return None
+    try:
+        return f"{int(founded_year)}-01-01"
+    except (TypeError, ValueError):
+        return None
 
 def _synced_delete_club(self, cid):
     _original_delete_club(self, cid)
@@ -4281,13 +4331,24 @@ class AthletesWindow(ctk.CTkToplevel):
             rank = rank_var.get()
             coach_id = coach_display_to_id.get(coach_var.get())
             if edit_id:
+                old = self.db.get_athlete(edit_id)
+                old_club_id = old["club_id"] if old else None
+                if old_club_id and old_club_id != club_id:
+                    from club_rating import apply_athlete_removed
+                    apply_athlete_removed(self.db.conn, edit_id, old_club_id)
                 self.db.update_athlete(edit_id, first_name, last_name, birth_date,
                         gender, club, rank, photo_path_var.get(), coach_id,
                         iin=iin, phone=phone, club_id=club_id)
+                if club_id and old_club_id != club_id:
+                    from club_rating import mark_joined
+                    mark_joined(self.db.conn, edit_id)
             else:
-                self.db.add_athlete(first_name, last_name, birth_date,
+                new_id = self.db.add_athlete(first_name, last_name, birth_date,
                         gender, club, rank, photo_path_var.get(), coach_id,
                         iin=iin, phone=phone, club_id=club_id)
+                if club_id:
+                    from club_rating import mark_joined
+                    mark_joined(self.db.conn, new_id)
             print("Сохраняю спортсмена")
             dlg.destroy()
             self._refresh_list()
@@ -4851,7 +4912,7 @@ class CoachesWindow(ctk.CTkToplevel):
 #  ОКНО «КЛУБЫ» — реестр клубов с привязкой спортсменов и тренеров
 # ════
 class ClubCard(ctk.CTkFrame):
-    def __init__(self, master, club, athletes_count, coaches_count, on_edit, on_delete, index=None, **kwargs):
+    def __init__(self, master, club, athletes_count, coaches_count, on_edit, on_delete, index=None, db=None, **kwargs):
         super().__init__(master, corner_radius=10, **kwargs)
         self.configure(fg_color=("#1e2a3a", "#1e2a3a"))
         c = club
@@ -4880,8 +4941,21 @@ class ClubCard(ctk.CTkFrame):
         ctk.CTkLabel(self, text="   ".join(info_parts), font=ctk.CTkFont(size=11),
                     text_color="#8899aa", anchor="w").grid(row=1, column=col + 1, sticky="w", padx=5, pady=(0, 10))
 
+        try:
+            from club_rating import get_club_rating
+            rating = get_club_rating(db.conn, c["id"]) if db is not None else 0
+            rating_text = f"⭐ {rating} баллов" if db is not None else ""
+        except Exception:
+            rating_text = ""
+        if rating_text:
+            ctk.CTkLabel(self, text=rating_text, font=ctk.CTkFont(size=12, weight="bold"),
+                        text_color="#c9a227", anchor="w").grid(row=0, column=col + 2, sticky="e", padx=5, pady=5)
+            btn_col = col + 3
+        else:
+            btn_col = col + 2
+
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        btn_frame.grid(row=0, column=col + 2, rowspan=2, padx=10, pady=10, sticky="e")
+        btn_frame.grid(row=0, column=btn_col, rowspan=2, padx=10, pady=10, sticky="e")
         ctk.CTkButton(btn_frame, text="✏️", width=36, height=32,
                     command=lambda: on_edit(c["id"])).pack(pady=2)
         ctk.CTkButton(btn_frame, text="🗑", width=36, height=32,
@@ -4942,7 +5016,7 @@ class ClubsWindow(ctk.CTkToplevel):
             coaches_count = len(self.db.get_coaches_by_club(cl["id"]))
             card = ClubCard(self.list_frame, cl, athletes_count, coaches_count,
                     on_edit=self._add_club_dialog,
-                    on_delete=self._delete_club, index=i)
+                    on_delete=self._delete_club, index=i, db=self.db)
             card.pack(fill="x", padx=5, pady=4)
 
     def _delete_club(self, cid):
@@ -5143,6 +5217,46 @@ class ClubsWindow(ctk.CTkToplevel):
             athletes = self.db.get_athletes_by_club(edit_id)
             coaches = self.db.get_coaches_by_club(edit_id)
 
+            # ─── Рейтинг клуба (баллы + история) ─────────────────
+            rating_card = ctk.CTkFrame(members_scroll, fg_color=PANEL, corner_radius=12,
+                                       border_width=1, border_color=BORDER)
+            rating_card.pack(fill="x", pady=(0, 10))
+            rating_head = ctk.CTkFrame(rating_card, fg_color="transparent")
+            rating_head.pack(fill="x", padx=14, pady=(12, 4))
+            ctk.CTkLabel(rating_head, text="⭐ Рейтинг клуба",
+                        font=ctk.CTkFont(size=13, weight="bold")).pack(side="left")
+
+            from club_rating import check_inactive_athletes, get_club_rating, get_club_rating_history
+            try:
+                check_inactive_athletes(self.db.conn)
+            except Exception:
+                pass
+            rating = get_club_rating(self.db.conn, edit_id)
+            ctk.CTkLabel(rating_head, text=f"{rating} баллов",
+                        font=ctk.CTkFont(size=14, weight="bold"),
+                        text_color="#c9a227").pack(side="right", padx=(8, 14))
+
+            hist_frame = ctk.CTkFrame(rating_card, fg_color="transparent")
+            hist_frame.pack(fill="x", padx=10, pady=(2, 8))
+            history = get_club_rating_history(self.db.conn, edit_id)
+            if not history:
+                ctk.CTkLabel(hist_frame, text="Пока нет записей",
+                            text_color=TEXT_FAINT, font=ctk.CTkFont(size=11)).pack(pady=8)
+            for h in history[:20]:
+                sign = f"+{h['points']}" if h["points"] > 0 else str(h["points"])
+                color = "#2fbf71" if h["points"] > 0 else ERR
+                who = h["athlete_name"] or "—"
+                evt = h["tournament_name"] or "—"
+                when = str(h["created_at"])[:10] if h["created_at"] else ""
+                row = ctk.CTkFrame(hist_frame, fg_color=CARD, corner_radius=8)
+                row.pack(fill="x", padx=2, pady=2)
+                ctk.CTkLabel(row, text=f"{sign}  {h['description']}  ·  {who}  ·  {evt}",
+                            anchor="w", font=ctk.CTkFont(size=11), text_color=color
+                            ).pack(side="left", padx=(8, 4), pady=5, fill="x", expand=True)
+                ctk.CTkLabel(row, text=when, anchor="e",
+                            font=ctk.CTkFont(size=10), text_color=TEXT_FAINT
+                            ).pack(side="right", padx=8)
+
             ath_card, ath_list, ath_badge, ath_empty = make_members_card("athletes")
             ath_badge.configure(text=str(len(athletes)))
             if not athletes:
@@ -5251,6 +5365,8 @@ class ClubsWindow(ctk.CTkToplevel):
                             a["birth_date"], a["gender"], club["name"],
                             a["rank"], a["photo_path"], a["coach_id"],
                             iin=a["iin"], phone=a["phone"], club_id=club_id)
+                        from club_rating import mark_joined
+                        mark_joined(self.db.conn, a["id"])
                         if on_done:
                             on_done()
                         picker.destroy()
@@ -5328,6 +5444,8 @@ class ClubsWindow(ctk.CTkToplevel):
     def _remove_athlete_from_club(self, aid, on_done=None):
         a = self.db.get_athlete(aid)
         if a:
+            from club_rating import apply_athlete_removed
+            apply_athlete_removed(self.db.conn, aid, a["club_id"])
             self.db.update_athlete(aid, a["first_name"], a["last_name"], a["birth_date"],
                                    a["gender"], "", a["rank"], a["photo_path"], a["coach_id"],
                                    iin=a["iin"], phone=a["phone"], club_id=None)
@@ -5381,6 +5499,18 @@ class App(ctk.CTk):
         self._refresh_tournament_list()
         self._start_auto_sync()
         self._start_pull_sync()
+
+        # Проверка неактивных спортсменов (клубный рейтинг) после старта UI.
+        self.after(1500, self._check_club_inactivity)
+
+    def _check_club_inactivity(self):
+        try:
+            from club_rating import check_inactive_athletes
+            n = check_inactive_athletes(self.db.conn)
+            if n:
+                print(f"club rating: {n} спортсменов отмечены неактивными")
+        except Exception as e:
+            print("club rating inactivity check error:", e)
 
     def _build_ui(self):
         self.sidebar = ctk.CTkFrame(self, width=240, corner_radius=0, fg_color=PANEL)
@@ -6279,6 +6409,12 @@ class App(ctk.CTk):
                         "категории и создавать/сбрасывать сетки — только просмотр.\n"
                         "Завершённый турнир можно будет возобновить в любой момент."):
                 self.db.finish_tournament(self.current_tournament_id)
+                from club_rating import check_inactive_athletes, finalize_competition
+                try:
+                    finalize_competition(self.db.conn, self.current_tournament_id)
+                    check_inactive_athletes(self.db.conn)
+                except Exception as e:
+                    print("club rating finalize error:", e)
                 from sync.sync_manager import sync_manager
                 sync_manager.update_tournament_status(self.current_tournament_id, "completed")
         self._select_tournament(self.current_tournament_id)
