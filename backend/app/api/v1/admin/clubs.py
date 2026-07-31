@@ -1,15 +1,109 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.v1.deps import require_role
+from app.db.models.athletes import Athlete
 from app.db.models.clubs import Club
+from app.db.models.coaches import Coach
+from app.db.models.geo import City
 from app.db.models.users import User
 from app.db.session import get_db
-from app.schemas.clubs import ClubCreate, ClubUpdate
+from app.schemas.clubs import (
+    ClubAdminDetailOut,
+    ClubAdminListOut,
+    ClubCreate,
+    ClubMemberOut,
+    ClubMembersAdd,
+    ClubUpdate,
+)
 
 router = APIRouter(prefix="/clubs", tags=["admin:clubs"])
 
 WRITE_ROLES = ("super_admin", "admin")
+
+
+@router.get("", response_model=list[ClubAdminListOut])
+def list_clubs_admin(
+    name: str | None = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(*WRITE_ROLES)),
+):
+    """Полный листинг клубов для админки (в отличие от публичного, с
+    описанием и city_id — нужны для формы редактирования)."""
+    query = (
+        db.query(
+            Club,
+            City.name.label("city_name"),
+            func.count(func.distinct(Athlete.id)).label("athletes_count"),
+            func.count(func.distinct(Coach.id)).label("coaches_count"),
+        )
+        .outerjoin(City, Club.city_id == City.id)
+        .outerjoin(Athlete, Athlete.club_id == Club.id)
+        .outerjoin(Coach, Coach.club_id == Club.id)
+        .group_by(Club.id, City.name)
+        .order_by(Club.name)
+    )
+    if name:
+        query = query.filter(Club.name.ilike(f"%{name}%"))
+    rows = query.all()
+    return [
+        ClubAdminListOut(
+            id=club.id,
+            name=club.name,
+            logo_path=club.logo_path,
+            description=club.description,
+            city_id=club.city_id,
+            city_name=city_name,
+            founded_year=club.founded_year,
+            rating_points=club.rating_points,
+            athletes_count=athletes_count,
+            coaches_count=coaches_count,
+        )
+        for club, city_name, athletes_count, coaches_count in rows
+    ]
+
+
+@router.get("/{club_id}", response_model=ClubAdminDetailOut)
+def get_club_admin(
+    club_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(*WRITE_ROLES)),
+):
+    """Детали клуба для админки + списки участников (спортсмены и тренеры),
+    которых можно добавлять/убирать со страницы клуба."""
+    club = db.query(Club).filter(Club.id == club_id).first()
+    if club is None:
+        raise HTTPException(status_code=404, detail="Клуб не найден")
+
+    athletes = (
+        db.query(Athlete)
+        .filter(Athlete.club_id == club.id)
+        .order_by(Athlete.full_name)
+        .all()
+    )
+    coaches = (
+        db.query(Coach)
+        .filter(Coach.club_id == club.id)
+        .order_by(Coach.full_name)
+        .all()
+    )
+    city_name = club.city.name if club.city else None
+
+    return ClubAdminDetailOut(
+        id=club.id,
+        name=club.name,
+        logo_path=club.logo_path,
+        description=club.description,
+        city_id=club.city_id,
+        city_name=city_name,
+        founded_year=club.founded_year,
+        rating_points=club.rating_points,
+        athletes_count=len(athletes),
+        coaches_count=len(coaches),
+        athletes=[ClubMemberOut(id=a.id, full_name=a.full_name, photo_path=a.photo_path) for a in athletes],
+        coaches=[ClubMemberOut(id=c.id, full_name=c.full_name, photo_path=c.photo_path) for c in coaches],
+    )
 
 
 @router.post("", status_code=201)
@@ -18,6 +112,10 @@ def create_club(
     db: Session = Depends(get_db),
     _: User = Depends(require_role(*WRITE_ROLES)),
 ):
+    if not payload.name.strip():
+        raise HTTPException(status_code=400, detail="Название клуба обязательно")
+    if not payload.city_id:
+        raise HTTPException(status_code=400, detail="Укажите город/область клуба")
     club = Club(**payload.model_dump())
     db.add(club)
     db.commit()
@@ -35,8 +133,61 @@ def update_club(
     club = db.query(Club).filter(Club.id == club_id).first()
     if club is None:
         raise HTTPException(status_code=404, detail="Клуб не найден")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    if "name" in data and data["name"] is not None and not data["name"].strip():
+        raise HTTPException(status_code=400, detail="Название клуба обязательно")
+    for field, value in data.items():
         setattr(club, field, value)
+    db.commit()
+    return {"status": "ok"}
+
+
+@router.post("/{club_id}/members")
+def add_club_members(
+    club_id: int,
+    payload: ClubMembersAdd,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(*WRITE_ROLES)),
+):
+    """Добавляет спортсменов и/или тренеров в клуб — присваивает им
+    club_id. Тот, кто уже состоял в другом клубе, автоматически переводится
+    в этот."""
+    club = db.query(Club).filter(Club.id == club_id).first()
+    if club is None:
+        raise HTTPException(status_code=404, detail="Клуб не найден")
+
+    if payload.athlete_ids:
+        db.query(Athlete).filter(Athlete.id.in_(payload.athlete_ids)).update(
+            {"club_id": club.id}, synchronize_session=False
+        )
+    if payload.coach_ids:
+        db.query(Coach).filter(Coach.id.in_(payload.coach_ids)).update(
+            {"club_id": club.id}, synchronize_session=False
+        )
+    db.commit()
+    return {"status": "ok"}
+
+
+@router.post("/{club_id}/members/remove")
+def remove_club_members(
+    club_id: int,
+    payload: ClubMembersAdd,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(*WRITE_ROLES)),
+):
+    """Убирает спортсменов/тренеров из клуба — обнуляет их club_id."""
+    club = db.query(Club).filter(Club.id == club_id).first()
+    if club is None:
+        raise HTTPException(status_code=404, detail="Клуб не найден")
+
+    if payload.athlete_ids:
+        db.query(Athlete).filter(
+            Athlete.id.in_(payload.athlete_ids), Athlete.club_id == club.id
+        ).update({"club_id": None}, synchronize_session=False)
+    if payload.coach_ids:
+        db.query(Coach).filter(
+            Coach.id.in_(payload.coach_ids), Coach.club_id == club.id
+        ).update({"club_id": None}, synchronize_session=False)
     db.commit()
     return {"status": "ok"}
 

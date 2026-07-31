@@ -171,7 +171,7 @@ export function CoachesAdmin() {
               className={inputClass}
             >
               <option value="">Клуб — не указан</option>
-              {clubs.data?.items.map((c) => (
+              {clubs.data?.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
@@ -247,11 +247,18 @@ export function CoachesAdmin() {
                     <div className="flex flex-wrap gap-3">
                       <select
                         defaultValue=""
-                        onChange={(e) => setEditForm({ ...editForm, club_id: e.target.value ? Number(e.target.value) : undefined })}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          setEditForm({
+                            ...editForm,
+                            club_id: v === 'none' ? null : v ? Number(v) : undefined,
+                          })
+                        }}
                         className={inputClass}
                       >
                         <option value="">Клуб: оставить «{coach.club_name ?? 'не указан'}»</option>
-                        {clubs.data?.items.map((c) => (
+                        <option value="none">Без клуба</option>
+                        {clubs.data?.map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.name}
                           </option>

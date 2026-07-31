@@ -144,7 +144,7 @@ export function AthletesAdmin() {
               className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
             >
               <option value="">Клуб — не указан</option>
-              {clubs.data?.items.map((c) => (
+              {clubs.data?.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
@@ -202,11 +202,18 @@ export function AthletesAdmin() {
                       />
                       <select
                         defaultValue=""
-                        onChange={(e) => setEditForm({ ...editForm, club_id: e.target.value ? Number(e.target.value) : undefined })}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          setEditForm({
+                            ...editForm,
+                            club_id: v === 'none' ? null : v ? Number(v) : undefined,
+                          })
+                        }}
                         className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
                       >
                         <option value="">Клуб: оставить «{a.club_name ?? 'не указан'}»</option>
-                        {clubs.data?.items.map((c) => (
+                        <option value="none">Без клуба</option>
+                        {clubs.data?.map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.name}
                           </option>

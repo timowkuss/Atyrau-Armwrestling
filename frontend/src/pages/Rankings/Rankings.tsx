@@ -16,10 +16,11 @@ export function Rankings() {
   const [tab, setTab] = useState<Tab>('athletes')
   const [name, setName] = useState('')
   const [hand, setHand] = useState('')
+  const [coachName, setCoachName] = useState('')
 
   const elo = useEloRankings({ name: name || undefined, hand: hand || undefined })
   const clubs = useClubRankings()
-  const coaches = useCoachRankings()
+  const coaches = useCoachRankings(coachName)
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'athletes', label: 'Спортсмены' },
@@ -141,6 +142,20 @@ export function Rankings() {
 
         {tab === 'coaches' && (
           <>
+            <div className="mb-6 flex items-center">
+              <div className="relative flex-1 max-w-xs">
+                <input
+                  value={coachName}
+                  onChange={(e) => setCoachName(e.target.value)}
+                  placeholder="Поиск по имени тренера..."
+                  className="w-full rounded-xl border border-steel-dim/20 bg-ink/80 px-4 py-2.5 pl-10 text-sm text-bone placeholder:text-steel-dim/50 backdrop-blur transition-colors focus:border-brass/50 focus:bg-ink focus:outline-none"
+                />
+                <svg className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-steel-dim" viewBox="0 0 16 16" fill="none">
+                  <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3" />
+                  <path d="M11 11l3.5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                </svg>
+              </div>
+            </div>
             {coaches.isLoading && <LoadingState label="Загрузка рейтинга" />}
             {coaches.isError && <ErrorState message={(coaches.error as Error).message} onRetry={() => coaches.refetch()} />}
             {coaches.data && coaches.data.length === 0 && (

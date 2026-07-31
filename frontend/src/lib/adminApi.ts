@@ -6,6 +6,8 @@ import type {
   AthleteStatisticsUpdateInput,
   AthleteUpdateInput,
   City,
+  ClubAdminDetail,
+  ClubAdminListItem,
   ClubInput,
   CoachAdminListItem,
   CoachInput,
@@ -113,11 +115,19 @@ export const adminApi = {
       authedRequest<City>(token, 'POST', '/admin/reference/cities', { name }),
   },
   clubs: {
+    list: (token: string) =>
+      authedRequest<ClubAdminListItem[]>(token, 'GET', '/admin/clubs'),
+    get: (token: string, id: number) =>
+      authedRequest<ClubAdminDetail>(token, 'GET', `/admin/clubs/${id}`),
     create: (token: string, payload: ClubInput) =>
       authedRequest<CreatedRef>(token, 'POST', '/admin/clubs', payload),
     update: (token: string, id: number, payload: Partial<ClubInput>) =>
       authedRequest<StatusResult>(token, 'PATCH', `/admin/clubs/${id}`, payload),
     remove: (token: string, id: number) => authedRequest<StatusResult>(token, 'DELETE', `/admin/clubs/${id}`),
+    addMembers: (token: string, id: number, payload: { athlete_ids: number[]; coach_ids: number[] }) =>
+      authedRequest<StatusResult>(token, 'POST', `/admin/clubs/${id}/members`, payload),
+    removeMembers: (token: string, id: number, payload: { athlete_ids: number[]; coach_ids: number[] }) =>
+      authedRequest<StatusResult>(token, 'POST', `/admin/clubs/${id}/members/remove`, payload),
   },
   coaches: {
     // С ИИН — в отличие от api.coaches.list (публичный, без ИИН).

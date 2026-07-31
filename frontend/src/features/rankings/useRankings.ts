@@ -9,8 +9,11 @@ export function useClubRankings() {
   return useQuery({ queryKey: ['rankings', 'clubs'], queryFn: () => api.rankings.clubs() })
 }
 
-export function useCoachRankings() {
-  return useQuery({ queryKey: ['rankings', 'coaches'], queryFn: () => api.rankings.coaches() })
+export function useCoachRankings(name?: string) {
+  return useQuery({
+    queryKey: ['rankings', 'coaches', name],
+    queryFn: () => api.rankings.coaches({ name: name || undefined }),
+  })
 }
 
 export function useEloRankings(params?: { gender?: string; hand?: string; name?: string }) {

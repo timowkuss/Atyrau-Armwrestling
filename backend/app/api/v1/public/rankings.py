@@ -39,14 +39,18 @@ def athlete_rankings(
 
 @router.get("/coaches", response_model=list[CoachRankingOut])
 def coach_rankings(
+    name: str | None = None,
     limit: int = Query(100, le=500),
     db: Session = Depends(get_db),
 ):
     coaches = db.query(Coach).outerjoin(Club, Coach.club_id == Club.id).add_columns(
         Club.name.label("club_name"),
-    ).all()
+    )
+    if name:
+        coaches = coaches.filter(Coach.full_name.ilike(f"%{name}%"))
+    rows = coaches.all()
     rankings = []
-    for c, club_name in coaches:
+    for c, club_name in rows:
         r = calculate_coach_rating(db, c.id)
         rankings.append({
             "coach_id": c.id,

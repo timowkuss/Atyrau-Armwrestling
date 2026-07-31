@@ -12,13 +12,15 @@ interface CityComboboxProps {
   initialText?: string
   placeholder?: string
   className?: string
+  /** Навесить required на инпут (для форм, где город обязателен). */
+  required?: boolean
   /** Вызывается с id найденного/созданного города, либо undefined, если
    * поле пустое (или не менялось — в режиме редактирования это значит
    * «оставить как есть», совпадает с прежним поведением select'а). */
   onChange: (cityId: number | undefined) => void
 }
 
-export function CityCombobox({ initialText = '', placeholder = 'Город/район', className, onChange }: CityComboboxProps) {
+export function CityCombobox({ initialText = '', placeholder = 'Город/район', className, required, onChange }: CityComboboxProps) {
   const listId = useId()
   const cities = useCities()
   const resolveCity = useResolveCity()
@@ -42,6 +44,7 @@ export function CityCombobox({ initialText = '', placeholder = 'Город/ра�
     <>
       <input
         list={listId}
+        required={required}
         placeholder={placeholder}
         value={text}
         onChange={(e) => setText(e.target.value)}
