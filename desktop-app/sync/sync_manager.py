@@ -305,6 +305,53 @@ class SyncManager:
             self.state.enqueue("delete_coach", {"cid": cid, "remote_id": remote_id})
             print(f"[sync] delete_coach -> в офлайн-очередь: {e}")
 
+    # ── клуб ───────────────────────────────────────────────────
+    def on_club_created(self, cid, name, city=None, founded_year=None, logo_path=None):
+        payload = {"cid": cid, "name": name, "city": city,
+                   "founded_year": founded_year, "logo_path": logo_path}
+
+        def go():
+            remote = self.api.create_club(
+                name=name, city_name=city or None,
+                founded_year=founded_year, logo_path=logo_path or None,
+            )
+            self.state.map_set("club", cid, remote["id"])
+            return remote["id"]
+
+        return self._try("create_club", payload, go)
+
+    def on_club_updated(self, cid, name=None, city=None, founded_year=None, logo_path=None):
+        remote_club_id = self.state.map_get("club", cid)
+        payload = {"cid": cid, "name": name, "city": city,
+                   "founded_year": founded_year, "logo_path": logo_path}
+        if remote_club_id is None:
+            self.state.enqueue("update_club", payload)
+            return None
+
+        def go():
+            self.api.update_club(
+                remote_club_id,
+                name=name, city_name=city or None,
+                founded_year=founded_year, logo_path=logo_path or None,
+            )
+            return remote_club_id
+
+        return self._try("update_club", payload, go)
+
+    def on_club_deleted(self, cid):
+        self.state.purge_pending("create_club", "cid", cid)
+        self.state.purge_pending("update_club", "cid", cid)
+
+        remote_id = self.state.map_get("club", cid)
+        if remote_id is None:
+            return
+
+        try:
+            self.api.delete_club(remote_id)
+        except ApiClientError as e:
+            self.state.enqueue("delete_club", {"cid": cid, "remote_id": remote_id})
+            print(f"[sync] delete_club -> в офлайн-очередь: {e}")
+
     # ── спортсмен-участник: поиск или создание на сервере ───────
     # local_athlete_id — id из ЛОКАЛЬНОЙ таблицы athletes (реестр
     # "Спортсмены"), если участник турнира был привязан к карточке.
@@ -355,6 +402,9 @@ class SyncManager:
 
     def _coach_exists_locally(self, cid: int) -> bool:
         return self._entity_exists_locally("coaches", "id", cid)
+
+    def _club_exists_locally(self, cid: int) -> bool:
+        return self._entity_exists_locally("clubs", "id", cid)
 
     def on_tournament_created(self, tid, name, date, location,
                                weight_tolerance=None, bracket_system=None, format_type=None):
@@ -900,6 +950,53 @@ class SyncManager:
                     delete_fn(payload["remote_id"])
                 except ApiClientError as e:
                     if e.status_code == 404:
+                        return True
+                    raise
+                return True
+
+            if operation == "delete_club":
+                delete_fn = getattr(self.api, "delete_club", None)
+                if delete_fn is None:
+                    return False
+                try:
+                    delete_fn(payload["remote_id"])
+                except ApiClientError as e:
+                    if e.status_code == 404:
+                        return True
+                    raise
+                return True
+
+            if operation == "create_club":
+                remote = self.api.create_club(
+                    name=payload["name"],
+                    city_name=payload.get("city") or None,
+                    founded_year=payload.get("founded_year"),
+                    logo_path=payload.get("logo_path") or None,
+                )
+                self.state.map_set("club", payload["cid"], remote["id"])
+                return True
+
+            if operation == "update_club":
+                remote_club_id = self.state.map_get("club", payload["cid"])
+                if remote_club_id is None:
+                    if not self._club_exists_locally(payload["cid"]):
+                        print(f"[sync] update_club cid={payload['cid']}: клуб удалён локально — чистим очередь")
+                        self.state.purge_pending("update_club", "cid", payload["cid"])
+                        return True
+                    print(f"[sync] DEBUG: update_club ждёт create_club cid={payload['cid']}")
+                    return None
+                try:
+                    self.api.update_club(
+                        remote_club_id,
+                        name=payload.get("name"),
+                        city_name=payload.get("city") or None,
+                        founded_year=payload.get("founded_year"),
+                        logo_path=payload.get("logo_path") or None,
+                    )
+                except ApiClientError as e:
+                    if e.status_code == 404:
+                        self.state.map_delete("club", payload["cid"])
+                        print(f"[sync] update_club cid={payload['cid']}: 404 — клуб удалён на сервере")
                         return True
                     raise
                 return True

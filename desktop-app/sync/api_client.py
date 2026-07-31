@@ -141,6 +141,32 @@ class SyncApiClient:
     def delete_coach(self, remote_id):
         return self._request("DELETE", f"/coaches/{remote_id}")
 
+    # ── клубы ────────────────────────────────────────────────
+    def get_clubs(self):
+        return self._request("GET", "/clubs")
+
+    def create_club(self, name, city_name=None, founded_year=None, logo_path=None):
+        return self._request("POST", "/clubs", json_body={
+            "name": name, "city_name": city_name,
+            "founded_year": founded_year, "logo_path": logo_path,
+        })
+
+    def update_club(self, remote_club_id, name=None, city_name=None,
+                    founded_year=None, logo_path=None):
+        body = {}
+        if name is not None:
+            body["name"] = name
+        if city_name is not None:
+            body["city_name"] = city_name
+        if founded_year is not None:
+            body["founded_year"] = founded_year
+        if logo_path is not None:
+            body["logo_path"] = logo_path
+        return self._request("PATCH", f"/clubs/{remote_club_id}", json_body=body)
+
+    def delete_club(self, remote_id):
+        return self._request("DELETE", f"/clubs/{remote_id}")
+
     def get_coach_rankings(self):
         """Рейтинг 'лучший тренер года' — читает ПУБЛИЧНЫЙ (не /sync)
         эндпоинт: это открытые данные сайта, X-Sync-Token не нужен.
