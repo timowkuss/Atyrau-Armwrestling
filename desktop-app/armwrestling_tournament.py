@@ -1,4 +1,4 @@
-"""
+﻿"""
 ╔════╗
 ║        АРМРЕСТЛИНГ — МЕНЕДЖЕР СОРЕВНОВАНИЙ               ║
 ║        Формат: до 2 поражений (Double Elimination)       ║
@@ -69,6 +69,16 @@ except ImportError:
 # ─── Тема приложения ────
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
+
+# Центральная тема/палитра — весь внешний вид приложения (цвета, шрифты,
+# отступы, переиспользуемые компоненты). Бизнес-логики в ней нет.
+from ui_theme import (theme, BG, PANEL, PANEL_LIGHT, CARD, CARD_ALT, INPUT_BG,
+                      BORDER, CARD_BORDER, SELECTED, TEXT, TEXT_DIM, TEXT_FAINT,
+                      TEXT_BRIGHT, ACCENT, ACCENT_HOVER, ACCENT_DIM, SUCCESS,
+                      SUCCESS_HOVER, WARNING, WARNING_HOVER, DANGER, DANGER_HOVER,
+                      OK, ERR, WARN, GOLD, DROPDOWN_BG, DROPDOWN_HOVER,
+                      OptionMenu)
+theme.apply_global(ctk)
 
 DB_PATH = Path(__file__).resolve().parent / "armwrestling.db"
 PHOTOS_DIR = Path("photos")
@@ -2074,7 +2084,7 @@ class ParticipantCard(ctk.CTkFrame):
         ctk.CTkButton(btn_frame, text="✏️", width=36, height=32,
                     command=lambda: on_edit(p["id"])).pack(pady=2)
         ctk.CTkButton(btn_frame, text="🗑", width=36, height=32,
-                    fg_color="#8b1a1a", hover_color="#a03030",
+                    fg_color=DANGER, hover_color=DANGER_HOVER,
                     command=lambda: on_delete(p["id"])).pack(pady=2)
         self.columnconfigure(1, weight=1)
 
@@ -2158,7 +2168,7 @@ class ParticipantGroupCard(ctk.CTkFrame):
             ctk.CTkButton(btns, text="✏️", width=32, height=28,
                     command=lambda pid=p["id"]: on_edit(pid)).pack(side="left", padx=2)
             ctk.CTkButton(btns, text="🗑", width=32, height=28,
-                    fg_color="#8b1a1a", hover_color="#a03030",
+                    fg_color=DANGER, hover_color=DANGER_HOVER,
                     command=lambda pid=p["id"]: on_delete(pid)).pack(side="left", padx=2)
 
         self.columnconfigure(1, weight=1)
@@ -2571,7 +2581,7 @@ class BracketWindow(ctk.CTkToplevel):
 
         self.title(f"Сетка — {category['name']} — {hand}")
         self.geometry("1200x800")
-        self.configure(fg_color="#0d1117")
+        self.configure(fg_color=BG)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(50, self.safe_init)
 
@@ -2600,7 +2610,7 @@ class BracketWindow(ctk.CTkToplevel):
             self.destroy()
 
     def _build_ui(self):
-        top = ctk.CTkFrame(self, fg_color="#161b22", height=55)
+        top = ctk.CTkFrame(self, fg_color=PANEL, height=55)
         top.pack(fill="x", padx=0, pady=0)
         top.pack_propagate(False)
 
@@ -2688,17 +2698,17 @@ class BracketWindow(ctk.CTkToplevel):
         # Автофокус на поле сканера
         self.scan_entry.focus_set()
         self.bind("<FocusIn>", lambda e: self.scan_entry.focus_set() if e.widget is self else None)
-        self.tabs = ctk.CTkTabview(self, fg_color="#0d1117")
+        self.tabs = ctk.CTkTabview(self, fg_color=BG)
         self.tabs.pack(fill="both", expand=True, padx=5, pady=5)
         self.tabs.add("🏟 Сетка")
         self.tabs.add("📋 Поединки")
         self.tabs.add("🥇 Итоги")
 
         bracket_outer = self.tabs.tab("🏟 Сетка")
-        self.canvas_frame = ctk.CTkFrame(bracket_outer, fg_color="#0d1117")
+        self.canvas_frame = ctk.CTkFrame(bracket_outer, fg_color=BG)
         self.canvas_frame.pack(fill="both", expand=True)
 
-        self.canvas = tk.Canvas(self.canvas_frame, bg="#0d1117",
+        self.canvas = tk.Canvas(self.canvas_frame, bg=BG,
                     highlightthickness=0, cursor="crosshair")
         hscroll = ctk.CTkScrollbar(self.canvas_frame, orientation="horizontal",
                     command=self.canvas.xview)
@@ -2710,11 +2720,11 @@ class BracketWindow(ctk.CTkToplevel):
         self.canvas.pack(fill="both", expand=True)
 
         match_tab = self.tabs.tab("📋 Поединки")
-        self.match_scroll = ScrollableFrame(match_tab, fg_color="#0d1117")
+        self.match_scroll = ScrollableFrame(match_tab, fg_color=BG)
         self.match_scroll.pack(fill="both", expand=True, padx=10, pady=10)
 
         result_tab = self.tabs.tab("🥇 Итоги")
-        self.result_frame = ctk.CTkFrame(result_tab, fg_color="#0d1117")
+        self.result_frame = ctk.CTkFrame(result_tab, fg_color=BG)
         self.result_frame.pack(fill="both", expand=True, padx=10, pady=10)
     
     # ════
@@ -3730,7 +3740,7 @@ class CombinedResultsWindow(ctk.CTkToplevel):
         self.title(f"Итоги двоеборья — {category['name']}")
         self.geometry("980x680")
         self.minsize(760, 480)
-        self.configure(fg_color="#0d1117")
+        self.configure(fg_color=BG)
         self.after(50, self.safe_init)
 
     def safe_init(self):
@@ -3746,7 +3756,7 @@ class CombinedResultsWindow(ctk.CTkToplevel):
             self.destroy()
 
     def _build_ui(self):
-        top = ctk.CTkFrame(self, fg_color="#161b22", height=55)
+        top = ctk.CTkFrame(self, fg_color=PANEL, height=55)
         top.pack(fill="x", padx=0, pady=0)
         top.pack_propagate(False)
 
@@ -3775,7 +3785,7 @@ class CombinedResultsWindow(ctk.CTkToplevel):
             ctk.CTkLabel(header, text=h, font=ctk.CTkFont(size=12, weight="bold"),
                     width=w, anchor="w").grid(row=0, column=i, padx=6, pady=8, sticky="w")
 
-        self.result_scroll = ScrollableFrame(self, fg_color="#0d1117")
+        self.result_scroll = ScrollableFrame(self, fg_color=BG)
         self.result_scroll.pack(fill="both", expand=True, padx=10, pady=10)
 
     @staticmethod
@@ -3948,7 +3958,7 @@ class AthleteCard(ctk.CTkFrame):
         ctk.CTkButton(btn_frame, text="✏️", width=36, height=32,
                     command=lambda: on_edit(a["id"])).pack(pady=2)
         ctk.CTkButton(btn_frame, text="🗑", width=36, height=32,
-                    fg_color="#8b1a1a", hover_color="#a03030",
+                    fg_color=DANGER, hover_color=DANGER_HOVER,
                     command=lambda: on_delete(a["id"])).pack(pady=2)
         self.columnconfigure(col + 1, weight=1)
 
@@ -3965,7 +3975,7 @@ class AthletesWindow(ctk.CTkToplevel):
         self.geometry("820x640")
         center_toplevel(self, 820, 640)
         self.minsize(600, 400)
-        self.configure(fg_color="#0d1117")
+        self.configure(fg_color=BG)
         self.after(50, self.safe_init)
 
     def safe_init(self):
@@ -3998,13 +4008,13 @@ class AthletesWindow(ctk.CTkToplevel):
 
         self.age_filter_var = ctk.StringVar(value="Все возрасты")
         age_options = ["Все возрасты"] + list(AGE_LEVEL_LABELS.values())
-        ctk.CTkOptionMenu(ctrl, variable=self.age_filter_var, values=age_options,
+        OptionMenu(ctrl, variable=self.age_filter_var, values=age_options,
                     width=200, command=lambda *_: self._refresh_list()).pack(side="left", padx=5)
 
         self.count_label = ctk.CTkLabel(ctrl, text="", text_color="#556677")
         self.count_label.pack(side="right", padx=10)
 
-        self.list_frame = ScrollableFrame(self, fg_color="#0d1117")
+        self.list_frame = ScrollableFrame(self, fg_color=BG)
         self.list_frame.pack(fill="both", expand=True, padx=15, pady=(0, 15))
 
     def _refresh_list(self):
@@ -4074,7 +4084,7 @@ class AthletesWindow(ctk.CTkToplevel):
         dlg.title("Редактировать спортсмена" if edit_id else "Добавить спортсмена")
         dlg.geometry("660x710")
         dlg.minsize(480, 710)
-        dlg.configure(bg="#161b22")
+        dlg.configure(bg=PANEL)
 
         fields = {}
         photo_path_var = ctk.StringVar()
@@ -4134,7 +4144,7 @@ class AthletesWindow(ctk.CTkToplevel):
         gender_reverse = {"Мужской": "M", "Женский": "F"}
         gender_var = ctk.StringVar(
             value=gender_display.get(existing["gender"], "Мужской") if existing else "Мужской")
-        ctk.CTkOptionMenu(form, variable=gender_var,
+        OptionMenu(form, variable=gender_var,
                     values=["Мужской", "Женский"], width=260
                     ).grid(row=5, column=1, padx=(0, 15), pady=8, sticky="w")
 
@@ -4162,7 +4172,7 @@ class AthletesWindow(ctk.CTkToplevel):
         club_var.set(existing_club_name)
         ctk.CTkLabel(form, text="Клуб:", anchor="e", width=110).grid(
             row=6, column=0, padx=(15, 8), pady=8, sticky="e")
-        ctk.CTkOptionMenu(form, variable=club_var,
+        OptionMenu(form, variable=club_var,
                     values=list(club_display_to_id.keys()), width=260
                     ).grid(row=6, column=1, padx=(0, 15), pady=8, sticky="w")
 
@@ -4171,7 +4181,7 @@ class AthletesWindow(ctk.CTkToplevel):
             row=7, column=0, padx=(15, 8), pady=8, sticky="e")
         rank_var = ctk.StringVar(
             value=existing["rank"] if existing and existing["rank"] in RANKS else "Без звания")
-        ctk.CTkOptionMenu(form, variable=rank_var, values=RANKS, width=260
+        OptionMenu(form, variable=rank_var, values=RANKS, width=260
                     ).grid(row=7, column=1, padx=(0, 15), pady=8, sticky="w")
 
         # ─── Тренер (только при редактировании; при создании спортсмена
@@ -4194,7 +4204,7 @@ class AthletesWindow(ctk.CTkToplevel):
                 if row:
                     existing_coach_name = row["full_name"]
             coach_var.set(existing_coach_name)
-            ctk.CTkOptionMenu(form, variable=coach_var,
+            OptionMenu(form, variable=coach_var,
                         values=[_NO_COACH] + [c["full_name"] for c in coaches], width=260
                         ).grid(row=8, column=1, padx=(0, 15), pady=8, sticky="w")
             photo_row_num = 9
@@ -4332,7 +4342,7 @@ class CoachCard(ctk.CTkFrame):
         ctk.CTkButton(btn_frame, text="✏️", width=36, height=32,
                     command=lambda: on_edit(c["id"])).pack(pady=2)
         ctk.CTkButton(btn_frame, text="🗑", width=36, height=32,
-                    fg_color="#8b1a1a", hover_color="#a03030",
+                    fg_color=DANGER, hover_color=DANGER_HOVER,
                     command=lambda: on_delete(c["id"])).pack(pady=2)
         self.columnconfigure(col + 1, weight=1)
 
@@ -4346,7 +4356,7 @@ class CoachesWindow(ctk.CTkToplevel):
         self.geometry("820x640")
         center_toplevel(self, 820, 640)
         self.minsize(600, 400)
-        self.configure(fg_color="#0d1117")
+        self.configure(fg_color=BG)
         self.after(50, self.safe_init)
 
     def safe_init(self):
@@ -4372,7 +4382,7 @@ class CoachesWindow(ctk.CTkToplevel):
         self.count_label = ctk.CTkLabel(ctrl, text="", text_color="#556677")
         self.count_label.pack(side="right", padx=10)
 
-        self.list_frame = ScrollableFrame(self, fg_color="#0d1117")
+        self.list_frame = ScrollableFrame(self, fg_color=BG)
         self.list_frame.pack(fill="both", expand=True, padx=15, pady=(0, 15))
 
     def _refresh_list(self):
@@ -4405,7 +4415,7 @@ class CoachesWindow(ctk.CTkToplevel):
         dlg.geometry("1300x810")
         dlg.minsize(1300, 650)
         dlg.resizable(True, True)
-        dlg.configure(bg="#0d1117")
+        dlg.configure(bg=BG)
         dlg.transient(self)
         dlg.grab_set()
         dlg.focus_force()
@@ -4416,8 +4426,8 @@ class CoachesWindow(ctk.CTkToplevel):
 
         # ─── helpers ────────────────────────────────────────────────
         def make_card(parent, **kw):
-            card = ctk.CTkFrame(parent, fg_color="#161b22", corner_radius=12,
-                               border_width=1, border_color="#2d333b")
+            card = ctk.CTkFrame(parent, fg_color=PANEL, corner_radius=12,
+                               border_width=1, border_color=BORDER)
             card.pack(**kw)
             return card
 
@@ -4430,25 +4440,25 @@ class CoachesWindow(ctk.CTkToplevel):
                 row=row, column=0, padx=(14, 6), pady=7, sticky="e")
             var = ctk.StringVar(value=default)
             ctk.CTkEntry(parent, textvariable=var, width=width, placeholder_text=placeholder,
-                        fg_color="#0d1117", border_color="#2d333b").grid(
+                        fg_color=BG, border_color=BORDER).grid(
                 row=row, column=1, padx=(0, 14), pady=7, sticky="w")
             fields[key] = var
             return var
 
         # ═══ ВЕРХНЯЯ ПАНЕЛЬ: фото + имя + статус ══════════════════
-        top_card = ctk.CTkFrame(dlg, fg_color="#161b22", corner_radius=12,
-                               border_width=1, border_color="#2d333b")
+        top_card = ctk.CTkFrame(dlg, fg_color=PANEL, corner_radius=12,
+                               border_width=1, border_color=BORDER)
         top_card.pack(fill="x", padx=14, pady=(14, 0))
 
         top_inner = ctk.CTkFrame(top_card, fg_color="transparent")
         top_inner.pack(fill="x", padx=14, pady=12)
 
         photo_thumb_lbl = ctk.CTkLabel(top_inner, text="", width=64, height=64,
-                                       corner_radius=32, fg_color="#0d1117")
+                                       corner_radius=32, fg_color=BG)
         photo_thumb_lbl.pack(side="left", padx=(0, 14))
 
         name_label = ctk.CTkLabel(top_inner, text="",
-                    font=ctk.CTkFont(size=18, weight="bold"), text_color="#e6edf3")
+                    font=ctk.CTkFont(size=18, weight="bold"), text_color=TEXT)
         name_label.pack(side="left", anchor="s")
 
         if existing:
@@ -4495,7 +4505,7 @@ class CoachesWindow(ctk.CTkToplevel):
             row=2, column=0, padx=(14, 6), pady=7, sticky="e")
         birth_date_var = ctk.StringVar(value=existing["birth_date"] if existing else "")
         birth_entry = ctk.CTkEntry(form_grid, textvariable=birth_date_var, width=240,
-                    placeholder_text="  .  .    ", fg_color="#0d1117", border_color="#2d333b")
+                    placeholder_text="  .  .    ", fg_color=BG, border_color=BORDER)
         birth_entry.grid(row=2, column=1, padx=(0, 14), pady=7, sticky="w")
 
         def format_birthdate(event=None):
@@ -4518,7 +4528,7 @@ class CoachesWindow(ctk.CTkToplevel):
             row=3, column=0, padx=(14, 6), pady=7, sticky="e")
         iin_var = ctk.StringVar(value=existing["iin"] if existing else "")
         iin_entry = ctk.CTkEntry(form_grid, textvariable=iin_var, width=240,
-                    placeholder_text="12 цифр", fg_color="#0d1117", border_color="#2d333b")
+                    placeholder_text="12 цифр", fg_color=BG, border_color=BORDER)
         iin_entry.grid(row=3, column=1, padx=(0, 14), pady=7, sticky="w")
 
         def format_iin(event=None):
@@ -4534,11 +4544,11 @@ class CoachesWindow(ctk.CTkToplevel):
         qualification_var = ctk.StringVar(
             value=existing["qualification"] if existing and existing["qualification"] in COACH_QUALIFICATIONS
             else COACH_QUALIFICATIONS[0])
-        qualification_menu = ctk.CTkOptionMenu(form_grid,
+        qualification_menu = OptionMenu(form_grid,
                     variable=qualification_var,
                     values=COACH_QUALIFICATIONS, width=240,
-                    fg_color="#0d1117", button_color="#2d333b",
-                    dropdown_fg_color="#161b22")
+                    fg_color=BG, button_color="#2d333b",
+                    dropdown_fg_color=DROPDOWN_BG)
         qualification_menu.grid(row=4, column=1, padx=(0, 14), pady=7, sticky="w")
 
         # ─── Клуб (выпадающий список из реестра «Клубы») ───
@@ -4564,10 +4574,10 @@ class CoachesWindow(ctk.CTkToplevel):
         club_var = ctk.StringVar(value=existing_club_name)
         ctk.CTkLabel(form_grid, text="Клуб:", anchor="e", width=90).grid(
             row=5, column=0, padx=(14, 6), pady=7, sticky="e")
-        ctk.CTkOptionMenu(form_grid, variable=club_var,
+        OptionMenu(form_grid, variable=club_var,
                     values=list(club_display_to_id.keys()), width=240,
-                    fg_color="#0d1117", button_color="#2d333b",
-                    dropdown_fg_color="#161b22"
+                    fg_color=BG, button_color="#2d333b",
+                    dropdown_fg_color=DROPDOWN_BG
                     ).grid(row=5, column=1, padx=(0, 14), pady=7, sticky="w")
 
         lbl_entry(form_grid, "Город/Район:", "city", (existing["city"] or "") if existing else "", row=6)
@@ -4602,30 +4612,30 @@ class CoachesWindow(ctk.CTkToplevel):
                     url = upload_photo(p, folder="coaches")
                 except CloudinaryUploadError as e:
                     def on_error():
-                        photo_status_lbl.configure(text=f"Ошибка: {e}", text_color="#f85149")
+                        photo_status_lbl.configure(text=f"Ошибка: {e}", text_color=ERR)
                         upload_btn.configure(state="normal")
                     dlg.after(0, on_error)
                     return
 
                 def on_success():
                     photo_path_var.set(url)
-                    photo_status_lbl.configure(text="✓ Загружено", text_color="#3fb950")
+                    photo_status_lbl.configure(text="✓ Загружено", text_color=OK)
                     upload_btn.configure(state="normal")
                 dlg.after(0, on_success)
 
             Thread(target=worker, daemon=True).start()
 
         upload_btn = ctk.CTkButton(photo_row, text="📷 Выбрать фото", width=120, height=32,
-                    fg_color="#1f6feb", hover_color="#388bfd",
+                    fg_color=ACCENT_DIM, hover_color=INFO_HOVER,
                     command=choose_photo)
         upload_btn.pack(side="left")
 
-        photo_status_lbl = ctk.CTkLabel(photo_row, text="не выбрано", text_color="#6e7681",
+        photo_status_lbl = ctk.CTkLabel(photo_row, text="не выбрано", text_color=TEXT_FAINT,
                     anchor="w", padx=10)
         photo_status_lbl.pack(side="left")
 
         if photo_path_var.get():
-            photo_status_lbl.configure(text="✓ Загружено", text_color="#3fb950")
+            photo_status_lbl.configure(text="✓ Загружено", text_color=OK)
 
         # ─── Правая колонка: ученики ────────────────────────────
         if existing:
@@ -4648,7 +4658,7 @@ class CoachesWindow(ctk.CTkToplevel):
                 picker.title("Выбрать спортсмена")
                 sw, sh = picker.winfo_screenwidth(), picker.winfo_screenheight()
                 picker.geometry(f"480x540+{(sw-480)//2}+{(sh-540)//2}")
-                picker.configure(bg="#0d1117")
+                picker.configure(bg=BG)
                 picker.transient(dlg)
                 picker.grab_set()
                 picker.focus_force()
@@ -4656,10 +4666,10 @@ class CoachesWindow(ctk.CTkToplevel):
                 search_var = ctk.StringVar()
                 ctk.CTkEntry(picker, textvariable=search_var, width=440,
                             placeholder_text="🔍 Поиск по имени или фамилии...",
-                            fg_color="#0d1117", border_color="#2d333b"
+                            fg_color=BG, border_color=BORDER
                             ).pack(padx=14, pady=(14, 6))
 
-                results_frame = ScrollableFrame(picker, fg_color="#0d1117")
+                results_frame = ScrollableFrame(picker, fg_color=BG)
                 results_frame.pack(fill="both", expand=True, padx=14, pady=(0, 14))
 
                 def refresh_picker():
@@ -4668,7 +4678,7 @@ class CoachesWindow(ctk.CTkToplevel):
                     q = search_var.get().strip()
                     if len(q) < 1:
                         ctk.CTkLabel(results_frame, text="Введите имя для поиска",
-                                    text_color="#6e7681").pack(pady=30)
+                                    text_color=TEXT_FAINT).pack(pady=30)
                         return
                     try:
                         found = self.db.search_athletes(q)
@@ -4676,7 +4686,7 @@ class CoachesWindow(ctk.CTkToplevel):
                         found = []
                     if not found:
                         ctk.CTkLabel(results_frame, text="Спортсмены не найдены",
-                                    text_color="#6e7681").pack(pady=30)
+                                    text_color=TEXT_FAINT).pack(pady=30)
                         return
                     for a in found:
                         if a["id"] in assigned_ids:
@@ -4700,8 +4710,8 @@ class CoachesWindow(ctk.CTkToplevel):
                                 messagebox.showerror("Ошибка", f"Не удалось привязать:\n{e}")
 
                         ctk.CTkButton(results_frame, text=label, anchor="w",
-                                    fg_color="#151b23", hover_color="#1c2333",
-                                    border_width=1, border_color="#2d333b",
+                                    fg_color=CARD, hover_color="#1c2333",
+                                    border_width=1, border_color=BORDER,
                                     command=pick, height=36
                                     ).pack(fill="x", padx=4, pady=3)
 
@@ -4709,7 +4719,7 @@ class CoachesWindow(ctk.CTkToplevel):
                 refresh_picker()
 
             ctk.CTkButton(search_row, text="🔍 Выбрать спортсмена",
-                        fg_color="#1f6feb", hover_color="#388bfd",
+                        fg_color=ACCENT_DIM, hover_color=INFO_HOVER,
                         height=36, command=open_athlete_picker
                         ).pack(fill="x")
 
@@ -4723,13 +4733,13 @@ class CoachesWindow(ctk.CTkToplevel):
                         text_color="#8899aa").pack(side="left")
 
             count_lbl = ctk.CTkLabel(students_header, text="0",
-                        fg_color="#2d333b", corner_radius=8,
-                        padx=6, text_color="#6e7681",
+                        fg_color=BORDER, corner_radius=8,
+                        padx=6, text_color=TEXT_FAINT,
                         font=ctk.CTkFont(size=11))
             count_lbl.pack(side="left", padx=(8, 0))
 
-            athletes_card = ctk.CTkFrame(students_card, fg_color="#0d1117",
-                        corner_radius=10, border_width=1, border_color="#2d333b")
+            athletes_card = ctk.CTkFrame(students_card, fg_color=BG,
+                        corner_radius=10, border_width=1, border_color=BORDER)
             athletes_card.pack(fill="both", expand=True, padx=14, pady=(0, 14))
             athletes_card.grid_rowconfigure(0, weight=1)
             athletes_card.grid_columnconfigure(0, weight=1)
@@ -4749,15 +4759,15 @@ class CoachesWindow(ctk.CTkToplevel):
                     empty.pack(fill="both", expand=True, pady=30)
                     ctk.CTkLabel(empty, text="🤷", font=("Arial", 28)).pack()
                     ctk.CTkLabel(empty, text="Нет привязанных спортсменов",
-                                text_color="#6e7681").pack(pady=(4, 0))
+                                text_color=TEXT_FAINT).pack(pady=(4, 0))
                 for i, a in enumerate(assigned, 1):
-                    row = ctk.CTkFrame(athletes_frame, fg_color="#151b23",
-                                       corner_radius=8, border_width=1, border_color="#2d333b")
+                    row = ctk.CTkFrame(athletes_frame, fg_color=CARD,
+                                       corner_radius=8, border_width=1, border_color=BORDER)
                     row.pack(fill="x", padx=6, pady=3)
                     age = datetime.now().year - extract_birth_year(a["birth_date"])
                     club = a["club"] or ""
                     num_lbl = ctk.CTkLabel(row, text=f"{i}.", width=28, anchor="e",
-                                           text_color="#6e7681", font=ctk.CTkFont(size=12))
+                                           text_color=TEXT_FAINT, font=ctk.CTkFont(size=12))
                     num_lbl.pack(side="left", padx=(8, 2), pady=8)
                     info = f"{a['last_name']} {a['first_name']}  ·  {age} лет"
                     if club:
@@ -4788,7 +4798,7 @@ class CoachesWindow(ctk.CTkToplevel):
             refresh_athletes_list()
 
         # ═══ КНОПКИ ═══════════════════════════════════════════════
-        btn_bar = ctk.CTkFrame(dlg, fg_color="#0d1117")
+        btn_bar = ctk.CTkFrame(dlg, fg_color=BG)
         btn_bar.pack(fill="x", padx=14, pady=(10, 14))
 
         def save():
@@ -4827,10 +4837,10 @@ class CoachesWindow(ctk.CTkToplevel):
             self._refresh_list()
             dlg.destroy()
 
-        ctk.CTkButton(btn_bar, text="💾 Сохранить", fg_color="#238636",
-                    hover_color="#2ea043", height=38, width=120,
+        ctk.CTkButton(btn_bar, text="💾 Сохранить", fg_color=SUCCESS,
+                    hover_color=SUCCESS_HOVER, height=38, width=120,
                     corner_radius=8, command=save).pack(side="right", padx=(6, 0))
-        ctk.CTkButton(btn_bar, text="Отмена", fg_color="#21262d",
+        ctk.CTkButton(btn_bar, text="Отмена", fg_color=DROPDOWN_BG,
                     hover_color="#30363d", height=38, width=100,
                     corner_radius=8,
                     command=lambda: (self._refresh_list(), dlg.destroy())
@@ -4875,7 +4885,7 @@ class ClubCard(ctk.CTkFrame):
         ctk.CTkButton(btn_frame, text="✏️", width=36, height=32,
                     command=lambda: on_edit(c["id"])).pack(pady=2)
         ctk.CTkButton(btn_frame, text="🗑", width=36, height=32,
-                    fg_color="#8b1a1a", hover_color="#a03030",
+                    fg_color=DANGER, hover_color=DANGER_HOVER,
                     command=lambda: on_delete(c["id"])).pack(pady=2)
         self.columnconfigure(col + 1, weight=1)
 
@@ -4889,7 +4899,7 @@ class ClubsWindow(ctk.CTkToplevel):
         self.geometry("860x640")
         center_toplevel(self, 860, 640)
         self.minsize(600, 400)
-        self.configure(fg_color="#0d1117")
+        self.configure(fg_color=BG)
         self.after(50, self.safe_init)
 
     def safe_init(self):
@@ -4915,7 +4925,7 @@ class ClubsWindow(ctk.CTkToplevel):
         self.count_label = ctk.CTkLabel(ctrl, text="", text_color="#556677")
         self.count_label.pack(side="right", padx=10)
 
-        self.list_frame = ScrollableFrame(self, fg_color="#0d1117")
+        self.list_frame = ScrollableFrame(self, fg_color=BG)
         self.list_frame.pack(fill="both", expand=True, padx=15, pady=(0, 15))
 
     def _refresh_list(self):
@@ -4949,7 +4959,7 @@ class ClubsWindow(ctk.CTkToplevel):
         dlg.title("Редактировать клуб" if edit_id else "Добавить клуб")
         dlg.geometry("1160x740")
         dlg.minsize(920, 560)
-        dlg.configure(bg="#0d1117")
+        dlg.configure(bg=BG)
         dlg.transient(self)
         dlg.grab_set()
         dlg.focus_force()
@@ -4958,8 +4968,8 @@ class ClubsWindow(ctk.CTkToplevel):
         logo_path_var = ctk.StringVar(value=(existing["logo_path"] or "") if existing else "")
 
         def make_card(parent, **kw):
-            card = ctk.CTkFrame(parent, fg_color="#161b22", corner_radius=12,
-                               border_width=1, border_color="#2d333b")
+            card = ctk.CTkFrame(parent, fg_color=PANEL, corner_radius=12,
+                               border_width=1, border_color=BORDER)
             card.pack(**kw)
             return card
 
@@ -4972,7 +4982,7 @@ class ClubsWindow(ctk.CTkToplevel):
                 row=row, column=0, padx=(14, 6), pady=7, sticky="e")
             var = ctk.StringVar(value=default)
             ctk.CTkEntry(parent, textvariable=var, width=width, placeholder_text=placeholder,
-                        fg_color="#0d1117", border_color="#2d333b").grid(
+                        fg_color=BG, border_color=BORDER).grid(
                 row=row, column=1, padx=(0, 14), pady=7, sticky="w")
             fields[key] = var
             return var
@@ -4984,7 +4994,7 @@ class ClubsWindow(ctk.CTkToplevel):
         COACH_ACCENT = "#c9a227"
 
         # ─── Шапка диалога ──────────────────────────────────────
-        header = ctk.CTkFrame(dlg, fg_color="#161b22", corner_radius=0, height=62)
+        header = ctk.CTkFrame(dlg, fg_color=PANEL, corner_radius=0, height=62)
         header.pack(fill="x")
         header.pack_propagate(False)
         ctk.CTkLabel(header, text="🏛", font=("Arial", 24)).pack(side="left", padx=(16, 10))
@@ -4994,7 +5004,7 @@ class ClubsWindow(ctk.CTkToplevel):
                     font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w")
         ctk.CTkLabel(title_col,
                     text="Новый клуб в реестре" if not existing else "Карточка клуба в реестре",
-                    font=ctk.CTkFont(size=11), text_color="#6e7681").pack(anchor="w")
+                    font=ctk.CTkFont(size=11), text_color=TEXT_FAINT).pack(anchor="w")
         ctk.CTkFrame(header, fg_color=ATH_ACCENT, height=2).pack(fill="x", side="bottom")
 
         # ─── Левая колонка: анкета клуба ───────────────────────
@@ -5020,7 +5030,7 @@ class ClubsWindow(ctk.CTkToplevel):
         logo_row = ctk.CTkFrame(logo_card, fg_color="transparent")
         logo_row.pack(fill="x", padx=14, pady=(0, 14))
 
-        logo_status_lbl = ctk.CTkLabel(logo_row, text="не выбрано", text_color="#6e7681",
+        logo_status_lbl = ctk.CTkLabel(logo_row, text="не выбрано", text_color=TEXT_FAINT,
                     anchor="w", padx=10)
         logo_status_lbl.pack(side="left")
 
@@ -5043,37 +5053,37 @@ class ClubsWindow(ctk.CTkToplevel):
                     url = upload_photo(p, folder="clubs")
                 except CloudinaryUploadError as e:
                     dlg.after(0, lambda: logo_status_lbl.configure(
-                        text=f"Ошибка: {e}", text_color="#f85149"))
+                        text=f"Ошибка: {e}", text_color=ERR))
                     return
                 dlg.after(0, lambda: (logo_path_var.set(url),
-                                      logo_status_lbl.configure(text="✓ Загружено", text_color="#3fb950")))
+                                      logo_status_lbl.configure(text="✓ Загружено", text_color=OK)))
 
             Thread(target=worker, daemon=True).start()
 
         ctk.CTkButton(logo_row, text="📷 Выбрать лого", width=120, height=32,
-                    fg_color="#1f6feb", hover_color="#388bfd",
+                    fg_color=ACCENT_DIM, hover_color=INFO_HOVER,
                     command=choose_logo).pack(side="left")
 
         if logo_path_var.get():
-            logo_status_lbl.configure(text="✓ Загружено", text_color="#3fb950")
+            logo_status_lbl.configure(text="✓ Загружено", text_color=OK)
 
         # ─── Правая колонка: спортсмены и тренеры клуба ────────
         right_col = ctk.CTkFrame(dlg, fg_color="transparent")
         right_col.pack(side="right", fill="both", expand=True, padx=(7, 14), pady=14)
 
-        members_scroll = ScrollableFrame(right_col, fg_color="#0d1117")
+        members_scroll = ScrollableFrame(right_col, fg_color=BG)
         members_scroll.pack(fill="both", expand=True)
 
         def member_row(parent, text, accent, on_remove):
-            row = ctk.CTkFrame(parent, fg_color="#151b23", corner_radius=8)
+            row = ctk.CTkFrame(parent, fg_color=CARD, corner_radius=8)
             row.pack(fill="x", padx=2, pady=3)
             ctk.CTkFrame(row, fg_color=accent, width=3, height=30,
                         corner_radius=0).pack(side="left", padx=(0, 8), fill="y")
             ctk.CTkLabel(row, text=text, anchor="w",
                         font=ctk.CTkFont(size=12)).pack(side="left", padx=(6, 6),
                                                         pady=7, fill="x", expand=True)
-            ctk.CTkButton(row, text="✕", width=30, height=26, fg_color="#8b1a1a",
-                        hover_color="#a03030", command=on_remove).pack(side="right", padx=6)
+            ctk.CTkButton(row, text="✕", width=30, height=26, fg_color=DANGER,
+                        hover_color=DANGER_HOVER, command=on_remove).pack(side="right", padx=6)
             return row
 
         def make_members_card(kind):
@@ -5085,8 +5095,8 @@ class ClubsWindow(ctk.CTkToplevel):
             empty_text = ("Пока нет спортсменов в клубе" if is_ath
                           else "Пока нет тренеров в клубе")
 
-            card = ctk.CTkFrame(members_scroll, fg_color="#161b22", corner_radius=12,
-                                border_width=1, border_color="#2d333b")
+            card = ctk.CTkFrame(members_scroll, fg_color=PANEL, corner_radius=12,
+                                border_width=1, border_color=BORDER)
             card.pack(fill="x", pady=(0, 10))
 
             head = ctk.CTkFrame(card, fg_color="transparent")
@@ -5119,7 +5129,7 @@ class ClubsWindow(ctk.CTkToplevel):
 
             if not existing:
                 hint = ctk.CTkFrame(members_scroll, fg_color="transparent",
-                                    border_width=1, border_color="#2d333b",
+                                    border_width=1, border_color=BORDER,
                                     corner_radius=12)
                 hint.pack(fill="x", padx=2, pady=20)
                 ctk.CTkLabel(hint, text="🏛 Новый клуб",
@@ -5127,7 +5137,7 @@ class ClubsWindow(ctk.CTkToplevel):
                             text_color="#8899aa").pack(pady=(26, 4))
                 ctk.CTkLabel(hint,
                             text="Сохраните клуб, чтобы привязывать к нему\nспортсменов и тренеров.",
-                            text_color="#6e7681").pack(pady=(0, 26))
+                            text_color=TEXT_FAINT).pack(pady=(0, 26))
                 return
 
             athletes = self.db.get_athletes_by_club(edit_id)
@@ -5136,7 +5146,7 @@ class ClubsWindow(ctk.CTkToplevel):
             ath_card, ath_list, ath_badge, ath_empty = make_members_card("athletes")
             ath_badge.configure(text=str(len(athletes)))
             if not athletes:
-                ctk.CTkLabel(ath_list, text=ath_empty, text_color="#6e7681",
+                ctk.CTkLabel(ath_list, text=ath_empty, text_color=TEXT_FAINT,
                             font=ctk.CTkFont(size=11)).pack(pady=10)
             for a in athletes:
                 name = f"{a['last_name']} {a['first_name']}".strip()
@@ -5146,7 +5156,7 @@ class ClubsWindow(ctk.CTkToplevel):
             coach_card, coach_list, coach_badge, coach_empty = make_members_card("coaches")
             coach_badge.configure(text=str(len(coaches)))
             if not coaches:
-                ctk.CTkLabel(coach_list, text=coach_empty, text_color="#6e7681",
+                ctk.CTkLabel(coach_list, text=coach_empty, text_color=TEXT_FAINT,
                             font=ctk.CTkFont(size=11)).pack(pady=10)
             for c in coaches:
                 member_row(coach_list, c["full_name"], COACH_ACCENT,
@@ -5155,7 +5165,7 @@ class ClubsWindow(ctk.CTkToplevel):
         render_all()
 
         # ─── Кнопки сохранения ─────────────────────────────────
-        btn_bar = ctk.CTkFrame(dlg, fg_color="#0d1117")
+        btn_bar = ctk.CTkFrame(dlg, fg_color=BG)
         btn_bar.pack(fill="x", padx=14, pady=(10, 14), side="bottom")
 
         def save():
@@ -5182,10 +5192,10 @@ class ClubsWindow(ctk.CTkToplevel):
             self._refresh_list()
             dlg.destroy()
 
-        ctk.CTkButton(btn_bar, text="💾 Сохранить", fg_color="#238636",
-                    hover_color="#2ea043", height=38, width=120,
+        ctk.CTkButton(btn_bar, text="💾 Сохранить", fg_color=SUCCESS,
+                    hover_color=SUCCESS_HOVER, height=38, width=120,
                     corner_radius=8, command=save).pack(side="right", padx=(6, 0))
-        ctk.CTkButton(btn_bar, text="Отмена", fg_color="#21262d",
+        ctk.CTkButton(btn_bar, text="Отмена", fg_color=DROPDOWN_BG,
                     hover_color="#30363d", height=38, width=100,
                     corner_radius=8,
                     command=lambda: (self._refresh_list(), dlg.destroy())
@@ -5198,17 +5208,17 @@ class ClubsWindow(ctk.CTkToplevel):
         picker.title("Выбрать спортсмена для клуба")
         sw, sh = picker.winfo_screenwidth(), picker.winfo_screenheight()
         picker.geometry(f"480x540+{(sw-480)//2}+{(sh-540)//2}")
-        picker.configure(bg="#0d1117")
+        picker.configure(bg=BG)
         picker.transient(self)
         picker.grab_set()
 
         search_var = ctk.StringVar()
         ctk.CTkEntry(picker, textvariable=search_var, width=440,
                     placeholder_text="🔍 Поиск по имени или фамилии...",
-                    fg_color="#0d1117", border_color="#2d333b"
+                    fg_color=BG, border_color=BORDER
                     ).pack(padx=14, pady=(14, 6))
 
-        results_frame = ScrollableFrame(picker, fg_color="#0d1117")
+        results_frame = ScrollableFrame(picker, fg_color=BG)
         results_frame.pack(fill="both", expand=True, padx=14, pady=(0, 14))
 
         def refresh():
@@ -5217,7 +5227,7 @@ class ClubsWindow(ctk.CTkToplevel):
             q = search_var.get().strip()
             if len(q) < 1:
                 ctk.CTkLabel(results_frame, text="Введите имя для поиска",
-                            text_color="#6e7681").pack(pady=30)
+                            text_color=TEXT_FAINT).pack(pady=30)
                 return
             try:
                 found = self.db.search_athletes(q)
@@ -5225,7 +5235,7 @@ class ClubsWindow(ctk.CTkToplevel):
                 found = []
             if not found:
                 ctk.CTkLabel(results_frame, text="Спортсмены не найдены",
-                            text_color="#6e7681").pack(pady=30)
+                            text_color=TEXT_FAINT).pack(pady=30)
                 return
             for a in found:
                 if a["club_id"] == club_id:
@@ -5248,7 +5258,7 @@ class ClubsWindow(ctk.CTkToplevel):
                         messagebox.showerror("Ошибка", f"Не удалось привязать:\n{e}")
 
                 ctk.CTkButton(results_frame, text=label, anchor="w",
-                            fg_color="#151b23", hover_color="#1c2333",
+                            fg_color=CARD, hover_color="#1c2333",
                             command=pick).pack(fill="x", padx=5, pady=2)
 
         search_var.trace_add("write", lambda *_: refresh())
@@ -5260,17 +5270,17 @@ class ClubsWindow(ctk.CTkToplevel):
         picker.title("Выбрать тренера для клуба")
         sw, sh = picker.winfo_screenwidth(), picker.winfo_screenheight()
         picker.geometry(f"480x540+{(sw-480)//2}+{(sh-540)//2}")
-        picker.configure(bg="#0d1117")
+        picker.configure(bg=BG)
         picker.transient(self)
         picker.grab_set()
 
         search_var = ctk.StringVar()
         ctk.CTkEntry(picker, textvariable=search_var, width=440,
                     placeholder_text="🔍 Поиск по ФИО...",
-                    fg_color="#0d1117", border_color="#2d333b"
+                    fg_color=BG, border_color=BORDER
                     ).pack(padx=14, pady=(14, 6))
 
-        results_frame = ScrollableFrame(picker, fg_color="#0d1117")
+        results_frame = ScrollableFrame(picker, fg_color=BG)
         results_frame.pack(fill="both", expand=True, padx=14, pady=(0, 14))
 
         def refresh():
@@ -5279,7 +5289,7 @@ class ClubsWindow(ctk.CTkToplevel):
             q = search_var.get().strip()
             if len(q) < 1:
                 ctk.CTkLabel(results_frame, text="Введите имя для поиска",
-                            text_color="#6e7681").pack(pady=30)
+                            text_color=TEXT_FAINT).pack(pady=30)
                 return
             try:
                 found = self.db.get_coaches(q)
@@ -5287,7 +5297,7 @@ class ClubsWindow(ctk.CTkToplevel):
                 found = []
             if not found:
                 ctk.CTkLabel(results_frame, text="Тренеры не найдены",
-                            text_color="#6e7681").pack(pady=30)
+                            text_color=TEXT_FAINT).pack(pady=30)
                 return
             for c in found:
                 if c["club_id"] == club_id:
@@ -5309,7 +5319,7 @@ class ClubsWindow(ctk.CTkToplevel):
                         messagebox.showerror("Ошибка", f"Не удалось привязать:\n{e}")
 
                 ctk.CTkButton(results_frame, text=label, anchor="w",
-                            fg_color="#151b23", hover_color="#1c2333",
+                            fg_color=CARD, hover_color="#1c2333",
                             command=pick).pack(fill="x", padx=5, pady=2)
 
         search_var.trace_add("write", lambda *_: refresh())
@@ -5347,7 +5357,7 @@ class App(ctk.CTk):
 
         self.title("🦾 ArmWrestling Tournament Manager")
         self.minsize(900, 600)
-        self.configure(fg_color="#0d1117")
+        self.configure(fg_color=BG)
 
         # Стартовый размер — на случай если zoomed вообще не применится
         sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
@@ -5373,7 +5383,7 @@ class App(ctk.CTk):
         self._start_pull_sync()
 
     def _build_ui(self):
-        self.sidebar = ctk.CTkFrame(self, width=240, corner_radius=0, fg_color="#161b22")
+        self.sidebar = ctk.CTkFrame(self, width=240, corner_radius=0, fg_color=PANEL)
         self.sidebar.pack(side="left", fill="y")
         self.sidebar.pack_propagate(False)
 
@@ -5405,7 +5415,7 @@ class App(ctk.CTk):
                     font=ctk.CTkFont(size=10, weight="bold"),
                     text_color="#445566").pack(padx=15, pady=(15, 5), anchor="w")
 
-        self.tournament_scroll = ScrollableFrame(self.sidebar, fg_color="#161b22", height=400)
+        self.tournament_scroll = ScrollableFrame(self.sidebar, fg_color=PANEL, height=400)
         self.tournament_scroll.pack(fill="x", padx=10, pady=5)
 
         ctk.CTkButton(self.sidebar, text="🗑 Удалить турнир",
@@ -5413,10 +5423,10 @@ class App(ctk.CTk):
                     command=self._delete_tournament).pack(padx=15, pady=6, fill="x",
                     side="bottom")
 
-        self.main = ctk.CTkFrame(self, fg_color="#0d1117", corner_radius=0)
+        self.main = ctk.CTkFrame(self, fg_color=BG, corner_radius=0)
         self.main.pack(side="right", fill="both", expand=True)
 
-        self.header = ctk.CTkFrame(self.main, height=60, fg_color="#161b22", corner_radius=0)
+        self.header = ctk.CTkFrame(self.main, height=60, fg_color=PANEL, corner_radius=0)
         self.header.pack(fill="x")
         self.header.pack_propagate(False)
         self.title_label = ctk.CTkLabel(self.header,
@@ -5440,7 +5450,7 @@ class App(ctk.CTk):
                     command=self._open_display_board)
         self.display_btn.pack(side="right", padx=(0, 8), pady=13)
 
-        self.notebook = ctk.CTkTabview(self.main, fg_color="#0d1117")
+        self.notebook = ctk.CTkTabview(self.main, fg_color=BG)
         self.notebook.pack(fill="both", expand=True, padx=8, pady=8)
         self.notebook.add("⚖️ Категории")
         self.notebook.add("👥 Участники")
@@ -5466,7 +5476,7 @@ class App(ctk.CTk):
                     fg_color="#1a4a2a", hover_color="#2a6a3a",
                     command=self._open_category_wizard).pack(side="left")
 
-        self.cat_list_frame = ScrollableFrame(tab, fg_color="#0d1117")
+        self.cat_list_frame = ScrollableFrame(tab, fg_color=BG)
         self.cat_list_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
     def _open_category_wizard(self):
@@ -5502,17 +5512,17 @@ class App(ctk.CTk):
             weight_menu.configure(values=labels, state="normal")
             weight_var.set(labels[0])
 
-        age_menu = ctk.CTkOptionMenu(win, variable=age_var,
+        age_menu = OptionMenu(win, variable=age_var,
                     values=[PLACEHOLDER] + age_keys, width=360, command=refresh_weights)
         age_menu.pack(padx=20)
 
         ctk.CTkLabel(win, text="Весовая категория:").pack(anchor="w", padx=20, pady=(15, 5))
-        weight_menu = ctk.CTkOptionMenu(win, variable=weight_var,
+        weight_menu = OptionMenu(win, variable=weight_var,
                     values=[PLACEHOLDER], width=360, state="disabled")
         weight_menu.pack(padx=20)
 
         ctk.CTkLabel(win, text="Рука:").pack(anchor="w", padx=20, pady=(15, 5))
-        ctk.CTkOptionMenu(win, variable=hand_var,
+        OptionMenu(win, variable=hand_var,
                     values=["Правая", "Левая", "Обе"], width=360).pack(padx=20)
 
         def confirm():
@@ -5595,7 +5605,7 @@ class App(ctk.CTk):
 
         ctk.CTkLabel(ctrl, text="Фильтр:").pack(side="left", padx=(20, 5))
         self.filter_cat_var = ctk.StringVar(value="Все")
-        self.filter_cat_menu = ctk.CTkOptionMenu(ctrl, variable=self.filter_cat_var,
+        self.filter_cat_menu = OptionMenu(ctrl, variable=self.filter_cat_var,
                     values=["Все"],
                     command=lambda _: self._refresh_participants(),
                     width=160)
@@ -5609,7 +5619,7 @@ class App(ctk.CTk):
         self.p_count_label = ctk.CTkLabel(ctrl, text="", text_color="#556677")
         self.p_count_label.pack(side="right", padx=15)
 
-        self.participants_scroll = ScrollableFrame(tab, fg_color="#0d1117")
+        self.participants_scroll = ScrollableFrame(tab, fg_color=BG)
         self.participants_scroll.pack(fill="both", expand=True, padx=10, pady=5)
 
     # ════
@@ -5697,7 +5707,7 @@ class App(ctk.CTk):
         dlg = tk.Toplevel(self)
         dlg.title("Редактировать участника" if edit_id else "Добавить участника")
         dlg.geometry("1000x1000")
-        dlg.configure(bg="#161b22")
+        dlg.configure(bg=PANEL)
 
         dlg.transient (self)          # привязать к главному окну
         dlg.grab_set()               # сделать модальным
@@ -5869,7 +5879,7 @@ class App(ctk.CTk):
         if not is_combined:
             ctk.CTkLabel(form, text="Рука:", anchor="e", width=110).grid(
                 row=3, column=0, padx=(15, 8), pady=6, sticky="e")
-            ctk.CTkOptionMenu(form, variable=hand_var,
+            OptionMenu(form, variable=hand_var,
                         values=["Правая", "Левая", "Обе"], width=240
                         ).grid(row=3, column=1, padx=(0, 15), pady=6, sticky="w")
 
@@ -5912,7 +5922,7 @@ class App(ctk.CTk):
             ctk.CTkEntry(picker, textvariable=search_var, width=380,
                         placeholder_text="🔍 Поиск по имени/фамилии...").pack(padx=10, pady=10)
 
-            results_frame = ScrollableFrame(picker, fg_color="#0d1117")
+            results_frame = ScrollableFrame(picker, fg_color=BG)
             results_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
             def refresh():
@@ -6109,7 +6119,7 @@ class App(ctk.CTk):
                     fg_color="#1a3a5a", hover_color="#2a5a7a",
                     command=self._sync_tournament).pack(side="right")
 
-        self.bracket_list = ScrollableFrame(tab, fg_color="#0d1117")
+        self.bracket_list = ScrollableFrame(tab, fg_color=BG)
         self.bracket_list.pack(fill="both", expand=True, padx=20, pady=10)
 
     def _refresh_brackets_tab(self):
@@ -6329,7 +6339,7 @@ class App(ctk.CTk):
         dlg.geometry("500x800")
         center_toplevel(dlg, 500, 800)
         dlg.minsize(420, 500)
-        dlg.configure(bg="#161b22")
+        dlg.configure(bg=PANEL)
         dlg.resizable(True, True)
         dlg.deiconify()
 
@@ -6382,14 +6392,14 @@ class App(ctk.CTk):
         ctk.CTkLabel(form, text="Формат соревнований", anchor="w",
                     font=ctk.CTkFont(size=12)).pack(anchor="w", pady=(14, 2))
         format_var = ctk.StringVar(value="На отдельных руках")
-        ctk.CTkOptionMenu(form, variable=format_var,
+        OptionMenu(form, variable=format_var,
                     values=["На отдельных руках", "Двоеборье"],
                     width=380).pack(fill="x")
 
         ctk.CTkLabel(form, text="Система сетки", anchor="w",
                     font=ctk.CTkFont(size=12)).pack(anchor="w", pady=(14, 2))
         system_var = ctk.StringVar(value="Double elimination (до двух поражений)")
-        ctk.CTkOptionMenu(form, variable=system_var,
+        OptionMenu(form, variable=system_var,
                     values=["Double elimination (до двух поражений)",
                             "Single elimination (до одного поражения)"],
                     width=380).pack(fill="x")
