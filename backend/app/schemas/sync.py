@@ -184,6 +184,7 @@ class ClubSyncItem(BaseModel):
 
     id: int
     name: str
+    address: str | None = None
     city_name: str | None = None
     founded_year: int | None = None
     logo_path: str | None = None
@@ -193,6 +194,7 @@ class ClubSyncCreate(_StrictModel):
     """Создание клуба из десктопа."""
 
     name: str
+    address: str | None = None
     city_name: str | None = None
     founded_year: int | None = None
     logo_path: str | None = None
@@ -202,6 +204,7 @@ class ClubSyncUpdate(_StrictModel):
     """PATCH из десктопа: приходят только изменённые поля."""
 
     name: str | None = None
+    address: str | None = None
     city_name: str | None = None
     founded_year: int | None = None
     logo_path: str | None = None

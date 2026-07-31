@@ -192,6 +192,7 @@ export interface ClubListItem {
   id: number
   name: string
   logo_path: string | null
+  address: string | null
   city_name: string | null
   rating_points: number
   athletes_count: number
@@ -311,6 +312,7 @@ export interface ClubInput {
   name: string
   logo_path?: string | null
   description?: string | null
+  address?: string | null
   city_id?: number | null
   founded_year?: number | null
 }
@@ -326,6 +328,7 @@ export interface ClubAdminListItem {
   name: string
   logo_path: string | null
   description: string | null
+  address: string | null
   city_id: number | null
   city_name: string | null
   founded_year: number | null

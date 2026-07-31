@@ -34,6 +34,7 @@ def list_clubs(
         ClubSyncItem(
             id=club.id,
             name=club.name,
+            address=club.address,
             city_name=city_name,
             founded_year=club.founded_year,
             logo_path=club.logo_path,
@@ -52,6 +53,7 @@ def create_club(
         raise HTTPException(status_code=400, detail="Название клуба обязательно")
     club = Club(
         name=payload.name.strip(),
+        address=payload.address,
         city_id=_find_city_id(db, payload.city_name),
         founded_year=payload.founded_year,
         logo_path=payload.logo_path,

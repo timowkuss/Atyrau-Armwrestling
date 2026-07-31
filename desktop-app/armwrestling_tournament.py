@@ -376,6 +376,7 @@ class Database:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             city TEXT,                       -- Город/Область
+            address TEXT,                    -- Адрес зала
             founded_year INTEGER,
             logo_path TEXT,
             created_at TEXT DEFAULT (datetime('now'))
@@ -436,6 +437,10 @@ class Database:
             cols = [r[1] for r in self.conn.execute(f"PRAGMA table_info({table})").fetchall()]
             if "club_id" not in cols:
                 self.conn.execute(f"ALTER TABLE {table} ADD COLUMN club_id INTEGER")
+
+        cl_cols = [r[1] for r in self.conn.execute("PRAGMA table_info(clubs)").fetchall()]
+        if "address" not in cl_cols:
+            self.conn.execute("ALTER TABLE clubs ADD COLUMN address TEXT")
         self.conn.commit()
 
         # ─── Карточка тренера: Имя/Фамилия/возраст/ИИН/звание/город ───
@@ -662,17 +667,17 @@ class Database:
     def get_club(self, cid):
         return self.conn.execute("SELECT * FROM clubs WHERE id=?", (cid,)).fetchone()
 
-    def add_club(self, name, city="", founded_year=None, logo_path=""):
+    def add_club(self, name, city="", address="", founded_year=None, logo_path=""):
         cur = self.conn.execute(
-            "INSERT INTO clubs (name, city, founded_year, logo_path) VALUES (?,?,?,?)",
-            (name, city, founded_year, logo_path))
+            "INSERT INTO clubs (name, city, address, founded_year, logo_path) VALUES (?,?,?,?,?)",
+            (name, city, address, founded_year, logo_path))
         self.conn.commit()
         return cur.lastrowid
 
-    def update_club(self, cid, name, city="", founded_year=None, logo_path=""):
+    def update_club(self, cid, name, city="", address="", founded_year=None, logo_path=""):
         self.conn.execute(
-            "UPDATE clubs SET name=?, city=?, founded_year=?, logo_path=? WHERE id=?",
-            (name, city, founded_year, logo_path, cid))
+            "UPDATE clubs SET name=?, city=?, address=?, founded_year=?, logo_path=? WHERE id=?",
+            (name, city, address, founded_year, logo_path, cid))
         # Переименование клуба должно обновить и карточки спортсменов/тренеров,
         # которые на него ссылаются (club_id), — иначе в реестре останется
         # старое название.
@@ -1001,19 +1006,19 @@ def _synced_delete_athlete(self, aid):
     except Exception as e:
         print(f"[sync] delete_athlete: {e}")
 
-def _synced_add_club(self, name, city="", founded_year=None, logo_path=""):
-    cid = _original_add_club(self, name, city, founded_year, logo_path)
+def _synced_add_club(self, name, city="", address="", founded_year=None, logo_path=""):
+    cid = _original_add_club(self, name, city, address, founded_year, logo_path)
     try:
-        sync_manager.on_club_created(cid, name, city=city,
+        sync_manager.on_club_created(cid, name, city=city, address=address,
                                      founded_year=founded_year, logo_path=logo_path)
     except Exception as e:
         print(f"[sync] add_club: {e}")
     return cid
 
-def _synced_update_club(self, cid, name, city="", founded_year=None, logo_path=""):
-    _original_update_club(self, cid, name, city, founded_year, logo_path)
+def _synced_update_club(self, cid, name, city="", address="", founded_year=None, logo_path=""):
+    _original_update_club(self, cid, name, city, address, founded_year, logo_path)
     try:
-        sync_manager.on_club_updated(cid, name, city=city,
+        sync_manager.on_club_updated(cid, name, city=city, address=address,
                                      founded_year=founded_year, logo_path=logo_path)
     except Exception as e:
         print(f"[sync] update_club: {e}")
@@ -4856,6 +4861,8 @@ class ClubCard(ctk.CTkFrame):
         info_parts = []
         if c["city"]:
             info_parts.append(f"📍 {c['city']}")
+        if c["address"]:
+            info_parts.append(f"🏢 {c['address']}")
         if c["founded_year"]:
             info_parts.append(f"📅 с {c['founded_year']}")
         info_parts.append(f"👤 спортсменов: {athletes_count}")
@@ -4984,8 +4991,9 @@ class ClubsWindow(ctk.CTkToplevel):
 
         lbl_entry(form_grid, "Название*:", "name", existing["name"] if existing else "", row=0)
         lbl_entry(form_grid, "Город/Область:", "city", (existing["city"] or "") if existing else "", row=1)
+        lbl_entry(form_grid, "Адрес зала:", "address", (existing["address"] or "") if existing else "", row=2)
         lbl_entry(form_grid, "Год основания:", "founded_year",
-                  str(existing["founded_year"]) if existing and existing["founded_year"] else "", row=2)
+                  str(existing["founded_year"]) if existing and existing["founded_year"] else "", row=3)
 
         # ─── Логотип ───
         logo_card = make_card(left_col, fill="x", pady=(8, 0))
@@ -5088,6 +5096,7 @@ class ClubsWindow(ctk.CTkToplevel):
                 messagebox.showwarning("Ошибка", "Введите название клуба.")
                 return
             city = fields["city"].get().strip()
+            address = fields["address"].get().strip()
             founded_raw = fields["founded_year"].get().strip()
             founded_year = None
             if founded_raw:
@@ -5099,9 +5108,9 @@ class ClubsWindow(ctk.CTkToplevel):
             logo_path = logo_path_var.get()
             nonlocal edit_id
             if edit_id:
-                self.db.update_club(edit_id, name, city, founded_year, logo_path)
+                self.db.update_club(edit_id, name, city, address, founded_year, logo_path)
             else:
-                edit_id = self.db.add_club(name, city, founded_year, logo_path)
+                edit_id = self.db.add_club(name, city, address, founded_year, logo_path)
             self._refresh_list()
             dlg.destroy()
 

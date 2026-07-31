@@ -15,6 +15,7 @@ class Club(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     logo_path: Mapped[str | None] = mapped_column(String(500))
     description: Mapped[str | None] = mapped_column(Text)
+    address: Mapped[str | None] = mapped_column(String(300))
     city_id: Mapped[int | None] = mapped_column(
         ForeignKey("cities.id", ondelete="SET NULL")
     )
