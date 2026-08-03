@@ -210,13 +210,23 @@ class _DropdownToplevel(ctk.CTkToplevel):
             self._global_bind = self.bind_all("<Button-1>", self._on_global_click, add="+")
 
     def close(self):
-        if self._global_bind is not None:
+        try:
+            if not self.winfo_exists():
+                self._global_bind = None
+                return
+            if self._global_bind is not None:
+                try:
+                    self.unbind_all("<Button-1>", self._global_bind)
+                except Exception:
+                    pass
+                self._global_bind = None
+            self.withdraw()
+        except Exception:
+            self._global_bind = None
             try:
-                self.unbind_all("<Button-1>", self._global_bind)
+                self.withdraw()
             except Exception:
                 pass
-            self._global_bind = None
-        self.withdraw()
 
     def _on_global_click(self, event):
         try:
@@ -228,9 +238,18 @@ class _DropdownToplevel(ctk.CTkToplevel):
             topath = str(self)
             if wpath.startswith(topath):
                 return
+            if not self.winfo_exists():
+                self._global_bind = None
+                return
             self.close()
         except Exception:
-            self.close()
+            try:
+                if self.winfo_exists():
+                    self.close()
+                else:
+                    self._global_bind = None
+            except Exception:
+                self._global_bind = None
 
     def is_open(self):
         return bool(self.winfo_viewable())
