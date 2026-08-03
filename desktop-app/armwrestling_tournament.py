@@ -4690,6 +4690,18 @@ class CoachesWindow(ctk.CTkToplevel):
 
         phone_entry.bind("<KeyRelease>", format_phone)
 
+        def block_extra(event=None):
+            if not event.char or not event.char.isdigit():
+                return None
+            # в поле всегда лежит префиксный "8" + до 10 набираемых цифр,
+            # поэтому больше 11 цифр в тексте набрать нельзя
+            total = len("".join(ch for ch in phone_entry.get() if ch.isdigit()))
+            if total >= 11:
+                return "break"
+            return None
+
+        phone_entry.bind("<Key>", block_extra)
+
         # ─── Фото ───
         photo_card = make_card(left_col, fill="x", pady=(8, 0))
         make_section_label(photo_card, "🖼 Фотография")
