@@ -7,7 +7,7 @@ import { FeedbackBanner } from '@/components/admin/FeedbackBanner'
 import { PhotoUploadField } from '@/components/admin/PhotoUploadField'
 import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 import { CityCombobox } from '@/components/admin/CityCombobox'
-import { formatPhone } from '@/lib/phoneMask'
+import { formatPhoneChange } from '@/lib/phoneMask'
 import { COACH_QUALIFICATIONS, type CoachInput } from '@/types/api'
 
 const EMPTY_FORM: CoachInput = {
@@ -158,7 +158,7 @@ export function CoachesAdmin() {
               placeholder="Телефон 8(XXX)XXX-XX-XX"
               inputMode="tel"
               value={form.phone ?? '8('}
-              onChange={(e) => setForm({ ...form, phone: formatPhone(e.target.value) })}
+              onChange={(e) => setForm({ ...form, phone: formatPhoneChange(form.phone, e.target.value) })}
               className={inputClass}
             />
             <select
@@ -244,7 +244,7 @@ export function CoachesAdmin() {
                         placeholder="Телефон"
                         inputMode="tel"
                         defaultValue={coach.phone ?? ''}
-                        onChange={(e) => setEditForm({ ...editForm, phone: formatPhone(e.target.value) })}
+                        onChange={(e) => setEditForm({ ...editForm, phone: formatPhoneChange(editForm.phone, e.target.value) })}
                         className={inputClass}
                       />
                       <select
