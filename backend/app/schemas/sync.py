@@ -46,6 +46,7 @@ class AthleteSyncUpdate(_StrictModel):
     coach_name: str | None = None
     iin: str | None = None
     phone: str | None = None
+    is_hidden: bool | None = None
 
 
 class CoachSyncCreate(_StrictModel):

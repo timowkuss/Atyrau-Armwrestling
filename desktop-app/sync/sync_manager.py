@@ -288,13 +288,13 @@ class SyncManager:
 
     def on_athlete_updated(self, aid, first_name, last_name, birth_date,
                            gender, club, rank, photo_path, coach_name=None,
-                           iin=None, phone=None):
+                           iin=None, phone=None, is_hidden=None):
         remote_athlete_id = self.state.map_get("athlete", aid)
         payload = {
             "aid": aid, "first_name": first_name, "last_name": last_name,
             "birth_date": birth_date, "gender": gender, "club": club,
             "rank": rank, "photo_path": photo_path, "coach_name": coach_name,
-            "iin": iin, "phone": phone,
+            "iin": iin, "phone": phone, "is_hidden": is_hidden,
         }
         if remote_athlete_id is None:
             self.state.enqueue("update_athlete", payload)
@@ -316,6 +316,7 @@ class SyncManager:
                 coach_name=coach_name,
                 iin=iin,
                 phone=phone,
+                is_hidden=is_hidden,
             )
             return remote_athlete_id
 
@@ -1150,6 +1151,7 @@ class SyncManager:
                         coach_name=payload.get("coach_name"),
                         iin=payload.get("iin"),
                         phone=payload.get("phone"),
+                        is_hidden=payload.get("is_hidden"),
                     )
                 except ApiClientError as e:
                     if e.status_code == 404:

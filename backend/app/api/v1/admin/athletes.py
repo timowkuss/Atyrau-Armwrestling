@@ -10,6 +10,7 @@ from app.db.models.coaches import Coach
 from app.db.models.competitions import CompetitionParticipant
 from app.db.models.geo import City
 from app.db.models.statistics import AthleteStatistic
+from app.db.models.sync_tombstone import SyncTombstone
 from app.db.models.users import User
 from app.db.session import get_db
 from app.schemas.athletes import (
@@ -193,6 +194,10 @@ def delete_athlete(
 
     old_photo_path = athlete.photo_path
 
+    # Tombstone для обратной синхронизации (сайт -> десктоп): без него
+    # десктоп никогда бы не узнал об удалении из админки спортсмена без
+    # истории участий (карточка просто исчезла бы из changes-выдачи).
+    db.add(SyncTombstone(entity_type="athlete", entity_id=athlete_id))
     db.delete(athlete)
     db.commit()
 

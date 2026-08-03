@@ -35,7 +35,7 @@ def list_clubs(
             func.count(Athlete.id).label("athletes_count"),
         )
         .outerjoin(City, Club.city_id == City.id)
-        .outerjoin(Athlete, Athlete.club_id == Club.id)
+        .outerjoin(Athlete, (Athlete.club_id == Club.id) & (Athlete.is_hidden.is_(False)))
         .group_by(Club.id, City.name)
     )
     if city_id is not None:
@@ -79,7 +79,7 @@ def get_club(club_id: int, db: Session = Depends(get_db)):
     city_name = club.city.name if club.city else None
     athletes = (
         db.query(Athlete)
-        .filter(Athlete.club_id == club.id)
+        .filter(Athlete.club_id == club.id, Athlete.is_hidden.is_(False))
         .order_by(Athlete.full_name)
         .all()
     )

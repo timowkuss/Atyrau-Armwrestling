@@ -30,7 +30,7 @@ def list_coaches(
         )
         .outerjoin(Club, Coach.club_id == Club.id)
         .outerjoin(City, Coach.city_id == City.id)
-        .outerjoin(Athlete, Athlete.coach_id == Coach.id)
+        .outerjoin(Athlete, (Athlete.coach_id == Coach.id) & (Athlete.is_hidden.is_(False)))
         .group_by(Coach.id, Club.name, City.name)
     )
     if name:
@@ -69,7 +69,7 @@ def get_coach(coach_id: int, db: Session = Depends(get_db)):
 
     club_name = coach.club.name if coach.club else None
     city_name = coach.city.name if coach.city else None
-    athletes_count = db.query(Athlete).filter(Athlete.coach_id == coach.id).count()
+    athletes_count = db.query(Athlete).filter(Athlete.coach_id == coach.id, Athlete.is_hidden.is_(False)).count()
 
     return CoachDetailOut(
         id=coach.id,

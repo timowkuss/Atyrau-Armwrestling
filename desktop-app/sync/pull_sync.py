@@ -360,6 +360,21 @@ class PullSyncManager:
 
     def _upsert_athlete(self, conn: sqlite3.Connection, item: dict):
         remote_id = item["id"]
+        local_id = self.state.map_get_local("athlete", remote_id)
+
+        # Скрытую на сайте карточку (is_hidden=True — админка "удалила"
+        # спортсмена, но сервер не смог стереть его физически из-за
+        # истории участий и вместо этого скрыл) помечаем локально, чтобы
+        # она исчезла из обычного списка, но осталась доступной в секции
+        # «Скрытые» (организатор может вернуть её "Показать"). Если
+        # карточки тут ещё не было — просто не заводим её (скрытую
+        # запись незачем создавать впервые).
+        if item.get("is_hidden"):
+            if local_id is None:
+                return
+            conn.execute("UPDATE athletes SET is_hidden=1 WHERE id=?", (local_id,))
+            return
+
         first_name, last_name = _split_full_name(item.get("full_name", ""))
         gender = _normalize_gender_for_desktop(item.get("gender"))
         birth_date = _to_desktop_date(item.get("birth_date"))
@@ -371,20 +386,10 @@ class PullSyncManager:
         phone = item.get("phone")
         coach_id = self._resolve_local_coach_id(conn, item.get("coach_name"))
 
-        local_id = self.state.map_get_local("athlete", remote_id)
-
-        # Скрытую на сайте карточку (is_hidden=True, обычно — попытка
-        # удаления, заблокированная историей участий) не убираем локально
-        # молча: если она уже есть в десктопе, просто обновляем данные, но
-        # НЕ создаём новую, если её тут ещё не было — скрытую карточку не
-        # имеет смысла заводить впервые.
-        if item.get("is_hidden") and local_id is None:
-            return
-
         if local_id is not None:
             conn.execute(
                 "UPDATE athletes SET first_name=?, last_name=?, birth_date=?, "
-                "gender=?, club=?, rank=?, photo_path=?, coach_id=?, iin=?, phone=? WHERE id=?",
+                "gender=?, club=?, rank=?, photo_path=?, coach_id=?, iin=?, phone=?, is_hidden=0 WHERE id=?",
                 (first_name, last_name, birth_date, gender, club, rank, photo_path,
                  coach_id, iin, phone, local_id),
             )
@@ -401,15 +406,32 @@ class PullSyncManager:
         local_id = self.state.map_get_local("athlete", remote_id)
         if local_id is None:
             return
-        try:
-            conn.execute("DELETE FROM athletes WHERE id=?", (local_id,))
-        except sqlite3.IntegrityError:
-            # У карточки есть локальные ссылки (например, участник турнира
-            # был привязан к ней через athlete_id) — оставляем запись как
-            # есть, чтобы не сломать историю уже прошедших соревнований;
-            # снимаем только связку id_map, чтобы не путать с будущими
-            # апдейтами по этому remote_id.
-            pass
+        self._remove_athlete_locally(conn, local_id, remote_id)
+
+    def _remove_athlete_locally(self, conn: sqlite3.Connection, local_id: int,
+                                remote_id: int):
+        """Зеркало удаления карточки из десктопа (Database.delete_athlete):
+        из активных турниров участник убирается целиком вместе со своими
+        поединками, из завершённых — запись остаётся как история с
+        отвязанным athlete_id, сама карточка удаляется, id_map снимается.
+        Используется и для "удалённых" (tombstone), и для скрытых
+        (is_hidden) карточек с сервера."""
+        rows = conn.execute(
+            "SELECT p.id AS pid, t.status AS tstatus "
+            "FROM participants p JOIN tournaments t ON t.id = p.tournament_id "
+            "WHERE p.athlete_id=?", (local_id,)).fetchall()
+        for r in rows:
+            if r["tstatus"] == "finished":
+                continue  # архив — отвяжем athlete_id ниже
+            pid = r["pid"]
+            conn.execute(
+                "UPDATE matches SET p1_id=NULL WHERE p1_id=? AND status='pending'", (pid,))
+            conn.execute(
+                "UPDATE matches SET p2_id=NULL WHERE p2_id=? AND status='pending'", (pid,))
+            conn.execute("DELETE FROM dvoeborie_overrides WHERE pid=?", (pid,))
+            conn.execute("DELETE FROM participants WHERE id=?", (pid,))
+        conn.execute("UPDATE participants SET athlete_id=NULL WHERE athlete_id=?", (local_id,))
+        conn.execute("DELETE FROM athletes WHERE id=?", (local_id,))
         self.state.map_delete("athlete", local_id)
 
 

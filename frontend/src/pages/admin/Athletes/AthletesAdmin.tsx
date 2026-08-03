@@ -128,8 +128,15 @@ export function AthletesAdmin() {
     if (!confirm(`Удалить спортсмена «${name}»? Это действие нельзя отменить.`)) return
     setFeedback(null)
     try {
-      await deleteAthlete.mutateAsync(id)
-      setFeedback({ kind: 'success', message: `«${name}» удалён.` })
+      const res = await deleteAthlete.mutateAsync(id)
+      if (res?.status === 'hidden') {
+        setFeedback({
+          kind: 'success',
+          message: `«${name}» скрыт: есть история участий — он убран с сайта и с десктопов, записи сохранены.`,
+        })
+      } else {
+        setFeedback({ kind: 'success', message: `«${name}» удалён.` })
+      }
     } catch (err) {
       setFeedback({ kind: 'error', message: (err as Error).message })
     }
@@ -261,8 +268,11 @@ export function AthletesAdmin() {
         {athletes.isLoading && <LoadingState label="Загрузка спортсменов" />}
         {athletes.isError && <ErrorState message={(athletes.error as Error).message} onRetry={() => athletes.refetch()} />}
         {athletes.data && (
-          <ul className="flex flex-col gap-3">
-            {athletes.data.map((a) => (
+          <>
+            <ul className="flex flex-col gap-3">
+              {athletes.data
+                .filter((a) => !a.is_hidden)
+                .map((a) => (
               <li key={a.id} className="plate rounded-[var(--radius-rivet)] p-4">
                 {editingId === a.id ? (
                   <div className="flex flex-col gap-3">
@@ -454,7 +464,58 @@ export function AthletesAdmin() {
                 )}
               </li>
             ))}
-          </ul>
+            </ul>
+
+            {athletes.data.filter((a) => a.is_hidden).length > 0 && (
+              <div className="mt-6">
+                <h2 className="text-eyebrow text-amber">
+                  Скрытые — удалённые с историей участий ({athletes.data.filter((a) => a.is_hidden).length})
+                </h2>
+                <div className="mt-3 flex gap-4 overflow-x-auto pb-2">
+                  {athletes.data
+                    .filter((a) => a.is_hidden)
+                    .map((a) => (
+                      <div key={a.id} className="plate w-56 flex-shrink-0 rounded-[var(--radius-rivet)] p-3">
+                        <div className="flex items-start gap-3">
+                          {a.photo_path ? (
+                            <img
+                              src={cloudinaryThumb(a.photo_path, 96) ?? undefined}
+                              alt=""
+                              className="h-14 w-14 flex-shrink-0 rounded-2xl object-cover border border-steel-dim"
+                              onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')}
+                            />
+                          ) : (
+                            <div className="h-14 w-14 flex-shrink-0 rounded-2xl bg-ink border border-steel-dim" />
+                          )}
+                          <div className="min-w-0">
+                            <p className="truncate font-display text-sm text-bone">{a.full_name}</p>
+                            <p className="mt-1 truncate font-mono text-xs text-steel">
+                              {a.club_name ?? 'без клуба'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            onClick={() => handleToggleHidden(a.id, a.full_name, false)}
+                            className="flex-1 rounded-[var(--radius-rivet)] border border-steel-dim px-2 py-1.5 text-xs text-steel hover:border-brass hover:text-brass"
+                          >
+                            Показать
+                          </button>
+                          {canDelete && (
+                            <button
+                              onClick={() => handleDelete(a.id, a.full_name)}
+                              className="flex-1 rounded-[var(--radius-rivet)] border border-steel-dim px-2 py-1.5 text-xs text-steel hover:border-danger hover:text-danger"
+                            >
+                              Удалить
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
