@@ -294,12 +294,17 @@ class _LazyDropdown:
         self._menu = None
 
     def open(self, x, y):
-        if self._menu is not None and not self._menu.winfo_exists():
-            self._menu = None
-        if self._menu is None:
-            self._menu = _DropdownToplevel(self._om, self._om._values,
-                                           self._callback, self._fg,
-                                           self._hover, self._text, self._font)
+        old = self._menu
+        self._menu = None
+        if old is not None:
+            try:
+                if old.winfo_exists():
+                    old.destroy()
+            except Exception:
+                pass
+        self._menu = _DropdownToplevel(self._om, self._om._values,
+                                       self._callback, self._fg,
+                                       self._hover, self._text, self._font)
         self._menu.open(x, y, current=self._om.get())
 
     def close(self):
