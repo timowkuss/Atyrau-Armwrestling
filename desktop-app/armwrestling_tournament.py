@@ -2117,13 +2117,13 @@ class ParticipantCard(ctk.CTkFrame):
         local_photo = resolve_local_photo_path(p["photo_path"], only_cached=True) if PIL_AVAILABLE and p["photo_path"] else None
         if local_photo:
             try:
-                img = load_photo_thumbnail(local_photo, 176, 192)
-                photo = ctk.CTkImage(img, size=(88, 96))
+                img = load_photo_thumbnail(local_photo, 184, 224)
+                photo = ctk.CTkImage(img, size=(92, 112))
                 photo_label = ctk.CTkLabel(self, image=photo, text="")
                 photo_label._image = photo
             except Exception:
                 pass
-        photo_label.grid(row=0, column=0, rowspan=3, padx=(10, 5), pady=10)
+        photo_label.grid(row=0, column=0, rowspan=3, padx=(6, 3), pady=2)
 
         ctk.CTkLabel(self, text=p["name"], font=ctk.CTkFont(size=14, weight="bold"),
                     anchor="w").grid(row=0, column=1, sticky="w", padx=5, pady=(8, 0))
@@ -3981,13 +3981,13 @@ class AthleteCard(ctk.CTkFrame):
         local_photo = resolve_local_photo_path(a["photo_path"], only_cached=True) if PIL_AVAILABLE and a["photo_path"] else None
         if local_photo:
             try:
-                img = load_photo_thumbnail(local_photo, 176, 192)
-                photo = ctk.CTkImage(img, size=(88, 96))
+                img = load_photo_thumbnail(local_photo, 184, 224)
+                photo = ctk.CTkImage(img, size=(92, 112))
                 photo_label = ctk.CTkLabel(self, image=photo, text="")
                 photo_label._image = photo
             except Exception:
                 pass
-        photo_label.grid(row=0, column=col, rowspan=3, padx=(10, 5), pady=10)
+        photo_label.grid(row=0, column=col, rowspan=3, padx=(6, 3), pady=2)
 
         full_name = f"{a['last_name']} {a['first_name']}"
         ctk.CTkLabel(self, text=full_name, font=ctk.CTkFont(size=14, weight="bold"),
