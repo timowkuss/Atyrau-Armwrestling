@@ -2117,7 +2117,7 @@ class ParticipantCard(ctk.CTkFrame):
         local_photo = resolve_local_photo_path(p["photo_path"], only_cached=True) if PIL_AVAILABLE and p["photo_path"] else None
         if local_photo:
             try:
-                img = Image.open(local_photo).resize((50, 60))
+                img = load_photo_thumbnail(local_photo, 50, 60)
                 photo = ctk.CTkImage(img, size=(50, 60))
                 photo_label = ctk.CTkLabel(self, image=photo, text="")
                 photo_label._image = photo
@@ -2176,7 +2176,7 @@ class ParticipantGroupCard(ctk.CTkFrame):
             try:
                 img = Image.open(local_photo)
                 img = ImageOps.exif_transpose(img)
-                img = ImageOps.fit(img, (self.PHOTO_W, self.PHOTO_H), Image.LANCZOS)
+                img = ImageOps.fit(img, (self.PHOTO_W * 2, self.PHOTO_H * 2), Image.LANCZOS)
                 photo = ctk.CTkImage(img, size=(self.PHOTO_W, self.PHOTO_H))
                 photo_label = ctk.CTkLabel(photo_holder, image=photo, text="")
                 photo_label._image = photo
@@ -3981,7 +3981,7 @@ class AthleteCard(ctk.CTkFrame):
         local_photo = resolve_local_photo_path(a["photo_path"], only_cached=True) if PIL_AVAILABLE and a["photo_path"] else None
         if local_photo:
             try:
-                img = Image.open(local_photo).resize((50, 60))
+                img = load_photo_thumbnail(local_photo, 50, 60)
                 photo = ctk.CTkImage(img, size=(50, 60))
                 photo_label = ctk.CTkLabel(self, image=photo, text="")
                 photo_label._image = photo
