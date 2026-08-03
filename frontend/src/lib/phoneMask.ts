@@ -1,7 +1,9 @@
 export function formatPhone(value: string): string {
-  let digits = value.replace(/\D/g, '')
-  // Если вставили полный 11-значный номер (начинается с 8/7) — отбросить префикс.
-  if (digits.length > 10 && (digits[0] === '8' || digits[0] === '7')) {
+  // фиксированный префикс "8(" не считаем частью набираемых цифр
+  const body = value.startsWith('8(') ? value.slice(2) : value
+  let digits = body.replace(/\D/g, '')
+  // если вставили полный 11-значный номер (8/7) — отбросить префикс
+  if (digits.length === 11 && (digits[0] === '8' || digits[0] === '7')) {
     digits = digits.slice(1)
   }
   digits = digits.slice(0, 10)
