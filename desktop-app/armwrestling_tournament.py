@@ -2164,7 +2164,7 @@ class ParticipantGroupCard(ctk.CTkFrame):
         photo_holder = ctk.CTkFrame(self, width=self.PHOTO_W, height=self.PHOTO_H,
                     corner_radius=8, fg_color="#0d1420")
         photo_holder.grid(row=0, column=0, rowspan=len(participants) + 1,
-                          padx=(14, 10), pady=14, sticky="n")
+                          padx=(14, 10), pady=14)
         photo_holder.grid_propagate(False)
         photo_holder.columnconfigure(0, weight=1)
         photo_holder.rowconfigure(0, weight=1)
@@ -4007,9 +4007,9 @@ class AthleteCard(ctk.CTkFrame):
         ctk.CTkLabel(self, text=cat_text, font=ctk.CTkFont(size=11), text_color="#5588bb",
                     anchor="w").grid(row=2, column=col + 1, sticky="w", padx=5)
 
-        if a["coach_name"]:
-            ctk.CTkLabel(self, text=f"Тренер: {a['coach_name']}", font=ctk.CTkFont(size=11),
-                        text_color="#44aa77", anchor="w").grid(row=3, column=col + 1, sticky="w", padx=5, pady=(0, 8))
+        coach_text = f"Тренер: {a['coach_name']}" if a["coach_name"] else "Тренер: отсутствует"
+        ctk.CTkLabel(self, text=coach_text, font=ctk.CTkFont(size=11),
+                    text_color="#44aa77", anchor="w").grid(row=3, column=col + 1, sticky="w", padx=5, pady=(0, 8))
 
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         btn_frame.grid(row=0, column=col + 2, rowspan=3, padx=10, pady=10, sticky="e")
