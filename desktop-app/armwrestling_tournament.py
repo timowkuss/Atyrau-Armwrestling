@@ -35,7 +35,11 @@ import webbrowser
 # os.environ на уровне модуля, при самом импорте.
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    # Грузим .env из папки самого скрипта, а НЕ из текущего каталога: если
+    # приложение запущено ярлыком/из другого места, CWD может не совпадать
+    # с desktop-app/, и иначе .env (в т.ч. DESKTOP_SYNC_TOKEN и Cloudinary)
+    # молча не подхватится — весь sync начнёт падать с 401.
+    load_dotenv(Path(__file__).resolve().parent / ".env")
 except ImportError:
     pass  # python-dotenv не установлен — просто не подхватываем .env,
           # переменные окружения всё ещё можно задать вручную в системе
@@ -86,7 +90,7 @@ PHOTOS_DIR.mkdir(exist_ok=True)
 
 # ─── Штрихкод ────
 BARCODE_PREFIX = "ARM"
-DELETE_ATHLETE_PASSWORD = "1234"  # смените на свой пароль
+DELETE_PASSWORD = "1234"  # смените на свой пароль
 
 
 def get_barcode_value(participant_id):
@@ -720,6 +724,9 @@ iin TEXT,                        -- ИИН, 12 цифр
                        "ORDER BY athletes.last_name",
                 (like,)).fetchall()
         return self.conn.execute(base + " ORDER BY athletes.last_name").fetchall()
+
+    def count_athletes(self):
+        return self.conn.execute("SELECT COUNT(*) FROM athletes").fetchone()[0]
 
     def get_athlete(self, aid):
         return self.conn.execute("SELECT * FROM athletes WHERE id=?", (aid,)).fetchone()
@@ -4010,17 +4017,20 @@ class AthleteCard(ctk.CTkFrame):
         ctk.CTkLabel(self, text=full_name, font=ctk.CTkFont(size=14, weight="bold"),
                     anchor="w").grid(row=0, column=col + 1, sticky="w", padx=5, pady=(10, 0))
 
-        gender_label = "Ж" if a["gender"] == "F" else "М"
+        gender_label = "Пол: Женский" if a["gender"] == "F" else "Пол: Мужской"
         turning_age = datetime.now().year - extract_birth_year(a["birth_date"])
         natural_cat = compute_age_category(a["birth_date"], a["gender"])
         iin_display = a["iin"] if a["iin"] else "—"
-        info = f"🎂 {a['birth_date']} ({turning_age} лет)   {gender_label}   🏛 {a['club'] or '—'}   ИИН: {iin_display}"
+        info = f"🎂 {a['birth_date']} ({turning_age} лет)   {gender_label}   🏛 {a['club'] or 'без клуба'}   ИИН: {iin_display}"
         ctk.CTkLabel(self, text=info, font=ctk.CTkFont(size=11),
                     text_color="#8899aa", anchor="w").grid(row=1, column=col + 1, sticky="w", padx=5)
 
         cat_text = f"Категория: {natural_cat or '—'}"
-        if a["rank"]:
-            cat_text += f"   |   🥋 {a['rank']}"
+        rank_phone_row = f"🥋 {a['rank']}" if a["rank"] else ""
+        if a["phone"]:
+            rank_phone_row += (f"   |   " if rank_phone_row else "") + f"📞 {a['phone']}"
+        if rank_phone_row:
+            cat_text += f"   |   {rank_phone_row}"
         ctk.CTkLabel(self, text=cat_text, font=ctk.CTkFont(size=11), text_color="#5588bb",
                     anchor="w").grid(row=2, column=col + 1, sticky="w", padx=5)
 
@@ -4086,8 +4096,10 @@ class AthletesWindow(ctk.CTkToplevel):
         OptionMenu(ctrl, variable=self.age_filter_var, values=age_options,
                     width=200, command=lambda *_: self._refresh_list()).pack(side="left", padx=5)
 
-        self.count_label = ctk.CTkLabel(ctrl, text="", text_color="#556677")
-        self.count_label.pack(side="right", padx=10)
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.pack(fill="x", padx=15, pady=(0, 5))
+        self.total_label = ctk.CTkLabel(header, text="", text_color="#556677")
+        self.total_label.pack(side="left")
 
         self.list_frame = ScrollableFrame(self, fg_color=BG)
         self.list_frame.pack(fill="both", expand=True, padx=15, pady=(0, 15))
@@ -4103,7 +4115,7 @@ class AthletesWindow(ctk.CTkToplevel):
             target_level = label_to_level[selected_age]
             athletes = [a for a in athletes if get_age_level(a["birth_date"]) == target_level]
 
-        self.count_label.configure(text=f"Всего: {len(athletes)}")
+        self.total_label.configure(text=f"👥 Всего спортсменов: {self.db.count_athletes()}")
         if not athletes:
             ctk.CTkLabel(self.list_frame, text="Нет спортсменов.",
                     text_color="#445566").pack(pady=20)
@@ -4126,7 +4138,7 @@ class AthletesWindow(ctk.CTkToplevel):
         )
         if entered is None:
             return
-        if entered != DELETE_ATHLETE_PASSWORD:
+        if entered != DELETE_PASSWORD:
             messagebox.showerror("Неверный пароль", "Удаление отменено.")
             return
 
@@ -4574,6 +4586,16 @@ class CoachesWindow(ctk.CTkToplevel):
                     "Удалить тренера из реестра?\n"
                     "Его спортсмены не удаляются — просто останутся без тренера."):
             return
+
+        entered = simpledialog.askstring(
+            "Подтверждение", "Введите пароль для удаления:", show="*", parent=self
+        )
+        if entered is None:
+            return
+        if entered != DELETE_PASSWORD:
+            messagebox.showerror("Неверный пароль", "Удаление отменено.")
+            return
+
         self.db.delete_coach(cid)
         self._refresh_list()
 
@@ -6818,7 +6840,7 @@ class App(ctk.CTk):
         )
         if entered is None:
             return
-        if entered != DELETE_ATHLETE_PASSWORD:
+        if entered != DELETE_PASSWORD:
             messagebox.showerror("Неверный пароль", "Удаление отменено.")
             return
 
@@ -6858,16 +6880,29 @@ class App(ctk.CTk):
         )
 
     def _auto_sync_tick(self):
-        from sync.sync_manager import sync_manager
-        if sync_manager.state.pending_count() > 0:
-            result = sync_manager.try_auto_flush()
-            if result:
-                succeeded, remaining = result
-                if succeeded > 0:
-                    print(f"[auto-sync] отправлено {succeeded}, осталось {remaining}")
-                    self._refresh_status_badge()
-                    if remaining == 0:
-                        self._show_sync_toast("Все данные синхронизированы")
+        try:
+            from sync.sync_manager import sync_manager
+            if sync_manager.state.pending_count() > 0:
+                result = sync_manager.try_auto_flush()
+                if result:
+                    succeeded, remaining = result
+                    if succeeded > 0:
+                        print(f"[auto-sync] отправлено {succeeded}, осталось {remaining}")
+                        self._refresh_status_badge()
+                        if remaining == 0:
+                            self._show_sync_toast("Все данные синхронизированы")
+            blocked = sync_manager.take_blocked_warning()
+            if blocked:
+                ops = ", ".join(sorted({b["operation"] for b in blocked}))
+                self._show_sync_toast(
+                    f"⚠️ Не удаётся синхронизировать: {ops}. "
+                    "Запись останется на сайте — проверьте интернет и токен "
+                    "(desktop-app/.env). Удаление не потеряно и повторится само."
+                )
+        except Exception as e:
+            # Тикер не должен умирать из-за одной ошибки (иначе синхронизация
+            # молча останавливается навсегда — мы это уже ловили).
+            print(f"[auto-sync] ошибка тикера: {e}")
         self.after(10000, self._auto_sync_tick)
 
     def _show_sync_toast(self, message):

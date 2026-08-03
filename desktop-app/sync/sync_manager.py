@@ -47,6 +47,13 @@ class SyncManager:
         # сервере (см. flush_pending).
         self._flush_lock = threading.Lock()
 
+        # Заблокированные (не долетающие до сервера) операции — в основном
+        # delete_*, которые НЕ выбрасываем молча (иначе на сайте остаётся
+        # лишняя запись, как было с удалением спортсмена). Здесь они
+        # копятся с ошибками для показа пользователю в UI-тикере.
+        self._blocked_lock = threading.Lock()
+        self.blocked_ops: list[dict] = []
+
         # ── асинхронный воркер для on_match_updated ──────────────────
         # Раньше движок сетки (advance_winner → _propagate → _place_player
         # → _sync_match) вызывал sync_manager.on_match_updated(...) НАПРЯМУЮ
@@ -158,6 +165,85 @@ class SyncManager:
         self._trigger_immediate_flush()
         return None
 
+    # ── гарантированное удаление на сервере ─────────────────────
+    def _delete_on_server(self, entity_type, op, local_id, remote_id, payload):
+        """Удалить запись на сервере и НИКОГДА не потерять операцию молча.
+
+        Раньше удаление могло «молча потеряться» (спортсмен удалялся в
+        десктопе, но оставался на сайте) через любой из путей:
+          * неожиданное исключение в API-клиенте (не ApiClientError)
+            пробрасывалось наверх и глоталось вызывающим кодом — в очередь
+            ничего не попадало;
+          * sync выключен / force_queue не проверялись;
+          * 401/405/5xx/нет сети уводили операцию в очередь, откуда её потом
+            МОЛЧА выбрасывал flush_pending после 50 неудачных попыток.
+        Теперь: любая ошибка -> в офлайн-очередь; 404 = на сервере уже
+        удалено (успех); успешное удаление снимает id_map. Операция из
+        очереди больше никогда не выбрасывается (см. flush_pending) и
+        доедет, как только проблема (токен/сеть) исчезнет.
+        """
+        if remote_id is None:
+            # На сервере записи никогда не было — удалять нечего. Это НЕ
+            # потеря данных: local_id никогда не синкался.
+            print(f"[sync] {op}: remote_id отсутствует для local={local_id} — "
+                  "на сервере записи не было, удалять нечего")
+            return True
+        if not self.enabled or self.force_queue:
+            self.state.enqueue(op, payload)
+            print(f"[sync] {op} -> в офлайн-очередь (sync выключен или force_queue)")
+            return False
+        delete_fn = getattr(self.api, op, None)
+        if delete_fn is None:
+            print(f"[sync] {op}: нет метода в api_client — запись останется на сайте; "
+                  "кладём в очередь, чтобы не потерять")
+            self.state.enqueue(op, payload)
+            return False
+        try:
+            delete_fn(remote_id)
+        except ApiClientError as e:
+            if e.status_code == 404:
+                self.state.map_delete(entity_type, local_id)
+                print(f"[sync] {op}: 404 — на сервере уже удалено")
+                return True
+            self.state.enqueue(op, payload)
+            print(f"[sync] {op} -> в офлайн-очередь: {e}")
+            return False
+        except Exception as e:
+            self.state.enqueue(op, payload)
+            print(f"[sync] {op} -> в офлайн-очередь (неожиданная ошибка): {e}")
+            return False
+        self.state.map_delete(entity_type, local_id)
+        return True
+
+    def _record_blocked(self, row):
+        """Помечает delete-операцию, упёршуюся в потолок повторов, как
+        «заблокированную» для показа пользователю. Из очереди её НЕ
+        выбрасываем — она продолжит пытаться при каждом flush."""
+        key = (row["operation"], row["payload"])
+        with self._blocked_lock:
+            for b in self.blocked_ops:
+                if (b["operation"], b["payload"]) == key:
+                    return
+            self.blocked_ops.append({
+                "operation": row["operation"],
+                "payload": row["payload"],
+                "attempts": row["attempts"],
+                "last_error": row["last_error"],
+            })
+        print(f"[sync] ⚠ {row['operation']} id={row['id']} не долетает до сервера "
+              f"({row['attempts']} попыток) — операция СОХРАНЕНА в очереди, "
+              "предупреждаем пользователя")
+
+    def take_blocked_warning(self):
+        """Отдаёт и очищает список заблокированных операций — вызывается из
+        UI-тикера, чтобы показать пользователю предупреждение (не блокирует
+        очередь, не теряет операцию: она остаётся в pending_queue)."""
+        with self._blocked_lock:
+            if not self.blocked_ops:
+                return None
+            blocked, self.blocked_ops = self.blocked_ops, []
+            return blocked
+
     def _trigger_immediate_flush(self):
         """Дёргает flush_pending() в фоновом потоке. Механизм coalescing:
         если поток уже запущен (даже если он ещё ждёт _flush_lock), новый
@@ -236,76 +322,65 @@ class SyncManager:
         return self._try("update_athlete", payload, go)
 
     # ── тренер: карточка из локальной таблицы coaches ────────────
-def on_coach_created(self, cid, full_name, club, photo_path, bio,
-                      first_name=None, last_name=None, birth_date=None,
-                      iin=None, qualification=None, city=None, phone=None):
-    payload = {"cid": cid, "full_name": full_name, "club": club,
-               "photo_path": photo_path, "bio": bio,
-               "first_name": first_name, "last_name": last_name,
-               "birth_date": birth_date, "iin": iin,
-               "qualification": qualification, "city": city, "phone": phone}
+    def on_coach_created(self, cid, full_name, club, photo_path, bio,
+                          first_name=None, last_name=None, birth_date=None,
+                          iin=None, qualification=None, city=None, phone=None):
+        payload = {"cid": cid, "full_name": full_name, "club": club,
+                   "photo_path": photo_path, "bio": bio,
+                   "first_name": first_name, "last_name": last_name,
+                   "birth_date": birth_date, "iin": iin,
+                   "qualification": qualification, "city": city, "phone": phone}
 
-    def go():
-        remote = self.api.create_coach(
-            full_name=full_name, club_name=club or None,
-            photo_path=photo_path or None, bio=bio or None,
-            first_name=first_name or None, last_name=last_name or None,
-            birth_date=birth_date or None, iin=iin or None,
-            qualification=qualification or None, city_name=city or None,
-            phone=phone or None,
-        )
-        self.state.map_set("coach", cid, remote["id"])
-        return remote["id"]
+        def go():
+            remote = self.api.create_coach(
+                full_name=full_name, club_name=club or None,
+                photo_path=photo_path or None, bio=bio or None,
+                first_name=first_name or None, last_name=last_name or None,
+                birth_date=birth_date or None, iin=iin or None,
+                qualification=qualification or None, city_name=city or None,
+                phone=phone or None,
+            )
+            self.state.map_set("coach", cid, remote["id"])
+            return remote["id"]
 
-    return self._try("create_coach", payload, go)
+        return self._try("create_coach", payload, go)
 
-def on_coach_updated(self, cid, full_name, club, photo_path, bio,
-                      first_name=None, last_name=None, birth_date=None,
-                      iin=None, qualification=None, city=None, phone=None):
-    remote_coach_id = self.state.map_get("coach", cid)
-    payload = {"cid": cid, "full_name": full_name, "club": club,
-               "photo_path": photo_path, "bio": bio,
-               "first_name": first_name, "last_name": last_name,
-               "birth_date": birth_date, "iin": iin,
-               "qualification": qualification, "city": city, "phone": phone}
-    if remote_coach_id is None:
-        self.state.enqueue("update_coach", payload)
-        return None
+    def on_coach_updated(self, cid, full_name, club, photo_path, bio,
+                          first_name=None, last_name=None, birth_date=None,
+                          iin=None, qualification=None, city=None, phone=None):
+        remote_coach_id = self.state.map_get("coach", cid)
+        payload = {"cid": cid, "full_name": full_name, "club": club,
+                   "photo_path": photo_path, "bio": bio,
+                   "first_name": first_name, "last_name": last_name,
+                   "birth_date": birth_date, "iin": iin,
+                   "qualification": qualification, "city": city, "phone": phone}
+        if remote_coach_id is None:
+            self.state.enqueue("update_coach", payload)
+            return None
 
-    def go():
-        self.api.update_coach(
-            remote_coach_id, full_name=full_name, club_name=club or None,
-            photo_path=photo_path or None, bio=bio or None,
-            first_name=first_name or None, last_name=last_name or None,
-            birth_date=birth_date or None, iin=iin or None,
-            qualification=qualification or None, city_name=city or None,
-            phone=phone or None,
-        )
-        return remote_coach_id
+        def go():
+            self.api.update_coach(
+                remote_coach_id, full_name=full_name, club_name=club or None,
+                photo_path=photo_path or None, bio=bio or None,
+                first_name=first_name or None, last_name=last_name or None,
+                birth_date=birth_date or None, iin=iin or None,
+                qualification=qualification or None, city_name=city or None,
+                phone=phone or None,
+            )
+            return remote_coach_id
 
-    return self._try("update_coach", payload, go)
+        return self._try("update_coach", payload, go)
 
     def on_coach_deleted(self, cid):
         # Та же схема, что on_athlete_deleted: гасим ещё не отправленные
-        # create/update этого тренера в очереди, потом пробуем удалить и
-        # на сервере, если он уже туда улетел.
+        # create/update этого тренера в очереди, потом гарантированно
+        # удаляем и на сервере, если он уже туда улетел.
         self.state.purge_pending("create_coach", "cid", cid)
         self.state.purge_pending("update_coach", "cid", cid)
 
         remote_id = self.state.map_get("coach", cid)
-        if remote_id is None:
-            return
-
-        delete_fn = getattr(self.api, "delete_coach", None)
-        if delete_fn is None:
-            print("[sync] delete_coach: в api_client нет метода удаления — "
-                "запись останется на сайте, удали вручную или добавь метод в API")
-            return
-        try:
-            delete_fn(remote_id)
-        except ApiClientError as e:
-            self.state.enqueue("delete_coach", {"cid": cid, "remote_id": remote_id})
-            print(f"[sync] delete_coach -> в офлайн-очередь: {e}")
+        self._delete_on_server("coach", "delete_coach", cid, remote_id,
+                               {"cid": cid, "remote_id": remote_id})
 
     # ── клуб ───────────────────────────────────────────────────
     def on_club_created(self, cid, name, city=None, address=None, founded_date=None, logo_path=None):
@@ -345,14 +420,8 @@ def on_coach_updated(self, cid, full_name, club, photo_path, bio,
         self.state.purge_pending("update_club", "cid", cid)
 
         remote_id = self.state.map_get("club", cid)
-        if remote_id is None:
-            return
-
-        try:
-            self.api.delete_club(remote_id)
-        except ApiClientError as e:
-            self.state.enqueue("delete_club", {"cid": cid, "remote_id": remote_id})
-            print(f"[sync] delete_club -> в офлайн-очередь: {e}")
+        self._delete_on_server("club", "delete_club", cid, remote_id,
+                               {"cid": cid, "remote_id": remote_id})
 
     # ── спортсмен-участник: поиск или создание на сервере ───────
     # local_athlete_id — id из ЛОКАЛЬНОЙ таблицы athletes (реестр
@@ -598,21 +667,10 @@ def on_coach_updated(self, cid, full_name, club, photo_path, bio,
         # 1. если ещё не отправлен — вообще не даём ему уйти
         self.state.purge_pending("create_participant", "pid", pid)
 
-        # 2. если уже был на сервере — пробуем удалить и там
+        # 2. если уже был на сервере — удаляем и там, гарантированно
         remote_id = self.state.map_get("participant", pid)
-        if remote_id is None:
-            return  # не долетел раньше — и не долетит теперь
-
-        delete_fn = getattr(self.api, "delete_participant", None)
-        if delete_fn is None:
-            print("[sync] delete_participant: в api_client нет метода удаления — "
-                "запись останется на сайте, удали вручную или добавь метод в API")
-            return
-        try:
-            delete_fn(remote_id)
-        except ApiClientError as e:
-            self.state.enqueue("delete_participant", {"pid": pid, "remote_id": remote_id})
-            print(f"[sync] delete_participant -> в офлайн-очередь: {e}")
+        self._delete_on_server("participant", "delete_participant", pid, remote_id,
+                               {"pid": pid, "remote_id": remote_id})
 
     def on_tournament_deleted(self, tid):
         # Турнир мог быть удалён до того, как он сам и/или его дети
@@ -628,16 +686,8 @@ def on_coach_updated(self, cid, full_name, club, photo_path, bio,
         self.state.purge_pending("update_match", "tournament_id", tid)
 
         remote_id = self.state.map_get("competition", tid)
-        if remote_id is None:
-            return
-        delete_fn = getattr(self.api, "delete_competition", None)
-        if delete_fn is None:
-            print("[sync] delete_competition: в api_client нет метода удаления")
-            return
-        try:
-            delete_fn(remote_id)
-        except ApiClientError as e:
-            self.state.enqueue("delete_competition", {"tid": tid, "remote_id": remote_id})
+        self._delete_on_server("competition", "delete_competition", tid, remote_id,
+                               {"tid": tid, "remote_id": remote_id})
 
     def on_category_deleted(self, cid):
         # Та же логика, что и для турнира: если категория удалена до того,
@@ -651,38 +701,20 @@ def on_coach_updated(self, cid, full_name, club, photo_path, bio,
         self.state.purge_pending("update_match", "category_id", cid)
 
         remote_id = self.state.map_get("category", cid)
-        if remote_id is None:
-            return
-        delete_fn = getattr(self.api, "delete_category", None)
-        if delete_fn is None:
-            print("[sync] delete_category: в api_client нет метода удаления")
-            return
-        try:
-            delete_fn(remote_id)
-        except ApiClientError as e:
-            self.state.enqueue("delete_category", {"cid": cid, "remote_id": remote_id})
-    
+        self._delete_on_server("category", "delete_category", cid, remote_id,
+                               {"cid": cid, "remote_id": remote_id})
+
     def on_athlete_deleted(self, aid):
         # 1. если карточка ещё не улетела на сервер — гасим её create/update
         #    прямо в очереди, чтобы не создать "призрака" после локального удаления
         self.state.purge_pending("create_athlete", "aid", aid)
         self.state.purge_pending("update_athlete", "aid", aid)
 
-        # 2. если уже был на сервере — пробуем удалить и там
+        # 2. если уже был на сервере — удаляем и там, гарантированно (любая
+        #    ошибка уходит в офлайн-очередь, операция не теряется молча)
         remote_id = self.state.map_get("athlete", aid)
-        if remote_id is None:
-            return  # не долетел раньше — и не долетит теперь
-
-        delete_fn = getattr(self.api, "delete_athlete", None)
-        if delete_fn is None:
-            print("[sync] delete_athlete: в api_client нет метода удаления — "
-                "запись останется на сайте, удали вручную или добавь метод в API")
-            return
-        try:
-            delete_fn(remote_id)
-        except ApiClientError as e:
-            self.state.enqueue("delete_athlete", {"aid": aid, "remote_id": remote_id})
-            print(f"[sync] delete_athlete -> в офлайн-очередь: {e}")
+        self._delete_on_server("athlete", "delete_athlete", aid, remote_id,
+                               {"aid": aid, "remote_id": remote_id})
 
     # ── матч ─────────────────────────────────────────────────────
     def on_match_created(self, mid, match: dict):
@@ -865,18 +897,41 @@ def on_coach_updated(self, cid, full_name, club, photo_path, bio,
             return 0, self.state.pending_count()
         try:
             succeeded = 0
+            # delete-операции, не долетевшие в ЭТОМ прогоне: пробуем их не
+            # более одного раза за flush (иначе многопроходный цикл ниже
+            # долбил бы сеть одним и тем же DELETE до 10 раз подряд).
+            stalled: set[int] = set()
             for _ in range(10):
                 made_progress = False
                 for row in self.state.pending():
                     if not self.state.exists(row["id"]):
                         continue
-                    if row["attempts"] >= MAX_RETRY_ATTEMPTS:
-                        print(f"[sync] PURGE {row['operation']} id={row['id']}: {row['attempts']} попыток — чистим")
+                    if row["id"] in stalled:
+                        continue
+                    op = row["operation"]
+                    is_delete = op.startswith("delete_")
+                    if not is_delete and row["attempts"] >= MAX_RETRY_ATTEMPTS:
+                        print(f"[sync] PURGE {op} id={row['id']}: {row['attempts']} попыток — чистим")
                         self.state.mark_done(row["id"])
                         continue
-                    op, payload = row["operation"], __import__("json").loads(row["payload"])
+                    if is_delete and row["attempts"] >= MAX_RETRY_ATTEMPTS:
+                        # Удаление НИКОГДА не выбрасываем молча: 50 неудач
+                        # подряд — это реальная проблема (неверный токен,
+                        # нет роута на сервере, постоянные сбои сети), а не
+                        # «битая» операция. Предупреждаем пользователя один
+                        # раз и продолжаем пытаться при каждом flush — как
+                        # только проблема исчезнет, операция доедет.
+                        self._record_blocked(row)
+                    payload = __import__("json").loads(row["payload"])
                     print(f"[sync] TRY: {op} payload={payload}")
-                    ok = self._replay(op, payload)
+                    try:
+                        ok = self._replay(op, payload)
+                    except Exception as e:
+                        # Одна упавшая операция не должна валить весь
+                        # flush_pending (а значит и auto-sync тикер): любое
+                        # неожиданное исключение считаем просто неудачей.
+                        print(f"[sync] RESULT: {op} -> ОШИБКА {e}")
+                        ok = False
                     print(f"[sync] RESULT: {op} -> {ok}")
 
                     if ok is True:
@@ -885,6 +940,14 @@ def on_coach_updated(self, cid, full_name, club, photo_path, bio,
                         made_progress = True
                     elif ok is None:
                         continue
+                    elif is_delete:
+                        # Удаление не блокирует остальную очередь и не
+                        # теряется молча: фиксируем ошибку, продолжаем слать
+                        # следующие операции, а само удаление повторится при
+                        # следующем flush_pending.
+                        stalled.add(row["id"])
+                        self.state.mark_failed(row["id"],
+                                               row["last_error"] or "delete не долетел — повторим позже")
                     else:
                         self.state.mark_failed(row["id"], "flush_pending: unrecoverable error")
                         return succeeded, self.state.pending_count()
