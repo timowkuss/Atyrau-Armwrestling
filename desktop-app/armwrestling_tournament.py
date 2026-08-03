@@ -198,7 +198,21 @@ def load_photo_thumbnail(path, width, height):
         new_h = int(src_w / target_ratio)
         top = (src_h - new_h) // 2
         img = img.crop((0, top, src_w, top + new_h))
-    return img.resize((width, height), Image.LANCZOS)
+    img = img.resize((width, height), Image.LANCZOS)
+    img = round_corners(img, max(6, min(width, height) // 8))
+    return img
+
+
+def round_corners(img, radius):
+    """Скругляет углы изображения через альфа-маску — фото в карточках
+    получает мягкие края вместо жёстких прямоугольных углов."""
+    img = img.convert("RGBA")
+    w, h = img.size
+    mask = Image.new("L", (w, h), 0)
+    draw = ImageDraw.Draw(mask)
+    draw.rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, fill=255)
+    img.putalpha(mask)
+    return img
 
 
 def center_toplevel(win, width, height):
@@ -2113,13 +2127,14 @@ class ParticipantCard(ctk.CTkFrame):
         self.configure(fg_color=("#1e2a3a", "#1e2a3a"))
         p = participant
 
-        photo_label = ctk.CTkLabel(self, text="👤", font=("Arial", 28), width=50)
+        photo_label = ctk.CTkLabel(self, text="👤", font=("Arial", 28), width=92, height=112,
+                    fg_color="#0d1420", corner_radius=12)
         local_photo = resolve_local_photo_path(p["photo_path"], only_cached=True) if PIL_AVAILABLE and p["photo_path"] else None
         if local_photo:
             try:
                 img = load_photo_thumbnail(local_photo, 184, 224)
                 photo = ctk.CTkImage(img, size=(92, 112))
-                photo_label = ctk.CTkLabel(self, image=photo, text="")
+                photo_label = ctk.CTkLabel(self, image=photo, text="", width=92, height=112)
                 photo_label._image = photo
             except Exception:
                 pass
@@ -2177,6 +2192,7 @@ class ParticipantGroupCard(ctk.CTkFrame):
                 img = Image.open(local_photo)
                 img = ImageOps.exif_transpose(img)
                 img = ImageOps.fit(img, (self.PHOTO_W * 2, self.PHOTO_H * 2), Image.LANCZOS)
+                img = round_corners(img, self.PHOTO_W // 8)
                 photo = ctk.CTkImage(img, size=(self.PHOTO_W, self.PHOTO_H))
                 photo_label = ctk.CTkLabel(photo_holder, image=photo, text="")
                 photo_label._image = photo
@@ -3977,17 +3993,18 @@ class AthleteCard(ctk.CTkFrame):
                         text_color="#556677", width=36).grid(row=0, column=0, rowspan=3, padx=(10, 0), pady=10)
             col = 1
 
-        photo_label = ctk.CTkLabel(self, text="👤", font=("Arial", 28), width=50)
+        photo_label = ctk.CTkLabel(self, text="👤", font=("Arial", 28), width=92, height=112,
+                    fg_color="#0d1420", corner_radius=12)
         local_photo = resolve_local_photo_path(a["photo_path"], only_cached=True) if PIL_AVAILABLE and a["photo_path"] else None
         if local_photo:
             try:
                 img = load_photo_thumbnail(local_photo, 184, 224)
                 photo = ctk.CTkImage(img, size=(92, 112))
-                photo_label = ctk.CTkLabel(self, image=photo, text="")
+                photo_label = ctk.CTkLabel(self, image=photo, text="", width=92, height=112)
                 photo_label._image = photo
             except Exception:
                 pass
-        photo_label.grid(row=0, column=col, rowspan=3, padx=(6, 3), pady=2)
+        photo_label.grid(row=0, column=col, rowspan=4, padx=(6, 3), pady=2)
 
         full_name = f"{a['last_name']} {a['first_name']}"
         ctk.CTkLabel(self, text=full_name, font=ctk.CTkFont(size=14, weight="bold"),
