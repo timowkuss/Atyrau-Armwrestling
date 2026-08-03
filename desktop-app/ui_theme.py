@@ -294,6 +294,8 @@ class _LazyDropdown:
         self._menu = None
 
     def open(self, x, y):
+        if self._menu is not None and not self._menu.winfo_exists():
+            self._menu = None
         if self._menu is None:
             self._menu = _DropdownToplevel(self._om, self._om._values,
                                            self._callback, self._fg,
@@ -301,11 +303,15 @@ class _LazyDropdown:
         self._menu.open(x, y, current=self._om.get())
 
     def close(self):
-        if self._menu is not None:
+        if self._menu is not None and self._menu.winfo_exists():
             self._menu.close()
 
     def is_open(self):
-        return bool(self._menu is not None and self._menu.is_open())
+        try:
+            return bool(self._menu is not None and self._menu.winfo_exists()
+                        and self._menu.is_open())
+        except Exception:
+            return False
 
     def configure(self, **kw):
         if "fg_color" in kw:
