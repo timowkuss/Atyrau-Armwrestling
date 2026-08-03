@@ -4661,20 +4661,22 @@ class CoachesWindow(ctk.CTkToplevel):
         # ─── Телефон (формат 8(XXX)XXX-XX-XX) ───
         ctk.CTkLabel(form_grid, text="Телефон:", anchor="e", width=90).grid(
             row=7, column=0, padx=(14, 6), pady=7, sticky="e")
-        phone_var = ctk.StringVar(value=(existing["phone"] or "") if existing else "")
+        phone_var = ctk.StringVar(value="8(" if not existing else (existing["phone"] or "8("))
         phone_entry = ctk.CTkEntry(form_grid, textvariable=phone_var, width=240,
                     placeholder_text="8(702)313-53-83", fg_color=BG, border_color=BORDER)
         phone_entry.grid(row=7, column=1, padx=(0, 14), pady=7, sticky="ew")
 
         def format_phone(event=None):
-            digits = "".join(ch for ch in phone_entry.get() if ch.isdigit())
+            raw = phone_entry.get()
+            # фиксированный префикс "8(" не считаем частью набираемых цифр
+            body = raw[2:] if raw.startswith("8(") else raw
+            digits = "".join(ch for ch in body if ch.isdigit())
             if len(digits) == 11 and digits[0] in "87":
                 digits = digits[1:]
             digits = digits[:10]
             if not digits:
-                phone_entry.delete(0, "end")
-                return
-            if len(digits) <= 3:
+                result = "8("
+            elif len(digits) <= 3:
                 result = f"8({digits}"
             elif len(digits) <= 6:
                 result = f"8({digits[:3]}){digits[3:]}"
@@ -4682,10 +4684,9 @@ class CoachesWindow(ctk.CTkToplevel):
                 result = f"8({digits[:3]}){digits[3:6]}-{digits[6:]}"
             else:
                 result = f"8({digits[:3]}){digits[3:6]}-{digits[6:8]}-{digits[8:]}"
-            cursor = len(result)
             phone_entry.delete(0, "end")
             phone_entry.insert(0, result)
-            phone_entry.icursor(cursor)
+            phone_entry.icursor(len(result))
 
         phone_entry.bind("<KeyRelease>", format_phone)
 
