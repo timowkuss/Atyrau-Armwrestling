@@ -117,7 +117,7 @@ class SyncApiClient:
     def update_coach(self, remote_coach_id, full_name=None, club_name=None,
                       photo_path=None, bio=None, first_name=None, last_name=None,
                       birth_date=None, iin=None, qualification=None, city_name=None,
-                      phone=None):
+                      phone=None, is_hidden=None):
         body = {}
         if full_name is not None:
             body["full_name"] = full_name
@@ -141,6 +141,8 @@ class SyncApiClient:
             body["city_name"] = city_name
         if phone is not None:
             body["phone"] = phone
+        if is_hidden is not None:
+            body["is_hidden"] = bool(is_hidden)
         return self._request("PATCH", f"/coaches/{remote_coach_id}", json_body=body)
     def delete_coach(self, remote_id):
         return self._request("DELETE", f"/coaches/{remote_id}")

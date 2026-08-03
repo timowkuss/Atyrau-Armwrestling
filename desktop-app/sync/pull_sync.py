@@ -256,6 +256,22 @@ class PullSyncManager:
 
     def _upsert_coach(self, conn: sqlite3.Connection, item: dict):
         remote_id = item["id"]
+
+        # Скрытую на сайте карточку (is_hidden=True — админка "удалила"
+        # тренера) помечаем локально, как и у спортсменов: тренер выходит
+        # из клуба и отпускает учеников (зеркально серверу — admin/coaches.py
+        # update_coach). Секция «Скрытые» в окне тренеров позволяет вернуть
+        # её обратно. Если карточки тут ещё не было — не заводим.
+        if item.get("is_hidden"):
+            local_id = self.state.map_get_local("coach", remote_id)
+            if local_id is None:
+                return
+            conn.execute("UPDATE athletes SET coach_id=NULL WHERE coach_id=?", (local_id,))
+            conn.execute(
+                "UPDATE coaches SET is_hidden=1, club=NULL, club_id=NULL WHERE id=?",
+                (local_id,))
+            return
+
         full_name = (item.get("full_name") or "").strip()
         club = item.get("club_name")
         photo_path = item.get("photo_path")
@@ -273,7 +289,8 @@ class PullSyncManager:
         if local_id is not None:
             conn.execute(
                 "UPDATE coaches SET full_name=?, club=?, photo_path=?, bio=?, "
-                "first_name=?, last_name=?, birth_date=?, iin=?, qualification=?, city=?, phone=? WHERE id=?",
+                "first_name=?, last_name=?, birth_date=?, iin=?, qualification=?, city=?, "
+                "phone=?, is_hidden=0 WHERE id=?",
                 (full_name, club, photo_path, bio, first_name, last_name,
                  birth_date, iin, qualification, city, phone, local_id),
             )
@@ -290,7 +307,8 @@ class PullSyncManager:
             local_id = row[0]
             conn.execute(
                 "UPDATE coaches SET full_name=?, club=?, photo_path=?, bio=?, "
-                "first_name=?, last_name=?, birth_date=?, iin=?, qualification=?, city=?, phone=? WHERE id=?",
+                "first_name=?, last_name=?, birth_date=?, iin=?, qualification=?, city=?, "
+                "phone=?, is_hidden=0 WHERE id=?",
                 (full_name, club, photo_path, bio, first_name, last_name,
                  birth_date, iin, qualification, city, phone, local_id),
             )
@@ -372,7 +390,14 @@ class PullSyncManager:
         if item.get("is_hidden"):
             if local_id is None:
                 return
-            conn.execute("UPDATE athletes SET is_hidden=1 WHERE id=?", (local_id,))
+            # Сервер при скрытии отвязал спортсмена от клуба и тренера —
+            # зеркалим то же самое локально (иначе привязки "зависнут",
+            # а рейтинг клуба в десктопе разойдётся с серверным).
+            conn.execute(
+                "UPDATE athletes SET is_hidden=1, club=NULL, club_id=NULL, coach_id=NULL "
+                "WHERE id=?",
+                (local_id,),
+            )
             return
 
         first_name, last_name = _split_full_name(item.get("full_name", ""))

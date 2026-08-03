@@ -417,6 +417,7 @@ iin TEXT,                        -- ИИН, 12 цифр
             club_id INTEGER,                 -- ссылка на клуб (реестр «Клубы»)
             photo_path TEXT,
             bio TEXT,
+            is_hidden INTEGER DEFAULT 0,     -- скрыт через админку сайта
             created_at TEXT DEFAULT (datetime('now'))
         );
 
@@ -496,6 +497,8 @@ iin TEXT,                        -- ИИН, 12 цифр
         for col in ("first_name", "last_name", "birth_date", "iin", "qualification", "city", "phone"):
             if col not in c_cols:
                 self.conn.execute(f"ALTER TABLE coaches ADD COLUMN {col} TEXT")
+        if "is_hidden" not in c_cols:
+            self.conn.execute("ALTER TABLE coaches ADD COLUMN is_hidden INTEGER DEFAULT 0")
         if "phone" in c_cols:
             self.conn.execute(
                 "UPDATE coaches SET phone = '8(702)313-53-83' WHERE phone IS NULL OR phone = ''"
@@ -687,22 +690,63 @@ iin TEXT,                        -- ИИН, 12 цифр
         self.conn.commit()
 
     def get_coaches(self, query=""):
+        # Скрытые через админку сайта карточки (is_hidden=1) не показываем
+        # среди обычных — они живут в отдельной секции «Скрытые».
+        base = "SELECT * FROM coaches WHERE COALESCE(is_hidden,0)=0"
         if query:
             like = f"%{query.lower()}%"
             return self.conn.execute(
-                "SELECT * FROM coaches WHERE lower(full_name) LIKE ? ORDER BY full_name",
+                base + " AND lower(full_name) LIKE ? ORDER BY full_name",
                 (like,)).fetchall()
-        return self.conn.execute("SELECT * FROM coaches ORDER BY full_name").fetchall()
+        return self.conn.execute(base + " ORDER BY full_name").fetchall()
+
+    def search_hidden_coaches(self, query=""):
+        base = "SELECT * FROM coaches WHERE COALESCE(is_hidden,0)=1"
+        if query:
+            like = f"%{query.lower()}%"
+            return self.conn.execute(
+                base + " AND lower(full_name) LIKE ? ORDER BY full_name",
+                (like,)).fetchall()
+        return self.conn.execute(base + " ORDER BY full_name").fetchall()
+
+    def count_hidden_coaches(self):
+        return self.conn.execute(
+            "SELECT COUNT(*) FROM coaches WHERE COALESCE(is_hidden,0)=1"
+        ).fetchone()[0]
+
+    def set_coach_hidden(self, cid, hidden):
+        if hidden:
+            # Скрытие = удаление: тренер выходит из клуба и отпускает всех
+            # учеников (зеркально серверу — admin/coaches.py update_coach).
+            # «Показать» ничего не восстанавливает.
+            self.conn.execute(
+                "UPDATE athletes SET coach_id=NULL WHERE coach_id=?", (cid,))
+            self.conn.execute(
+                "UPDATE coaches SET is_hidden=1, club_id=NULL, club='' WHERE id=?",
+                (cid,))
+        else:
+            self.conn.execute("UPDATE coaches SET is_hidden=0 WHERE id=?", (cid,))
+        self.conn.commit()
 
     def get_coach(self, cid):
         return self.conn.execute("SELECT * FROM coaches WHERE id=?", (cid,)).fetchone()
 
     def get_athletes_by_coach(self, coach_id):
         return self.conn.execute(
-            "SELECT * FROM athletes WHERE coach_id=? ORDER BY last_name", (coach_id,)
+            "SELECT * FROM athletes WHERE coach_id=? AND COALESCE(is_hidden,0)=0 "
+            "ORDER BY last_name", (coach_id,)
         ).fetchall()
 
     def delete_athlete(self, aid):
+        # Удаление спортсмена из клуба: штраф -10 рейтингу клуба (зеркально
+        # серверу — admin/athletes.py delete_athlete). Делаем ДО удаления
+        # карточки, чтобы history.athlete_id ещё указывал на спортсмена.
+        row = self.conn.execute(
+            "SELECT club_id FROM athletes WHERE id=?", (aid,)).fetchone()
+        if row and row["club_id"]:
+            from club_rating import apply_athlete_removed
+            apply_athlete_removed(self.conn, aid, row["club_id"])
+
         # participants.athlete_id ссылается на athletes(id) БЕЗ ON DELETE —
         # если не отвязать/не удалить вручную, после удаления карточки в
         # participants останутся "битые" athlete_id, указывающие в никуда.
@@ -772,8 +816,21 @@ iin TEXT,                        -- ИИН, 12 цифр
         ).fetchone()[0]
 
     def set_athlete_hidden(self, aid, hidden):
-        self.conn.execute("UPDATE athletes SET is_hidden=? WHERE id=?",
-                          (1 if hidden else 0, aid))
+        if hidden:
+            # Скрытие = удаление: спортсмен выходит из клуба (штраф -10,
+            # зеркально серверу) и от тренера. «Показать» ничего не
+            # восстанавливает — привязки придётся делать заново.
+            row = self.conn.execute(
+                "SELECT club_id, coach_id FROM athletes WHERE id=?", (aid,)).fetchone()
+            if row and row["club_id"]:
+                from club_rating import apply_athlete_removed
+                apply_athlete_removed(self.conn, aid, row["club_id"])
+            self.conn.execute(
+                "UPDATE athletes SET is_hidden=1, club_id=NULL, coach_id=NULL, "
+                "club='', join_club_date=NULL, last_competition_date=NULL, "
+                "next_inactive_date=NULL, club_active=0 WHERE id=?", (aid,))
+        else:
+            self.conn.execute("UPDATE athletes SET is_hidden=0 WHERE id=?", (aid,))
         self.conn.commit()
 
     def get_athlete(self, aid):
@@ -975,6 +1032,7 @@ _original_delete_category = Database.delete_category
 _original_delete_participant = Database.delete_participant
 _original_delete_athlete = Database.delete_athlete
 _original_set_athlete_hidden = Database.set_athlete_hidden
+_original_set_coach_hidden = Database.set_coach_hidden
 _original_add_club = Database.add_club
 _original_update_club = Database.update_club
 _original_delete_club = Database.delete_club
@@ -1133,6 +1191,21 @@ def _synced_update_coach(self, cid, full_name, club="", photo_path="", bio="",
     except Exception as e:
         print(f"[sync] update_coach: {e}")
 
+def _synced_set_coach_hidden(self, cid, hidden):
+    _original_set_coach_hidden(self, cid, hidden)
+    try:
+        card = self.get_coach(cid)
+        if card is None:
+            return
+        sync_manager.on_coach_updated(
+            cid, card["full_name"], card["club"], card["photo_path"], card["bio"],
+            first_name=card["first_name"], last_name=card["last_name"],
+            birth_date=card["birth_date"], iin=card["iin"],
+            qualification=card["qualification"], city=card["city"],
+            phone=card["phone"], is_hidden=bool(hidden))
+    except Exception as e:
+        print(f"[sync] set_coach_hidden: {e}")
+
 def _synced_delete_coach(self, cid):
     _original_delete_coach(self, cid)
     try:
@@ -1218,6 +1291,7 @@ Database.update_coach = _synced_update_coach
 Database.delete_coach = _synced_delete_coach
 Database.delete_athlete = _synced_delete_athlete
 Database.set_athlete_hidden = _synced_set_athlete_hidden
+Database.set_coach_hidden = _synced_set_coach_hidden
 Database.add_club = _synced_add_club
 Database.update_club = _synced_update_club
 Database.delete_club = _synced_delete_club
@@ -4624,7 +4698,8 @@ class AthletesWindow(ctk.CTkToplevel):
     #  ОКНО «ТРЕНЕРЫ» — общий реестр, не привязан к турниру
     # ════
 class CoachCard(ctk.CTkFrame):
-    def __init__(self, master, coach, athletes_count, on_edit, on_delete, index=None, **kwargs):
+    def __init__(self, master, coach, athletes_count, on_edit, on_delete, index=None,
+                 on_show=None, hidden=False, **kwargs):
         super().__init__(master, corner_radius=10, **kwargs)
         self.configure(fg_color=("#1e2a3a", "#1e2a3a"))
         c = coach
@@ -4652,6 +4727,9 @@ class CoachCard(ctk.CTkFrame):
         full_name = (c["full_name"] or "").strip()
         ctk.CTkLabel(self, text=full_name, font=ctk.CTkFont(size=14, weight="bold"),
                     anchor="w").grid(row=0, column=col + 1, sticky="w", padx=5, pady=(10, 0))
+        if hidden:
+            ctk.CTkLabel(self, text="🙈 скрыт", font=ctk.CTkFont(size=10, weight="bold"),
+                        text_color="#cc8844", anchor="w").grid(row=0, column=col + 2, sticky="w", padx=(0, 5), pady=(10, 0))
 
         # ── дата рождения (возраст) ──
         age_label = birth_age_label(c["birth_date"]) or "дата рождения не указана"
@@ -4674,8 +4752,15 @@ class CoachCard(ctk.CTkFrame):
         ctk.CTkLabel(self, text=row3, font=ctk.CTkFont(size=11), text_color="#44aa77",
                     anchor="w").grid(row=3, column=col + 1, sticky="w", padx=5, pady=(0, 10))
 
+        btn_col = col + 2
+        if hidden:
+            btn_col = col + 3
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        btn_frame.grid(row=0, column=col + 2, rowspan=4, padx=10, pady=10, sticky="e")
+        btn_frame.grid(row=0, column=btn_col, rowspan=4, padx=10, pady=10, sticky="e")
+        if hidden and on_show:
+            ctk.CTkButton(btn_frame, text="👁 Показать", width=90, height=32,
+                        fg_color="#2a4a2a", hover_color="#3a6a3a",
+                        command=lambda: on_show(c["id"])).pack(pady=2)
         ctk.CTkButton(btn_frame, text="✏️", width=36, height=32,
                     command=lambda: on_edit(c["id"])).pack(pady=2)
         ctk.CTkButton(btn_frame, text="🗑", width=36, height=32,
@@ -4730,13 +4815,33 @@ class CoachesWindow(ctk.CTkToplevel):
         if not coaches:
             ctk.CTkLabel(self.list_frame, text="Нет тренеров.",
                     text_color="#445566").pack(pady=20)
-            return
-        for i, c in enumerate(coaches, start=1):
-            count = len(self.db.get_athletes_by_coach(c["id"]))
-            card = CoachCard(self.list_frame, c, count,
-                    on_edit=self._add_coach_dialog,
-                    on_delete=self._delete_coach, index=i)
-            card.pack(fill="x", padx=5, pady=4)
+        else:
+            for i, c in enumerate(coaches, start=1):
+                count = len(self.db.get_athletes_by_coach(c["id"]))
+                card = CoachCard(self.list_frame, c, count,
+                        on_edit=self._add_coach_dialog,
+                        on_delete=self._delete_coach, index=i)
+                card.pack(fill="x", padx=5, pady=4)
+
+        hidden = self.db.search_hidden_coaches(self.search_var.get().strip())
+        if hidden:
+            ctk.CTkFrame(self.list_frame, height=2, fg_color="#334455").pack(fill="x", padx=5, pady=8)
+            ctk.CTkLabel(self.list_frame,
+                        text=f"🙈 Скрытые — удалены через админку сайта ({len(hidden)})",
+                        font=ctk.CTkFont(size=13, weight="bold"),
+                        text_color="#cc8844", anchor="w").pack(fill="x", padx=5, pady=(4, 2))
+            for i, c in enumerate(hidden, start=1):
+                count = len(self.db.get_athletes_by_coach(c["id"]))
+                card = CoachCard(self.list_frame, c, count,
+                        on_edit=self._add_coach_dialog,
+                        on_delete=self._delete_coach,
+                        on_show=self._show_coach, hidden=True, index=i)
+                card.pack(fill="x", padx=5, pady=4)
+
+    def _show_coach(self, cid):
+        """Вернуть тренера из «Скрытых» в обычный реестр (и на сайт)."""
+        self.db.set_coach_hidden(cid, False)
+        self._refresh_list()
 
     def _delete_coach(self, cid):
         if not messagebox.askyesno("Удалить",

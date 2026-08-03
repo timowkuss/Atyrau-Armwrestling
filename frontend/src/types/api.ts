@@ -256,6 +256,7 @@ export interface CoachAdminListItem extends CoachListItem {
   first_name: string | null
   last_name: string | null
   phone: string | null
+  is_hidden: boolean
 }
 
 export interface NewsListItem {
@@ -400,6 +401,7 @@ export interface CoachInput {
   photo_path?: string | null
   bio?: string | null
   phone?: string | null
+  is_hidden?: boolean
 }
 
 // --- Admin: athletes -------------------------------------------------------

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.v1.deps import require_desktop_sync
+from app.db.models.athletes import Athlete
 from app.db.models.clubs import Club
 from app.db.models.coaches import Coach
 from app.db.models.geo import City
@@ -18,6 +19,16 @@ from app.schemas.sync import (
 from app.services.cloudinary_photos import delete_cloudinary_photo
 
 router = APIRouter(prefix="/coaches", tags=["sync:coaches"])
+
+
+def _release_students(db: Session, coach_id: int) -> None:
+    """Тренер удалён или скрыт — все его ученики автоматически остаются
+    без тренера (coach_id → NULL). При жёстком удалении FK (ondelete=SET
+    NULL) справился бы и сам, но при скрытии (is_hidden) тренер остаётся
+    в БД — нужен явный UPDATE (зеркально админскому эндпоинту)."""
+    db.query(Athlete).filter(Athlete.coach_id == coach_id).update(
+        {Athlete.coach_id: None}, synchronize_session=False
+    )
 
 
 def _find_or_create_club(db: Session, club_name: str | None) -> int | None:
@@ -109,6 +120,7 @@ def get_coach_changes(
             qualification=c.qualification,
             city_name=city_name,
             phone=c.phone,
+            is_hidden=c.is_hidden,
             updated_at=c.updated_at.isoformat(),
         )
         for c, club_name, city_name in rows
@@ -233,6 +245,13 @@ def update_coach(
             continue
         setattr(coach, field, value)
 
+    # ── скрытие тренера: каскад (см. admin/coaches.py update_coach) ──
+    # Скрытая карточка покидает клуб (club_id=NULL) и отпускает всех
+    # своих учеников (coach_id=NULL у спортсменов).
+    if data.get("is_hidden"):
+        _release_students(db, coach.id)
+        coach.club_id = None
+
     db.commit()
 
     # Старое фото удаляем только ПОСЛЕ успешного сохранения новой ссылки
@@ -260,6 +279,9 @@ def delete_coach(
         raise HTTPException(status_code=404, detail="Тренер не найден")
 
     photo_path = coach.photo_path
+    # Явно отпускаем учеников (см. _release_students) — зеркально
+    # админскому delete_coach.
+    _release_students(db, coach_id)
     db.add(SyncTombstone(entity_type="coach", entity_id=coach_id))
     db.delete(coach)
     db.commit()

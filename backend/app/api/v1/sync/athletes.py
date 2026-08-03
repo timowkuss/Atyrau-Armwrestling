@@ -24,6 +24,18 @@ from datetime import date, datetime, timezone
 
 router = APIRouter(prefix="/athletes", tags=["sync:athletes"])
 
+def _detach_from_club_and_coach(db: Session, athlete: Athlete) -> None:
+    """Скрытие/удаление спортсмена: выход из клуба (штраф -10 рейтингу,
+    активность сбрасывается) и от тренера. Зеркально admin/athletes.py —
+    иначе скрытие с десктопа и скрытие с сайта вели бы себя по-разному."""
+    if athlete.club_id is not None:
+        apply_athlete_removed(db, athlete.id, athlete.club_id)
+        athlete.club_id = None
+        athlete.club_active = False
+        athlete.join_club_date = None
+        athlete.next_inactive_date = None
+    athlete.coach_id = None
+
 def _parse_birth_date(value: str) -> date:
     for fmt in ("%d.%m.%Y", "%Y-%m-%d"):
         try:
@@ -301,6 +313,10 @@ def update_athlete(
     for field, value in data.items():
         setattr(athlete, field, value)
 
+    # ── скрытие спортсмена: каскад (см. admin/athletes.py) ────────
+    if data.get("is_hidden"):
+        _detach_from_club_and_coach(db, athlete)
+
     db.commit()
 
     # Старое фото удаляем только ПОСЛЕ успешного сохранения новой ссылки
@@ -343,11 +359,14 @@ def delete_athlete(
         # (см. app/db/models/competitions.py). Прячем карточку вместо этого —
         # ровно то, что обещает диалог удаления в десктопе: "записи участий
         # не удаляются".
+        _detach_from_club_and_coach(db, athlete)
         athlete.is_hidden = True
         db.commit()
         return {"status": "hidden", "reason": "has_participations"}
 
     photo_path = athlete.photo_path
+    if athlete.club_id is not None:
+        apply_athlete_removed(db, athlete.id, athlete.club_id)
     db.add(SyncTombstone(entity_type="athlete", entity_id=athlete_id))
     db.delete(athlete)
     db.commit()

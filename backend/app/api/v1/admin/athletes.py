@@ -30,6 +30,22 @@ router = APIRouter(prefix="/athletes", tags=["admin:athletes"])
 WRITE_ROLES = ("super_admin", "admin")
 
 
+def _detach_from_club_and_coach(db: Session, athlete: Athlete) -> None:
+    """Скрытие/удаление спортсмена: он автоматически выходит из клуба
+    (штраф -10 рейтингу клуба, клубная активность сбрасывается) и от
+    тренера (coach_id=NULL). Ровно то, что обещает диалог удаления в
+    десктопе. Идемпотентно: повторный вызов на спортсмене уже без клуба
+    ничего не делает (apply_athlete_removed тоже идемпотентен — у
+    истории уникальный ключ)."""
+    if athlete.club_id is not None:
+        apply_athlete_removed(db, athlete.id, athlete.club_id)
+        athlete.club_id = None
+        athlete.club_active = False
+        athlete.join_club_date = None
+        athlete.next_inactive_date = None
+    athlete.coach_id = None
+
+
 @router.get("", response_model=list[AthleteAdminListOut])
 def list_athletes_admin(
     name: str | None = None,
@@ -146,6 +162,13 @@ def update_athlete(
         if not hasattr(athlete, field):
             continue
         setattr(athlete, field, value)
+
+    # ── скрытие спортсмена: каскад ────────────────────────────────
+    # Скрытая карточка выходит из клуба (штраф -10) и от тренера —
+    # ровно как при удалении. «Показать» ничего не восстанавливает.
+    if data.get("is_hidden"):
+        _detach_from_club_and_coach(db, athlete)
+
     db.commit()
 
     if photo_changed and old_photo_path:
@@ -201,11 +224,17 @@ def delete_athlete(
         # было — db.delete(athlete) на спортсмене с историей падал бы
         # необработанным IntegrityError (500) прямо в админке сайта. Фото
         # НЕ трогаем — карточка может снова стать видимой.
+        _detach_from_club_and_coach(db, athlete)
         athlete.is_hidden = True
         db.commit()
         return {"status": "hidden", "reason": "has_participations"}
 
     old_photo_path = athlete.photo_path
+
+    # Спортсмен без истории уходит из клуба со штрафом рейтингу (-10),
+    # как при любом другом выходе/переводе (см. update_athlete).
+    if athlete.club_id is not None:
+        apply_athlete_removed(db, athlete.id, athlete.club_id)
 
     # Tombstone для обратной синхронизации (сайт -> десктоп): без него
     # десктоп никогда бы не узнал об удалении из админки спортсмена без

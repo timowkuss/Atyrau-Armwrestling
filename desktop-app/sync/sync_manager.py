@@ -348,13 +348,15 @@ class SyncManager:
 
     def on_coach_updated(self, cid, full_name, club, photo_path, bio,
                           first_name=None, last_name=None, birth_date=None,
-                          iin=None, qualification=None, city=None, phone=None):
+                          iin=None, qualification=None, city=None, phone=None,
+                          is_hidden=None):
         remote_coach_id = self.state.map_get("coach", cid)
         payload = {"cid": cid, "full_name": full_name, "club": club,
                    "photo_path": photo_path, "bio": bio,
                    "first_name": first_name, "last_name": last_name,
                    "birth_date": birth_date, "iin": iin,
-                   "qualification": qualification, "city": city, "phone": phone}
+                   "qualification": qualification, "city": city, "phone": phone,
+                   "is_hidden": is_hidden}
         if remote_coach_id is None:
             self.state.enqueue("update_coach", payload)
             return None
@@ -366,7 +368,7 @@ class SyncManager:
                 first_name=first_name or None, last_name=last_name or None,
                 birth_date=birth_date or None, iin=iin or None,
                 qualification=qualification or None, city_name=city or None,
-                phone=phone or None,
+                phone=phone or None, is_hidden=is_hidden,
             )
             return remote_coach_id
 
@@ -1173,6 +1175,7 @@ class SyncManager:
                     iin=payload.get("iin") or None,
                     qualification=payload.get("qualification") or None,
                     city_name=payload.get("city") or None,
+                    phone=payload.get("phone") or None,
                 )
                 self.state.map_set("coach", payload["cid"], remote["id"])
                 return True
@@ -1199,6 +1202,8 @@ class SyncManager:
                         iin=payload.get("iin") or None,
                         qualification=payload.get("qualification") or None,
                         city_name=payload.get("city") or None,
+                        phone=payload.get("phone") or None,
+                        is_hidden=payload.get("is_hidden"),
                     )
                 except ApiClientError as e:
                     if e.status_code == 404:

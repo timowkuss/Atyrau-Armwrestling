@@ -85,7 +85,7 @@ def get_club(club_id: int, db: Session = Depends(get_db)):
     )
     coaches = (
         db.query(Coach)
-        .filter(Coach.club_id == club.id)
+        .filter(Coach.club_id == club.id, Coach.is_hidden.is_(False))
         .order_by(Coach.full_name)
         .all()
     )

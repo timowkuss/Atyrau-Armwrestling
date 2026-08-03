@@ -113,6 +113,16 @@ export function CoachesAdmin() {
     }
   }
 
+  async function handleToggleHidden(id: number, name: string, hide: boolean) {
+    setFeedback(null)
+    try {
+      await updateCoach.mutateAsync({ id, payload: { is_hidden: hide } })
+      setFeedback({ kind: 'success', message: `«${name}» ${hide ? 'скрыт с сайта' : 'снова виден на сайте'}.` })
+    } catch (err) {
+      setFeedback({ kind: 'error', message: (err as Error).message })
+    }
+  }
+
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -241,8 +251,11 @@ export function CoachesAdmin() {
         {coaches.isLoading && <LoadingState label="Загрузка тренеров" />}
         {coaches.isError && <ErrorState message={(coaches.error as Error).message} onRetry={() => coaches.refetch()} />}
         {coaches.data && (
-          <ul className="flex flex-col gap-3">
-            {coaches.data.items.map((coach) => (
+          <>
+            <ul className="flex flex-col gap-3">
+            {coaches.data.items
+              .filter((coach) => !coach.is_hidden)
+              .map((coach) => (
               <li key={coach.id} className="plate rounded-[var(--radius-rivet)] p-4">
                 {editingId === coach.id ? (
                   <div className="flex flex-col gap-3">
@@ -392,6 +405,12 @@ export function CoachesAdmin() {
                       >
                         Изменить
                       </button>
+                      <button
+                        onClick={() => handleToggleHidden(coach.id, coach.full_name, true)}
+                        className="rounded-[var(--radius-rivet)] border border-steel-dim px-3 py-1.5 text-sm text-steel hover:border-brass hover:text-brass"
+                      >
+                        Скрыть
+                      </button>
                       {canDelete && (
                         <button
                           onClick={() => handleDelete(coach.id, coach.full_name)}
@@ -405,7 +424,58 @@ export function CoachesAdmin() {
                 )}
               </li>
             ))}
-          </ul>
+            </ul>
+
+            {coaches.data.items.filter((c) => c.is_hidden).length > 0 && (
+              <div className="mt-6">
+                <h2 className="text-eyebrow text-amber">
+                  Скрытые — удалённые с сайта ({coaches.data.items.filter((c) => c.is_hidden).length})
+                </h2>
+                <div className="mt-3 flex gap-4 overflow-x-auto pb-2">
+                  {coaches.data.items
+                    .filter((c) => c.is_hidden)
+                    .map((coach) => (
+                      <div key={coach.id} className="plate w-56 flex-shrink-0 rounded-[var(--radius-rivet)] p-3">
+                        <div className="flex items-start gap-3">
+                          {coach.photo_path ? (
+                            <img
+                              src={cloudinaryThumb(coach.photo_path, 96) ?? undefined}
+                              alt=""
+                              className="h-14 w-14 flex-shrink-0 rounded-2xl object-cover border border-steel-dim"
+                              onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')}
+                            />
+                          ) : (
+                            <div className="h-14 w-14 flex-shrink-0 rounded-2xl bg-ink border border-steel-dim" />
+                          )}
+                          <div className="min-w-0">
+                            <p className="truncate font-display text-sm text-bone">{coach.full_name}</p>
+                            <p className="mt-1 truncate font-mono text-xs text-steel">
+                              {coach.club_name ?? 'без клуба'} · {coach.athletes_count} спортсменов
+                            </p>
+                          </div>
+                        </div>
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            onClick={() => handleToggleHidden(coach.id, coach.full_name, false)}
+                            className="flex-1 rounded-[var(--radius-rivet)] border border-steel-dim px-2 py-1.5 text-xs text-steel hover:border-brass hover:text-brass"
+                          >
+                            Показать
+                          </button>
+                          {canDelete && (
+                            <button
+                              onClick={() => handleDelete(coach.id, coach.full_name)}
+                              className="flex-1 rounded-[var(--radius-rivet)] border border-steel-dim px-2 py-1.5 text-xs text-steel hover:border-danger hover:text-danger"
+                            >
+                              Удалить
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

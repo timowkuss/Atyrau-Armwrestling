@@ -24,6 +24,17 @@ router = APIRouter(prefix="/coaches", tags=["admin:coaches"])
 WRITE_ROLES = ("super_admin", "admin")
 
 
+def _release_students(db: Session, coach_id: int) -> None:
+    """Тренер удалён или скрыт — все его ученики автоматически остаются
+    без тренера (coach_id → NULL), ровно как обещает диалог удаления.
+    При жёстком удалении FK (ondelete=SET NULL) справился бы и сам, но
+    при скрытии (is_hidden) тренер остаётся в БД — нужен явный UPDATE.
+    Скрытие идемпотентно: повторный вызов ничего не ломает."""
+    db.query(Athlete).filter(Athlete.coach_id == coach_id).update(
+        {Athlete.coach_id: None}, synchronize_session=False
+    )
+
+
 @router.get("", response_model=Page[CoachAdminListOut])
 def list_coaches_admin(
     page: int = 1,
@@ -62,6 +73,7 @@ def list_coaches_admin(
             last_name=coach.last_name,
             phone=coach.phone,
             athletes_count=athletes_count,
+            is_hidden=coach.is_hidden,
         )
         for coach, club_name, city_name, athletes_count in rows
     ]
@@ -92,6 +104,7 @@ def get_coach_admin(
         last_name=coach.last_name,
         phone=coach.phone,
         athletes_count=athletes_count,
+        is_hidden=coach.is_hidden,
     )
 
 
@@ -156,6 +169,16 @@ def update_coach(
 
     for field, value in data.items():
         setattr(coach, field, value)
+
+    # ── скрытие тренера: каскад ──────────────────────────────────
+    # Как и у спортсменов: скрытая карточка покидает клуб (club_id=NULL)
+    # и отпускает всех своих учеников (coach_id=NULL у спортсменов).
+    # Возврат видимости ("Показать") ничего не восстанавливает — тренера
+    # нужно заново привязать к клубу/ученикам, как в десктопе.
+    if data.get("is_hidden"):
+        _release_students(db, coach.id)
+        coach.club_id = None
+
     db.commit()
 
     if photo_changed and old_photo_path:
@@ -200,6 +223,11 @@ def delete_coach(
         raise HTTPException(status_code=404, detail="Тренер не найден")
 
     old_photo_path = coach.photo_path
+
+    # Сначала отпускаем учеников (явно, не полагаясь на FK SET NULL) —
+    # иначе между UPDATE/DELETE при отключённых внешних ключах часть
+    # спортсменов может остаться ссылаться на несуществующего тренера.
+    _release_students(db, coach_id)
 
     db.add(SyncTombstone(entity_type="coach", entity_id=coach_id))
     db.delete(coach)

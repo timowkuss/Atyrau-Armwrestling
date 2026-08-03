@@ -46,6 +46,7 @@ def coach_rankings(
     coaches = db.query(Coach).outerjoin(Club, Coach.club_id == Club.id).add_columns(
         Club.name.label("club_name"),
     )
+    coaches = coaches.filter(Coach.is_hidden.is_(False))
     if name:
         coaches = coaches.filter(Coach.full_name.ilike(f"%{name}%"))
     rows = coaches.all()

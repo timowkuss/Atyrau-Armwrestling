@@ -81,6 +81,7 @@ class CoachSyncUpdate(_StrictModel):
     qualification: str | None = None
     city_name: str | None = None
     phone: str | None = None
+    is_hidden: bool | None = None
 
 
 class CompetitionSyncCreate(_StrictModel):
@@ -174,6 +175,7 @@ class CoachChangeItem(BaseModel):
     qualification: str | None = None
     city_name: str | None = None
     phone: str | None = None
+    is_hidden: bool
     updated_at: str
 
 

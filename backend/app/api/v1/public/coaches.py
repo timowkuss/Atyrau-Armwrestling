@@ -33,6 +33,9 @@ def list_coaches(
         .outerjoin(Athlete, (Athlete.coach_id == Coach.id) & (Athlete.is_hidden.is_(False)))
         .group_by(Coach.id, Club.name, City.name)
     )
+    # Скрытые тренеры на публичный сайт не попадают (админка и десктоп
+    # видят их отдельно, в своих секциях «Скрытые»).
+    query = query.filter(Coach.is_hidden.is_(False))
     if name:
         query = query.filter(Coach.full_name.ilike(f"%{name}%"))
     if club_id is not None:
@@ -63,7 +66,7 @@ def list_coaches(
 
 @router.get("/{coach_id}", response_model=CoachDetailOut)
 def get_coach(coach_id: int, db: Session = Depends(get_db)):
-    coach = db.query(Coach).filter(Coach.id == coach_id).first()
+    coach = db.query(Coach).filter(Coach.id == coach_id, Coach.is_hidden.is_(False)).first()
     if coach is None:
         raise HTTPException(status_code=404, detail="Тренер не найден")
 

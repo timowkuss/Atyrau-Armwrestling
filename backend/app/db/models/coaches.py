@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -36,6 +36,13 @@ class Coach(Base):
 
     photo_path: Mapped[str | None] = mapped_column(String(500))
     bio: Mapped[str | None] = mapped_column(Text)
+
+    # Скрытые тренеры (см. is_hidden у Athlete): админка «удаляет» тренера,
+    # но полностью стереть его нельзя — карточку прячем, оставаясь
+    # доступной в секции «Скрытые». Скрытые тренеры не показываются на
+    # публичном сайте, в админке/десктопе — только в отдельной секции.
+    is_hidden: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
     club_id: Mapped[int | None] = mapped_column(
         ForeignKey("clubs.id", ondelete="SET NULL")
     )

@@ -82,6 +82,7 @@ class CoachAdminListOut(CoachListOut):
     first_name: str | None
     last_name: str | None
     phone: str | None = None
+    is_hidden: bool = False
 
 
 class CoachAdminDetailOut(CoachDetailOut):
@@ -89,6 +90,7 @@ class CoachAdminDetailOut(CoachDetailOut):
     first_name: str | None
     last_name: str | None
     phone: str | None = None
+    is_hidden: bool = False
 
 
 class CoachCreate(BaseModel):
@@ -127,6 +129,7 @@ class CoachUpdate(BaseModel):
     photo_path: str | None = None
     bio: str | None = None
     phone: str | None = None
+    is_hidden: bool | None = None
 
     _validate_iin_field = field_validator("iin")(_validate_iin)
     _validate_birth_date_field = field_validator("birth_date")(_validate_birth_date)
