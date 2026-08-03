@@ -68,6 +68,17 @@ def _normalize_gender_for_desktop(gender: str | None) -> str:
     return "F" if gender == "female" else "M"
 
 
+def _to_founded_year(value) -> int | None:
+    """Сервер отдаёт founded_date как ISO 'ГГГГ-ММ-ДД'; десктоп хранит
+    только founded_year (INTEGER) — берём первые 4 символа как год."""
+    if not value:
+        return None
+    try:
+        return int(str(value).strip()[:4])
+    except (TypeError, ValueError):
+        return None
+
+
 class PullSyncManager:
     def __init__(self, api_client=None, state=None, db_path=None, poll_interval=10,
                  on_changes_applied=None):
@@ -114,12 +125,14 @@ class PullSyncManager:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA busy_timeout = 5000")
         try:
-            # Клубы — ПЕРЕД спортсменами: при upsert'е спортсмена по имени
-            # клуба он может понадобиться уже существующим локально.
-            applied += self._poll_clubs(conn)
-            # Тренеры — ПЕРЕД спортсменами (см. docstring модуля).
-            applied += self._poll_coaches(conn)
-            applied += self._poll_athletes(conn)
+            # Каждый поллёр оборачиваем отдельно: сбой одной сущности
+            # (например, временное падение/деплой сервера) не должен ронять
+            # весь цикл и лишать синхронизации остальных.
+            for poller in (self._poll_clubs, self._poll_coaches, self._poll_athletes):
+                try:
+                    applied += poller(conn)
+                except Exception as e:  # noqa: BLE001
+                    print(f"[pull-sync] {poller.__name__}: {e}")
         finally:
             conn.close()
 
@@ -156,13 +169,13 @@ class PullSyncManager:
         name = (item.get("name") or "").strip()
         city = item.get("city_name")
         address = item.get("address")
-        founded_date = _to_desktop_date(item.get("founded_date")) if item.get("founded_date") else None
+        founded_year = _to_founded_year(item.get("founded_date"))
         logo_path = item.get("logo_path")
 
         local_id = self.state.map_get_local("club", remote_id)
         if local_id is not None:
             return self._apply_club(conn, local_id, name, city, address,
-                                    founded_date, logo_path, remote_id=remote_id)
+                                    founded_year, logo_path, remote_id=remote_id)
 
         # Клуб мог уже существовать локально под этим же именем (создан в
         # десктопе и ещё не успел уйти на сервер) — сопоставляем по имени,
@@ -172,30 +185,30 @@ class PullSyncManager:
         ).fetchone()
         if row is not None:
             return self._apply_club(conn, row[0], name, city, address,
-                                    founded_date, logo_path, remote_id=remote_id)
+                                    founded_year, logo_path, remote_id=remote_id)
 
         cur = conn.execute(
-            "INSERT INTO clubs (name, city, address, founded_date, logo_path) "
+            "INSERT INTO clubs (name, city, address, founded_year, logo_path) "
             "VALUES (?,?,?,?,?)",
-            (name, city, address, founded_date, logo_path),
+            (name, city, address, founded_year, logo_path),
         )
         self.state.map_set("club", cur.lastrowid, remote_id)
         return True
 
     def _apply_club(self, conn: sqlite3.Connection, local_id: int, name, city,
-                    address, founded_date, logo_path, remote_id: int) -> bool:
+                    address, founded_year, logo_path, remote_id: int) -> bool:
         row = conn.execute(
-            "SELECT name, city, address, founded_date, logo_path FROM clubs WHERE id=?",
+            "SELECT name, city, address, founded_year, logo_path FROM clubs WHERE id=?",
             (local_id,),
         ).fetchone()
-        current = (row["name"], row["city"], row["address"], row["founded_date"], row["logo_path"])
-        new = (name, city, address, founded_date, logo_path)
+        current = (row["name"], row["city"], row["address"], row["founded_year"], row["logo_path"])
+        new = (name, city, address, founded_year, logo_path)
         if current == new:
             self.state.map_set("club", local_id, remote_id)
             return False
         conn.execute(
-            "UPDATE clubs SET name=?, city=?, address=?, founded_date=?, logo_path=? WHERE id=?",
-            (name, city, address, founded_date, logo_path, local_id),
+            "UPDATE clubs SET name=?, city=?, address=?, founded_year=?, logo_path=? WHERE id=?",
+            (name, city, address, founded_year, logo_path, local_id),
         )
         self.state.map_set("club", local_id, remote_id)
         return True
