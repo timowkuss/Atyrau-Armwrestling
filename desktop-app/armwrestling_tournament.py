@@ -4486,8 +4486,8 @@ class CoachesWindow(ctk.CTkToplevel):
             dlg.minsize(1300, 650)
             dlg.resizable(True, True)
         else:
-            dlg.geometry("720x800")
-            dlg.minsize(680, 740)
+            dlg.geometry("720x850")
+            dlg.minsize(680, 790)
             dlg.resizable(False, False)
         dlg.configure(bg=BG)
         dlg.transient(self)
