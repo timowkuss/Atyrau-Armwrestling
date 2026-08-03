@@ -23,6 +23,44 @@ const EMPTY_FORM: AthleteInput = { full_name: '', gender: 'male', phone: '8(' }
 
 const RANKS = ['КМС', 'МС', 'МСМК', 'ЗМС', 'Без звания']
 
+// В базе ФИО хранится одной строкой; на форме — отдельными полями
+// «Фамилия» и «Имя» (assembles в "Фамилия Имя").
+function splitName(value: string): { first: string; last: string } {
+  const parts = value.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 1) return { first: parts[0], last: '' }
+  return { first: parts.slice(0, -1).join(' '), last: parts[parts.length - 1] }
+}
+
+function NameFields({ seed, onChange }: { seed: string; onChange: (full: string) => void }) {
+  const [last, setLast] = useState(splitName(seed).last)
+  const [first, setFirst] = useState(splitName(seed).first)
+  const emit = (l: string, f: string) => onChange(`${l} ${f}`.trim())
+  return (
+    <div className="flex gap-3">
+      <input
+        required
+        placeholder="Фамилия"
+        value={last}
+        onChange={(e) => {
+          setLast(e.target.value)
+          emit(e.target.value, first)
+        }}
+        className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+      />
+      <input
+        required
+        placeholder="Имя"
+        value={first}
+        onChange={(e) => {
+          setFirst(e.target.value)
+          emit(last, e.target.value)
+        }}
+        className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+      />
+    </div>
+  )
+}
+
 export function AthletesAdmin() {
   const { user } = useAuth()
   const canDelete = user?.role_code === 'super_admin'
@@ -111,13 +149,7 @@ export function AthletesAdmin() {
 
       {showCreate && (
         <form onSubmit={handleCreate} className="plate mt-4 flex flex-col gap-3 rounded-[var(--radius-rivet)] p-4">
-          <input
-            required
-            placeholder="ФИО"
-            value={form.full_name}
-            onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-            className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
-          />
+          <NameFields key={showCreate ? 'new' : 'new'} seed="" onChange={(full) => setForm({ ...form, full_name: full })} />
           <div className="flex flex-wrap gap-3">
             <select
               value={form.gender}
@@ -204,10 +236,10 @@ export function AthletesAdmin() {
               <li key={a.id} className="plate rounded-[var(--radius-rivet)] p-4">
                 {editingId === a.id ? (
                   <div className="flex flex-col gap-3">
-                    <input
-                      defaultValue={a.full_name}
-                      onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
-                      className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+                    <NameFields
+                      key={`edit-${editingId}`}
+                      seed={a.full_name ?? ''}
+                      onChange={(full) => setEditForm({ ...editForm, full_name: full })}
                     />
                     <div className="flex flex-wrap gap-3">
                       <select
