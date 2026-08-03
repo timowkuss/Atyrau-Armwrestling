@@ -31,12 +31,20 @@ function splitName(value: string): { first: string; last: string } {
   return { first: parts.slice(0, -1).join(' '), last: parts[parts.length - 1] }
 }
 
-function NameFields({ seed, onChange }: { seed: string; onChange: (full: string) => void }) {
+function NameFields({
+  seed,
+  onChange,
+  extra,
+}: {
+  seed: string
+  onChange: (full: string) => void
+  extra?: React.ReactNode
+}) {
   const [last, setLast] = useState(splitName(seed).last)
   const [first, setFirst] = useState(splitName(seed).first)
   const emit = (l: string, f: string) => onChange(`${l} ${f}`.trim())
   return (
-    <div className="flex gap-3">
+    <div className="flex flex-wrap gap-3">
       <input
         required
         placeholder="Фамилия"
@@ -57,6 +65,7 @@ function NameFields({ seed, onChange }: { seed: string; onChange: (full: string)
         }}
         className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
       />
+      {extra}
     </div>
   )
 }
@@ -149,7 +158,23 @@ export function AthletesAdmin() {
 
       {showCreate && (
         <form onSubmit={handleCreate} className="plate mt-4 flex flex-col gap-3 rounded-[var(--radius-rivet)] p-4">
-          <NameFields key={showCreate ? 'new' : 'new'} seed="" onChange={(full) => setForm({ ...form, full_name: full })} />
+          <NameFields
+            key="new"
+            seed=""
+            onChange={(full) => setForm({ ...form, full_name: full })}
+            extra={
+              <input
+                required
+                placeholder="ИИН (12 цифр)"
+                inputMode="numeric"
+                maxLength={12}
+                pattern="\d{12}"
+                value={form.iin ?? ''}
+                onChange={(e) => setForm({ ...form, iin: e.target.value.replace(/\D/g, '').slice(0, 12) || undefined })}
+                className="w-40 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+              />
+            }
+          />
           <div className="flex flex-wrap gap-3">
             <select
               value={form.gender}
@@ -183,16 +208,6 @@ export function AthletesAdmin() {
               value={form.phone ?? '8('}
               onChange={(e) => setForm({ ...form, phone: formatPhoneChange(form.phone, e.target.value) })}
               className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
-            />
-            <input
-              required
-              placeholder="ИИН (12 цифр)"
-              inputMode="numeric"
-              maxLength={12}
-              pattern="\d{12}"
-              value={form.iin ?? ''}
-              onChange={(e) => setForm({ ...form, iin: e.target.value.replace(/\D/g, '').slice(0, 12) || undefined })}
-              className="w-40 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
             />
           </div>
           <div className="flex flex-wrap gap-3">
@@ -250,6 +265,21 @@ export function AthletesAdmin() {
                       key={`edit-${editingId}`}
                       seed={a.full_name ?? ''}
                       onChange={(full) => setEditForm({ ...editForm, full_name: full })}
+                      extra={
+                        <input
+                          placeholder="ИИН: оставить прежний"
+                          inputMode="numeric"
+                          maxLength={12}
+                          defaultValue={a.iin ?? ''}
+                          onChange={(e) =>
+                            setEditForm({
+                              ...editForm,
+                              iin: e.target.value.replace(/\D/g, '').slice(0, 12) || undefined,
+                            })
+                          }
+                          className="w-48 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+                        />
+                      }
                     />
                     <div className="flex flex-wrap gap-3">
                       <select
@@ -272,19 +302,6 @@ export function AthletesAdmin() {
                         defaultValue={a.phone ?? ''}
                         onChange={(e) => setEditForm({ ...editForm, phone: formatPhoneChange(editForm.phone, e.target.value) })}
                         className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
-                      />
-                      <input
-                        placeholder="ИИН: оставить прежний"
-                        inputMode="numeric"
-                        maxLength={12}
-                        defaultValue={a.iin ?? ''}
-                        onChange={(e) =>
-                          setEditForm({
-                            ...editForm,
-                            iin: e.target.value.replace(/\D/g, '').slice(0, 12) || undefined,
-                          })
-                        }
-                        className="w-48 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
                       />
                       <select
                         defaultValue=""
