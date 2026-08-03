@@ -21,9 +21,23 @@ from datetime import datetime
 
 from . import config
 from .api_client import ApiClientError
+from .photo_cache import resolve_local_photo_path
 
 _CURSOR_ATHLETES = "athletes"
 _CURSOR_COACHES = "coaches"
+
+def _warm_photo(photo_path):
+    """Скачивает облачную фотку (Cloudinary URL) в локальный кэш, чтобы на
+    десктопе она показалась сразу, а не при первом запросе с экрана."""
+    if not photo_path:
+        return
+    s = str(photo_path)
+    if not (s.startswith("http://") or s.startswith("https://")):
+        return
+    try:
+        resolve_local_photo_path(s)
+    except Exception as e:
+        print(f"[pull-sync] не удалось прогреть фото {s}: {e}")
 def _to_desktop_date(value: str | None) -> str:
     """Центральная база отдаёт birth_date в ISO (ГГГГ-ММ-ДД —
     a.birth_date.isoformat() на сервере), а вся остальная десктоп-логика
@@ -245,6 +259,7 @@ class PullSyncManager:
         full_name = (item.get("full_name") or "").strip()
         club = item.get("club_name")
         photo_path = item.get("photo_path")
+        _warm_photo(photo_path)
         bio = item.get("bio")
         first_name = item.get("first_name")
         last_name = item.get("last_name")
@@ -351,6 +366,7 @@ class PullSyncManager:
         club = item.get("club_name")
         rank = item.get("rank")
         photo_path = item.get("photo_path")
+        _warm_photo(photo_path)
         iin = item.get("iin")
         phone = item.get("phone")
         coach_id = self._resolve_local_coach_id(conn, item.get("coach_name"))
