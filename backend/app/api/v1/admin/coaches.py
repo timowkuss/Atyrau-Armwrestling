@@ -126,6 +126,11 @@ def update_coach(
 
     data = payload.model_dump(exclude_unset=True)
 
+    # ── пустой ИИН = стёрт: храним NULL, а не '' (иначе unique-constraint
+    # посчитает двух тренеров с пустым ИИН дубликатом) ──────────────────
+    if "iin" in data and not data["iin"]:
+        data["iin"] = None
+
     if data.get("iin") and (
         db.query(Coach)
         .filter(Coach.iin == data["iin"], Coach.id != coach_id)

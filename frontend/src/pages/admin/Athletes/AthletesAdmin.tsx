@@ -76,6 +76,7 @@ export function AthletesAdmin() {
 
   const [search, setSearch] = useState('')
   const athletes = useAdminAthletes(search || undefined)
+  const allAthletes = useAdminAthletes()
   const clubs = useAdminClubsList()
   const coaches = useAdminCoachesList()
 
@@ -90,9 +91,22 @@ export function AthletesAdmin() {
   const [statsOpenId, setStatsOpenId] = useState<number | null>(null)
   const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
 
+  const createIinConflict = form.iin
+    ? (allAthletes.data?.find((a) => a.iin === form.iin) ?? null)
+    : null
+  const editingAthlete = editingId !== null ? (allAthletes.data?.find((a) => a.id === editingId) ?? null) : null
+  const editIinValue = editForm.iin ?? editingAthlete?.iin ?? null
+  const editIinConflict = editIinValue
+    ? (allAthletes.data?.find((a) => a.iin === editIinValue && a.id !== editingId) ?? null)
+    : null
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
     setFeedback(null)
+    if (createIinConflict) {
+      setFeedback({ kind: 'error', message: `Спортсмен с таким ИИН уже существует: ${createIinConflict.full_name}` })
+      return
+    }
     try {
       await createAthlete.mutateAsync(form)
       setFeedback({ kind: 'success', message: `Спортсмен «${form.full_name}» добавлен.` })
@@ -105,6 +119,10 @@ export function AthletesAdmin() {
 
   async function handleUpdate(id: number) {
     setFeedback(null)
+    if (editIinConflict) {
+      setFeedback({ kind: 'error', message: `Спортсмен с таким ИИН уже существует: ${editIinConflict.full_name}` })
+      return
+    }
     try {
       await updateAthlete.mutateAsync({ id, payload: editForm })
       setFeedback({ kind: 'success', message: 'Изменения сохранены.' })
@@ -170,17 +188,24 @@ export function AthletesAdmin() {
             seed=""
             onChange={(full) => setForm({ ...form, full_name: full })}
             extra={
-              <input
-                required
-                placeholder="ИИН (12 цифр)"
-                inputMode="numeric"
-                maxLength={12}
-                pattern="\d{12}"
-                value={form.iin ?? ''}
-                onKeyDown={blockNonDigits}
-                onChange={(e) => setForm({ ...form, iin: e.target.value.replace(/\D/g, '').slice(0, 12) || undefined })}
-                className="w-40 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
-              />
+              <div className="flex flex-col gap-1">
+                <input
+                  required
+                  placeholder="ИИН (12 цифр)"
+                  inputMode="numeric"
+                  maxLength={12}
+                  pattern="\d{12}"
+                  value={form.iin ?? ''}
+                  onKeyDown={blockNonDigits}
+                  onChange={(e) => setForm({ ...form, iin: e.target.value.replace(/\D/g, '').slice(0, 12) || undefined })}
+                  className="w-40 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+                />
+                {createIinConflict && (
+                  <p className="text-xs text-red-400">
+                    Спортсмен с таким ИИН уже существует: {createIinConflict.full_name}
+                  </p>
+                )}
+              </div>
             }
           />
           <div className="flex flex-wrap gap-3">
@@ -281,20 +306,27 @@ export function AthletesAdmin() {
                       seed={a.full_name ?? ''}
                       onChange={(full) => setEditForm({ ...editForm, full_name: full })}
                       extra={
-                        <input
-                          placeholder="ИИН: оставить прежний"
-                          inputMode="numeric"
-                          maxLength={12}
-                          value={editForm.iin ?? a.iin ?? ''}
-                          onKeyDown={blockNonDigits}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              iin: e.target.value.replace(/\D/g, '').slice(0, 12) || undefined,
-                            })
-                          }
-                          className="w-48 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
-                        />
+                        <div className="flex flex-col gap-1">
+                          <input
+                            placeholder="ИИН: оставить прежний"
+                            inputMode="numeric"
+                            maxLength={12}
+                            value={editForm.iin ?? a.iin ?? ''}
+                            onKeyDown={blockNonDigits}
+                            onChange={(e) =>
+                              setEditForm({
+                                ...editForm,
+                                iin: e.target.value.replace(/\D/g, '').slice(0, 12),
+                              })
+                            }
+                            className="w-48 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+                          />
+                          {editIinConflict && (
+                            <p className="text-xs text-red-400">
+                              Спортсмен с таким ИИН уже существует: {editIinConflict.full_name}
+                            </p>
+                          )}
+                        </div>
                       }
                     />
                     <div className="flex flex-wrap gap-3">

@@ -45,6 +45,15 @@ export function CoachesAdmin() {
   const [editForm, setEditForm] = useState<Partial<CoachInput>>({})
   const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
 
+  const createIinConflict = form.iin
+    ? (coaches.data?.items.find((c) => c.iin === form.iin) ?? null)
+    : null
+  const editingCoach = editingId !== null ? (coaches.data?.items.find((c) => c.id === editingId) ?? null) : null
+  const editIinValue = editForm.iin ?? editingCoach?.iin ?? null
+  const editIinConflict = editIinValue
+    ? (coaches.data?.items.find((c) => c.iin === editIinValue && c.id !== editingId) ?? null)
+    : null
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
     setFeedback(null)
@@ -58,6 +67,10 @@ export function CoachesAdmin() {
     }
     if (!isValidIin(form.iin)) {
       setFeedback({ kind: 'error', message: 'ИИН должен состоять ровно из 12 цифр.' })
+      return
+    }
+    if (createIinConflict) {
+      setFeedback({ kind: 'error', message: `Тренер с таким ИИН уже существует: ${createIinConflict.full_name}` })
       return
     }
     try {
@@ -74,6 +87,10 @@ export function CoachesAdmin() {
     setFeedback(null)
     if (editForm.iin !== undefined && editForm.iin !== '' && !isValidIin(editForm.iin)) {
       setFeedback({ kind: 'error', message: 'ИИН должен состоять ровно из 12 цифр.' })
+      return
+    }
+    if (editIinConflict) {
+      setFeedback({ kind: 'error', message: `Тренер с таким ИИН уже существует: ${editIinConflict.full_name}` })
       return
     }
     try {
@@ -144,17 +161,24 @@ export function CoachesAdmin() {
               onChange={(e) => setForm({ ...form, birth_date: e.target.value })}
               className={inputClass}
             />
-            <input
-              required
-              placeholder="ИИН (12 цифр)"
-              inputMode="numeric"
-              maxLength={12}
-              pattern="\d{12}"
-              value={form.iin}
-              onKeyDown={blockNonDigits}
-              onChange={(e) => setForm({ ...form, iin: e.target.value.replace(/\D/g, '').slice(0, 12) })}
-              className={`w-40 ${inputClass}`}
-            />
+            <div className="flex flex-col gap-1">
+              <input
+                required
+                placeholder="ИИН (12 цифр)"
+                inputMode="numeric"
+                maxLength={12}
+                pattern="\d{12}"
+                value={form.iin}
+                onKeyDown={blockNonDigits}
+                onChange={(e) => setForm({ ...form, iin: e.target.value.replace(/\D/g, '').slice(0, 12) })}
+                className={`w-40 ${inputClass}`}
+              />
+              {createIinConflict && (
+                <p className="text-xs text-red-400">
+                  Тренер с таким ИИН уже существует: {createIinConflict.full_name}
+                </p>
+              )}
+            </div>
             <input
               placeholder="Телефон 8(XXX)XXX-XX-XX"
               inputMode="tel"
@@ -237,15 +261,22 @@ export function CoachesAdmin() {
                       />
                     </div>
                     <div className="flex flex-wrap gap-3">
-                      <input
-                        placeholder="ИИН: оставить прежний"
-                        inputMode="numeric"
-                        maxLength={12}
-                        value={editForm.iin ?? coach.iin ?? ''}
-                        onKeyDown={blockNonDigits}
-                        onChange={(e) => setEditForm({ ...editForm, iin: e.target.value.replace(/\D/g, '').slice(0, 12) })}
-                        className={`w-48 ${inputClass}`}
-                      />
+                      <div className="flex flex-col gap-1">
+                        <input
+                          placeholder="ИИН: оставить прежний"
+                          inputMode="numeric"
+                          maxLength={12}
+                          value={editForm.iin ?? coach.iin ?? ''}
+                          onKeyDown={blockNonDigits}
+                          onChange={(e) => setEditForm({ ...editForm, iin: e.target.value.replace(/\D/g, '').slice(0, 12) })}
+                          className={`w-48 ${inputClass}`}
+                        />
+                        {editIinConflict && (
+                          <p className="text-xs text-red-400">
+                            Тренер с таким ИИН уже существует: {editIinConflict.full_name}
+                          </p>
+                        )}
+                      </div>
                       <input
                         placeholder="Телефон 8(XXX)XXX-XX-XX"
                         inputMode="tel"

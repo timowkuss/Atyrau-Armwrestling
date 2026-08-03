@@ -141,6 +141,16 @@ def create_coach(
     birth_date = _parse_birth_date(payload.birth_date)
 
     existing = _find_existing_coach(db, payload.full_name)
+
+    # ── ИИН уникален для всех тренеров ──────────────────────────────
+    if payload.iin:
+        dup = db.query(Coach).filter(Coach.iin == payload.iin).first()
+        if dup is not None and (existing is None or dup.id != existing.id):
+            raise HTTPException(
+                status_code=409,
+                detail="Тренер с таким ИИН уже существует",
+            )
+
     if existing is not None:
         # Тот же тренер уже есть на сервере — не плодим дубль, отдаём его
         # id (десктоп сохранит в id_map, как будто сам его создал), заодно
@@ -199,6 +209,18 @@ def update_coach(
 
     old_photo_path = coach.photo_path
     data = payload.model_dump(exclude_unset=True)
+
+    # ── ИИН уникален для всех тренеров ──────────────────────────────
+    if data.get("iin"):
+        dup = db.query(Coach).filter(
+            Coach.iin == data["iin"], Coach.id != coach_id
+        ).first()
+        if dup is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Тренер с таким ИИН уже существует",
+            )
+
     if "club_name" in data:
         coach.club_id = _find_or_create_club(db, data.pop("club_name"))
     if "city_name" in data:

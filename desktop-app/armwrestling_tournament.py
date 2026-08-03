@@ -183,6 +183,24 @@ def extract_birth_year(birth_date_str):
         return datetime.now().year
 
 
+def birth_age_label(birth_date_str):
+    """'ДД.ММ.ГГГГ' -> 'ДД.ММ.ГГГГ (N лет)' с точным возрастом на сегодня.
+    Понимает и ISO 'ГГГГ-ММ-ДД' (наследие старого pull_sync)."""
+    if not birth_date_str:
+        return ""
+    s = str(birth_date_str).strip()
+    try:
+        bd = datetime.strptime(s, "%d.%m.%Y")
+    except ValueError:
+        try:
+            bd = datetime.strptime(s, "%Y-%m-%d")
+        except ValueError:
+            return s
+    today = datetime.now()
+    age = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
+    return f"{bd.strftime('%d.%m.%Y')} ({age} лет)"
+
+
 def load_photo_thumbnail(path, width, height):
     """Открывает фото и готовит качественный превью нужного размера:
     сначала центр-кроп под целевые пропорции (чтобы не растягивать лицо),
@@ -760,6 +778,23 @@ iin TEXT,                        -- ИИН, 12 цифр
 
     def get_athlete(self, aid):
         return self.conn.execute("SELECT * FROM athletes WHERE id=?", (aid,)).fetchone()
+
+    # ── поиск по ИИН (уникальность: один спортсмен = один ИИН) ─────
+    def find_athlete_by_iin(self, iin, exclude_id=None):
+        if exclude_id:
+            return self.conn.execute(
+                "SELECT id, first_name, last_name FROM athletes WHERE iin=? AND id!=?",
+                (iin, exclude_id)).fetchone()
+        return self.conn.execute(
+            "SELECT id, first_name, last_name FROM athletes WHERE iin=?", (iin,)).fetchone()
+
+    def find_coach_by_iin(self, iin, exclude_id=None):
+        if exclude_id:
+            return self.conn.execute(
+                "SELECT id, full_name FROM coaches WHERE iin=? AND id!=?",
+                (iin, exclude_id)).fetchone()
+        return self.conn.execute(
+            "SELECT id, full_name FROM coaches WHERE iin=?", (iin,)).fetchone()
 
     # ── клубы ──────────────────────────────────────────────────
     def get_clubs(self, query=""):
@@ -4252,8 +4287,8 @@ class AthletesWindow(ctk.CTkToplevel):
     def _add_athlete_dialog(self, edit_id=None):
         dlg = tk.Toplevel(self)
         dlg.title("Редактировать спортсмена" if edit_id else "Добавить спортсмена")
-        dlg.geometry("660x710")
-        dlg.minsize(480, 710)
+        dlg.geometry("660x750")
+        dlg.minsize(480, 740)
         dlg.configure(bg=PANEL)
 
         fields = {}
@@ -4278,6 +4313,21 @@ class AthletesWindow(ctk.CTkToplevel):
         lbl_entry(form, "ИИН* (12 цифр):", "iin", existing["iin"] if existing else "", row=2,
                   placeholder="12 цифр")
 
+        iin_err_lbl = ctk.CTkLabel(form, text="", text_color=ERR,
+                                   font=ctk.CTkFont(size=10), anchor="w")
+        iin_err_lbl.grid(row=3, column=0, columnspan=2, padx=(128, 15), sticky="w")
+
+        def check_iin_dup():
+            value = fields["iin_entry"].get().strip()
+            conflict = None
+            if len(value) == 12 and value.isdigit():
+                conflict = self.db.find_athlete_by_iin(value, exclude_id=edit_id)
+            if conflict:
+                iin_err_lbl.configure(
+                    text="⚠ Спортсмен с таким ИИН уже существует", text_color=ERR)
+            else:
+                iin_err_lbl.configure(text="")
+
         def format_iin(event=None):
             raw = fields["iin_entry"].get()
             value = "".join(ch for ch in raw if ch.isdigit())[:12]
@@ -4285,16 +4335,18 @@ class AthletesWindow(ctk.CTkToplevel):
                 fields["iin_entry"].delete(0, "end")
                 fields["iin_entry"].insert(0, value)
                 fields["iin_entry"].icursor(len(value))
+            check_iin_dup()
 
         fields["iin_entry"].bind("<KeyRelease>", format_iin)
+        check_iin_dup()
 
         # ─── Телефон с маской 8(XXX)XXX-XX-XX ───
         ctk.CTkLabel(form, text="Телефон:", anchor="e", width=110).grid(
-            row=3, column=0, padx=(15, 8), pady=8, sticky="e")
+            row=4, column=0, padx=(15, 8), pady=8, sticky="e")
         phone_var = ctk.StringVar(value="8(" if not existing else (existing["phone"] or "8("))
         phone_entry = ctk.CTkEntry(form, textvariable=phone_var, width=260,
                     placeholder_text="8(702)313-53-83")
-        phone_entry.grid(row=3, column=1, padx=(0, 15), pady=8, sticky="w")
+        phone_entry.grid(row=4, column=1, padx=(0, 15), pady=8, sticky="w")
         fields["phone"] = phone_var
 
         def format_phone(event=None):
@@ -4330,11 +4382,11 @@ class AthletesWindow(ctk.CTkToplevel):
         phone_entry.bind("<Key>", block_extra)
 
         ctk.CTkLabel(form, text="Дата рожд.*:", anchor="e", width=110).grid(
-            row=4, column=0, padx=(15, 8), pady=8, sticky="e")
+            row=5, column=0, padx=(15, 8), pady=8, sticky="e")
         birth_date_var = ctk.StringVar(value=existing["birth_date"] if existing else "")
         birth_entry = ctk.CTkEntry(form, textvariable=birth_date_var, width=260,
                     placeholder_text="  .  .    ")
-        birth_entry.grid(row=4, column=1, padx=(0, 15), pady=8, sticky="w")
+        birth_entry.grid(row=5, column=1, padx=(0, 15), pady=8, sticky="w")
 
         def format_birthdate(event=None):
             now_year = datetime.now().year
@@ -4365,14 +4417,14 @@ class AthletesWindow(ctk.CTkToplevel):
 
         # ─── Пол ───
         ctk.CTkLabel(form, text="Пол*:", anchor="e", width=110).grid(
-            row=5, column=0, padx=(15, 8), pady=8, sticky="e")
+            row=6, column=0, padx=(15, 8), pady=8, sticky="e")
         gender_display = {"M": "Мужской", "F": "Женский"}
         gender_reverse = {"Мужской": "M", "Женский": "F"}
         gender_var = ctk.StringVar(
             value=gender_display.get(existing["gender"], "Мужской") if existing else "Мужской")
         OptionMenu(form, variable=gender_var,
                     values=["Мужской", "Женский"], width=260
-                    ).grid(row=5, column=1, padx=(0, 15), pady=8, sticky="w")
+                    ).grid(row=6, column=1, padx=(0, 15), pady=8, sticky="w")
 
         # ─── Клуб (выпадающий список из реестра «Клубы») ───
         _NO_CLUB = "— нет —"
@@ -4397,18 +4449,18 @@ class AthletesWindow(ctk.CTkToplevel):
             club_display_to_id[existing_club_name] = None
         club_var.set(existing_club_name)
         ctk.CTkLabel(form, text="Клуб:", anchor="e", width=110).grid(
-            row=6, column=0, padx=(15, 8), pady=8, sticky="e")
+            row=7, column=0, padx=(15, 8), pady=8, sticky="e")
         OptionMenu(form, variable=club_var,
                     values=list(club_display_to_id.keys()), width=260
-                    ).grid(row=6, column=1, padx=(0, 15), pady=8, sticky="w")
+                    ).grid(row=7, column=1, padx=(0, 15), pady=8, sticky="w")
 
         # ─── Звание (выпадающий список, обязательное) ───
         ctk.CTkLabel(form, text="Звание*:", anchor="e", width=110).grid(
-            row=7, column=0, padx=(15, 8), pady=8, sticky="e")
+            row=8, column=0, padx=(15, 8), pady=8, sticky="e")
         rank_var = ctk.StringVar(
             value=existing["rank"] if existing and existing["rank"] in RANKS else "Без звания")
         OptionMenu(form, variable=rank_var, values=RANKS, width=260
-                    ).grid(row=7, column=1, padx=(0, 15), pady=8, sticky="w")
+                    ).grid(row=8, column=1, padx=(0, 15), pady=8, sticky="w")
 
         # ─── Тренер (только при редактировании; при создании спортсмена
         # привязка к тренеру не делается — её выполняют отдельно, после
@@ -4416,11 +4468,11 @@ class AthletesWindow(ctk.CTkToplevel):
         _NO_COACH = "— нет —"
         coach_display_to_id = {_NO_COACH: None}
         coach_var = ctk.StringVar(value=_NO_COACH)
-        photo_row_num = 8
+        photo_row_num = 9
 
         if existing:
             ctk.CTkLabel(form, text="Тренер:", anchor="e", width=110).grid(
-                row=8, column=0, padx=(15, 8), pady=8, sticky="e")
+                row=9, column=0, padx=(15, 8), pady=8, sticky="e")
             coaches = self.db.get_coaches()
             for c in coaches:
                 coach_display_to_id[c["full_name"]] = c["id"]
@@ -4432,8 +4484,8 @@ class AthletesWindow(ctk.CTkToplevel):
             coach_var.set(existing_coach_name)
             OptionMenu(form, variable=coach_var,
                         values=[_NO_COACH] + [c["full_name"] for c in coaches], width=260
-                        ).grid(row=8, column=1, padx=(0, 15), pady=8, sticky="w")
-            photo_row_num = 9
+                        ).grid(row=9, column=1, padx=(0, 15), pady=8, sticky="w")
+            photo_row_num = 10
 
         # ─── Фото (в отдельной строке, чтобы не наезжало на кнопку) ───
         ctk.CTkLabel(form, text="Фото:", anchor="e", width=110).grid(
@@ -4521,6 +4573,9 @@ class AthletesWindow(ctk.CTkToplevel):
             if not validate_iin(iin):
                 messagebox.showwarning("Ошибка", "ИИН должен содержать 12 цифр.")
                 return
+            if self.db.find_athlete_by_iin(iin, exclude_id=edit_id):
+                messagebox.showwarning("Ошибка", "Спортсмен с таким ИИН уже существует.")
+                return
             try:
                 datetime.strptime(birth_date, "%d.%m.%Y")
             except ValueError:
@@ -4577,31 +4632,50 @@ class CoachCard(ctk.CTkFrame):
         col = 0
         if index is not None:
             ctk.CTkLabel(self, text=f"#{index}", font=ctk.CTkFont(size=12, weight="bold"),
-                        text_color="#556677", width=36).grid(row=0, column=0, rowspan=2, padx=(10, 0), pady=10)
+                        text_color="#556677", width=36).grid(row=0, column=0, rowspan=4, padx=(10, 0), pady=10)
             col = 1
 
-        photo_label = ctk.CTkLabel(self, text="🧑‍🏫", font=("Arial", 30), width=120)
+        photo_label = ctk.CTkLabel(self, text="🧑‍🏫", font=("Arial", 30), width=120, height=140,
+                    fg_color="#0d1420", corner_radius=14)
         if PIL_AVAILABLE and c["photo_path"]:
             local_path = resolve_local_photo_path(c["photo_path"], only_cached=True)
             if local_path:
                 try:
                     img = load_photo_thumbnail(local_path, 240, 280)
                     photo = ctk.CTkImage(light_image=img, dark_image=img, size=(120, 140))
-                    photo_label.configure(image=photo, text="")
-                    photo_label.image = photo  # держим ссылку — иначе GC уберёт картинку
+                    photo_label.configure(image=photo, text="", fg_color="transparent", corner_radius=0)
+                    photo_label._image = photo  # держим ссылку — иначе GC уберёт картинку
                 except Exception:
                     pass
-        photo_label.grid(row=0, column=col, rowspan=2, padx=(10, 8), pady=10)
+        photo_label.grid(row=0, column=col, rowspan=4, padx=(10, 8), pady=10)
 
-        ctk.CTkLabel(self, text=c["full_name"], font=ctk.CTkFont(size=14, weight="bold"),
+        full_name = (c["full_name"] or "").strip()
+        ctk.CTkLabel(self, text=full_name, font=ctk.CTkFont(size=14, weight="bold"),
                     anchor="w").grid(row=0, column=col + 1, sticky="w", padx=5, pady=(10, 0))
 
-        info = f"🏛 {c['club'] or '—'}   |   👥 учеников: {athletes_count}"
-        ctk.CTkLabel(self, text=info, font=ctk.CTkFont(size=11),
-                    text_color="#8899aa", anchor="w").grid(row=1, column=col + 1, sticky="w", padx=5, pady=(0, 10))
+        # ── дата рождения (возраст) ──
+        age_label = birth_age_label(c["birth_date"]) or "дата рождения не указана"
+        ctk.CTkLabel(self, text=f"🎂 {age_label}", font=ctk.CTkFont(size=11),
+                    text_color="#8899aa", anchor="w").grid(row=1, column=col + 1, sticky="w", padx=5)
+
+        # ── клуб · город/район · ИИН · телефон ──
+        row2 = f"🏛 {c['club'] or 'без клуба'}"
+        if c["city"]:
+            row2 += f"   |   📍 {c['city']}"
+        row2 += f"   |   ИИН: {c['iin'] or '—'}"
+        if c["phone"]:
+            row2 += f"   |   📞 {c['phone']}"
+        ctk.CTkLabel(self, text=row2, font=ctk.CTkFont(size=11), text_color="#5588bb",
+                    anchor="w").grid(row=2, column=col + 1, sticky="w", padx=5)
+
+        # ── разряд · ученики ──
+        row3 = f"🥋 {c['qualification'] or 'разряд не указан'}"
+        row3 += f"   |   👥 учеников: {athletes_count}"
+        ctk.CTkLabel(self, text=row3, font=ctk.CTkFont(size=11), text_color="#44aa77",
+                    anchor="w").grid(row=3, column=col + 1, sticky="w", padx=5, pady=(0, 10))
 
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        btn_frame.grid(row=0, column=col + 2, rowspan=2, padx=10, pady=10, sticky="e")
+        btn_frame.grid(row=0, column=col + 2, rowspan=4, padx=10, pady=10, sticky="e")
         ctk.CTkButton(btn_frame, text="✏️", width=36, height=32,
                     command=lambda: on_edit(c["id"])).pack(pady=2)
         ctk.CTkButton(btn_frame, text="🗑", width=36, height=32,
@@ -4820,16 +4894,33 @@ class CoachesWindow(ctk.CTkToplevel):
                     placeholder_text="12 цифр", fg_color=BG, border_color=BORDER)
         iin_entry.grid(row=3, column=1, padx=(0, 14), pady=7, sticky="ew")
 
+        iin_err_lbl = ctk.CTkLabel(form_grid, text="", text_color=ERR,
+                                   font=ctk.CTkFont(size=10), anchor="w")
+        iin_err_lbl.grid(row=4, column=1, padx=(0, 14), pady=(0, 4), sticky="w")
+
+        def check_iin_dup():
+            value = iin_entry.get().strip()
+            conflict = None
+            if len(value) == 12 and value.isdigit():
+                conflict = self.db.find_coach_by_iin(value, exclude_id=edit_id)
+            if conflict:
+                iin_err_lbl.configure(
+                    text="⚠ Тренер с таким ИИН уже существует", text_color=ERR)
+            else:
+                iin_err_lbl.configure(text="")
+
         def format_iin(event=None):
             value = "".join(ch for ch in iin_entry.get() if ch.isdigit())[:12]
             if value != iin_entry.get():
                 iin_entry.delete(0, "end")
                 iin_entry.insert(0, value)
+            check_iin_dup()
 
         iin_entry.bind("<KeyRelease>", format_iin)
+        check_iin_dup()
 
         ctk.CTkLabel(form_grid, text="Звание:", anchor="e", width=90).grid(
-            row=4, column=0, padx=(14, 6), pady=7, sticky="e")
+            row=5, column=0, padx=(14, 6), pady=7, sticky="e")
         qualification_var = ctk.StringVar(
             value=existing["qualification"] if existing and existing["qualification"] in COACH_QUALIFICATIONS
             else COACH_QUALIFICATIONS[0])
@@ -4838,7 +4929,7 @@ class CoachesWindow(ctk.CTkToplevel):
                     values=COACH_QUALIFICATIONS, width=240,
                     fg_color=BG, button_color="#2d333b",
                     dropdown_fg_color=DROPDOWN_BG)
-        qualification_menu.grid(row=4, column=1, padx=(0, 14), pady=7, sticky="ew")
+        qualification_menu.grid(row=5, column=1, padx=(0, 14), pady=7, sticky="ew")
 
         # ─── Клуб (выпадающий список из реестра «Клубы») ───
         _NO_CLUB = "— нет —"
@@ -4862,22 +4953,22 @@ class CoachesWindow(ctk.CTkToplevel):
             club_display_to_id[existing_club_name] = None
         club_var = ctk.StringVar(value=existing_club_name)
         ctk.CTkLabel(form_grid, text="Клуб:", anchor="e", width=90).grid(
-            row=5, column=0, padx=(14, 6), pady=7, sticky="e")
+            row=6, column=0, padx=(14, 6), pady=7, sticky="e")
         OptionMenu(form_grid, variable=club_var,
                     values=list(club_display_to_id.keys()), width=240,
                     fg_color=BG, button_color="#2d333b",
                     dropdown_fg_color=DROPDOWN_BG
-                    ).grid(row=5, column=1, padx=(0, 14), pady=7, sticky="ew")
+                    ).grid(row=6, column=1, padx=(0, 14), pady=7, sticky="ew")
 
-        lbl_entry(form_grid, "Город/Район:", "city", (existing["city"] or "") if existing else "", row=6)
+        lbl_entry(form_grid, "Город/Район:", "city", (existing["city"] or "") if existing else "", row=7)
 
         # ─── Телефон (формат 8(XXX)XXX-XX-XX) ───
         ctk.CTkLabel(form_grid, text="Телефон:", anchor="e", width=90).grid(
-            row=7, column=0, padx=(14, 6), pady=7, sticky="e")
+            row=8, column=0, padx=(14, 6), pady=7, sticky="e")
         phone_var = ctk.StringVar(value="8(" if not existing else (existing["phone"] or "8("))
         phone_entry = ctk.CTkEntry(form_grid, textvariable=phone_var, width=240,
                     placeholder_text="8(702)313-53-83", fg_color=BG, border_color=BORDER)
-        phone_entry.grid(row=7, column=1, padx=(0, 14), pady=7, sticky="ew")
+        phone_entry.grid(row=8, column=1, padx=(0, 14), pady=7, sticky="ew")
 
         def format_phone(event=None):
             raw = phone_entry.get()
@@ -5135,6 +5226,7 @@ class CoachesWindow(ctk.CTkToplevel):
         btn_bar.pack(fill="x", padx=14, pady=(10, 14))
 
         def save():
+            nonlocal edit_id
             first_name = fields["first_name"].get().strip()
             last_name = fields["last_name"].get().strip()
             if not first_name or not last_name:
@@ -5151,6 +5243,9 @@ class CoachesWindow(ctk.CTkToplevel):
             if len(iin) != 12 or not iin.isdigit():
                 messagebox.showwarning("Ошибка", "ИИН должен состоять ровно из 12 цифр.")
                 return
+            if self.db.find_coach_by_iin(iin, exclude_id=edit_id):
+                messagebox.showwarning("Ошибка", "Тренер с таким ИИН уже существует.")
+                return
             qualification = qualification_var.get()
             club_var_value = club_var.get()
             club_id = club_display_to_id.get(club_var_value)
@@ -5159,7 +5254,6 @@ class CoachesWindow(ctk.CTkToplevel):
             phone = phone_var.get().strip()
             full_name = f"{last_name} {first_name}".strip()
             photo_path = photo_path_var.get()
-            nonlocal edit_id
             if edit_id:
                 self.db.update_coach(edit_id, full_name, club, photo_path, "",
                         first_name, last_name, birth_date, iin, qualification, city,

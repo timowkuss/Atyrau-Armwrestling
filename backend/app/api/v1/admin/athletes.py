@@ -83,6 +83,8 @@ def create_athlete(
         # первого участия в турнире (см. app/services/club_rating.py)
         athlete.join_club_date = datetime.now(timezone.utc).date()
         athlete.club_active = False
+    if payload.iin and db.query(Athlete).filter(Athlete.iin == payload.iin).first():
+        raise HTTPException(status_code=400, detail="Спортсмен с таким ИИН уже существует")
     db.add(athlete)
     db.flush()
     db.add(AthleteStatistic(athlete_id=athlete.id))
@@ -102,6 +104,17 @@ def update_athlete(
         raise HTTPException(status_code=404, detail="Спортсмен не найден")
 
     data = payload.model_dump(exclude_unset=True)
+
+    # ── пустой ИИН = стёрт: храним NULL, а не '' (иначе unique-constraint
+    # посчитает двух спортсменов с пустым ИИН дубликатом) ───────────────
+    if "iin" in data and not data["iin"]:
+        data["iin"] = None
+
+    # ── ИИН уникален для всех спортсменов (в т.ч. скрытых) ──────────
+    if data.get("iin") and (
+        db.query(Athlete).filter(Athlete.iin == data["iin"], Athlete.id != athlete_id).first()
+    ):
+        raise HTTPException(status_code=400, detail="Спортсмен с таким ИИН уже существует")
 
     # ── смена клуба / выход из клуба: рейтинг клубов ───────────
     # - выход из клуба (club_id → None)          : штраф -10 старому клубу

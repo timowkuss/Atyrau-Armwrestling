@@ -194,6 +194,16 @@ def create_athlete(
     gender = _normalize_gender(payload.gender)
 
     existing = _find_existing_athlete(db, payload.full_name, birth_date)
+
+    # ── ИИН уникален для всех спортсменов (в т.ч. скрытых) ──────────
+    if payload.iin:
+        dup = db.query(Athlete).filter(Athlete.iin == payload.iin).first()
+        if dup is not None and (existing is None or dup.id != existing.id):
+            raise HTTPException(
+                status_code=409,
+                detail="Спортсмен с таким ИИН уже существует",
+            )
+
     if existing is not None:
         # Уже есть спортсмен с таким же ФИО и датой рождения — не создаём
         # дубль, отдаём его id (десктоп сохранит его в своей id_map, как
@@ -250,6 +260,18 @@ def update_athlete(
     old_club_id = athlete.club_id
     old_photo_path = athlete.photo_path
     data = payload.model_dump(exclude_unset=True)
+
+    # ── ИИН уникален для всех спортсменов (в т.ч. скрытых) ──────────
+    if data.get("iin"):
+        dup = db.query(Athlete).filter(
+            Athlete.iin == data["iin"], Athlete.id != athlete_id
+        ).first()
+        if dup is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Спортсмен с таким ИИН уже существует",
+            )
+
     if "club_name" in data:
         athlete.club_id = _find_or_create_club(db, data.pop("club_name"))
     if "coach_name" in data:
