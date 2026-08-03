@@ -21,6 +21,8 @@ import type { AthleteInput, AthleteStatisticsUpdateInput, Gender } from '@/types
 
 const EMPTY_FORM: AthleteInput = { full_name: '', gender: 'male', phone: '8(' }
 
+const RANKS = ['КМС', 'МС', 'МСМК', 'ЗМС', 'Без звания']
+
 export function AthletesAdmin() {
   const { user } = useAuth()
   const canDelete = user?.role_code === 'super_admin'
@@ -131,12 +133,18 @@ export function AthletesAdmin() {
               onChange={(e) => setForm({ ...form, birth_date: e.target.value || undefined })}
               className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
             />
-            <input
-              placeholder="Разряд"
+            <select
               value={form.rank ?? ''}
               onChange={(e) => setForm({ ...form, rank: e.target.value || undefined })}
-              className="w-32 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
-            />
+              className="w-36 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+            >
+              <option value="">Разряд — не указан</option>
+              {RANKS.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
             <input
               placeholder="Телефон 8(XXX)XXX-XX-XX"
               inputMode="tel"
@@ -202,12 +210,20 @@ export function AthletesAdmin() {
                       className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
                     />
                     <div className="flex flex-wrap gap-3">
-                      <input
-                        placeholder="Разряд"
-                        defaultValue={a.rank ?? ''}
-                        onChange={(e) => setEditForm({ ...editForm, rank: e.target.value || undefined })}
-                        className="w-32 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
-                      />
+                      <select
+                        defaultValue=""
+                        onChange={(e) => {
+                          setEditForm({ ...editForm, rank: e.target.value || undefined })
+                        }}
+                        className="w-36 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+                      >
+                        <option value="">Разряд: оставить «{a.rank ?? 'не указан'}»</option>
+                        {RANKS.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </select>
                       <input
                         placeholder="Телефон"
                         inputMode="tel"
