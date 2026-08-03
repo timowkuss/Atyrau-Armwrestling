@@ -31,3 +31,31 @@ export function formatPhoneChange(prev: string | null | undefined, next: string)
   }
   return formatPhone(next)
 }
+
+import type React from 'react'
+
+/** Только цифры, максимум `max` штук. */
+export function onlyDigits(value: string, max: number): string {
+  return value.replace(/\D/g, '').slice(0, max)
+}
+
+/** Блокирует вставку любых символов, кроме цифр (служебные клавиши пропускаются). */
+export function blockNonDigits(e: React.KeyboardEvent<HTMLInputElement>): void {
+  if (e.ctrlKey || e.metaKey || e.altKey) return
+  if (e.key.length === 1 && !/\d/.test(e.key)) {
+    e.preventDefault()
+  }
+}
+
+/** Не даёт стереть фиксированный префикс «8(» у телефона. */
+export function blockPhonePrefix(e: React.KeyboardEvent<HTMLInputElement>): void {
+  if (e.ctrlKey || e.metaKey) return
+  const el = e.currentTarget
+  const selStart = el.selectionStart ?? 0
+  const selEnd = el.selectionEnd ?? 0
+  if (e.key === 'Backspace' && selEnd <= 2) {
+    e.preventDefault()
+  } else if (e.key === 'Delete' && selStart < 2) {
+    e.preventDefault()
+  }
+}

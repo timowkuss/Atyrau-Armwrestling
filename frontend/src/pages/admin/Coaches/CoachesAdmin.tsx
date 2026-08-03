@@ -7,7 +7,7 @@ import { FeedbackBanner } from '@/components/admin/FeedbackBanner'
 import { PhotoUploadField } from '@/components/admin/PhotoUploadField'
 import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 import { CityCombobox } from '@/components/admin/CityCombobox'
-import { formatPhoneChange } from '@/lib/phoneMask'
+import { blockNonDigits, blockPhonePrefix, formatPhone, formatPhoneChange } from '@/lib/phoneMask'
 import { COACH_QUALIFICATIONS, type CoachInput } from '@/types/api'
 
 const EMPTY_FORM: CoachInput = {
@@ -151,6 +151,7 @@ export function CoachesAdmin() {
               maxLength={12}
               pattern="\d{12}"
               value={form.iin}
+              onKeyDown={blockNonDigits}
               onChange={(e) => setForm({ ...form, iin: e.target.value.replace(/\D/g, '').slice(0, 12) })}
               className={`w-40 ${inputClass}`}
             />
@@ -158,6 +159,10 @@ export function CoachesAdmin() {
               placeholder="Телефон 8(XXX)XXX-XX-XX"
               inputMode="tel"
               value={form.phone ?? '8('}
+              onKeyDown={(e) => {
+                blockPhonePrefix(e)
+                blockNonDigits(e)
+              }}
               onChange={(e) => setForm({ ...form, phone: formatPhoneChange(form.phone, e.target.value) })}
               className={inputClass}
             />
@@ -236,15 +241,25 @@ export function CoachesAdmin() {
                         placeholder="ИИН: оставить прежний"
                         inputMode="numeric"
                         maxLength={12}
-                        defaultValue={coach.iin ?? ''}
+                        value={editForm.iin ?? coach.iin ?? ''}
+                        onKeyDown={blockNonDigits}
                         onChange={(e) => setEditForm({ ...editForm, iin: e.target.value.replace(/\D/g, '').slice(0, 12) })}
                         className={`w-48 ${inputClass}`}
                       />
                       <input
-                        placeholder="Телефон"
+                        placeholder="Телефон 8(XXX)XXX-XX-XX"
                         inputMode="tel"
-                        defaultValue={coach.phone ?? ''}
-                        onChange={(e) => setEditForm({ ...editForm, phone: formatPhoneChange(editForm.phone, e.target.value) })}
+                        value={formatPhone(editForm.phone ?? coach.phone ?? '')}
+                        onKeyDown={(e) => {
+                          blockPhonePrefix(e)
+                          blockNonDigits(e)
+                        }}
+                        onChange={(e) =>
+                          setEditForm({
+                            ...editForm,
+                            phone: formatPhoneChange(editForm.phone ?? coach.phone ?? '', e.target.value),
+                          })
+                        }
                         className={inputClass}
                       />
                       <select

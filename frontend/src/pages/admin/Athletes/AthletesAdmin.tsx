@@ -16,7 +16,7 @@ import { FeedbackBanner } from '@/components/admin/FeedbackBanner'
 import { PhotoUploadField } from '@/components/admin/PhotoUploadField'
 import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 import { CityCombobox } from '@/components/admin/CityCombobox'
-import { formatPhoneChange } from '@/lib/phoneMask'
+import { blockNonDigits, blockPhonePrefix, formatPhone, formatPhoneChange } from '@/lib/phoneMask'
 import type { AthleteInput, AthleteStatisticsUpdateInput, Gender } from '@/types/api'
 
 const EMPTY_FORM: AthleteInput = { full_name: '', gender: 'male', phone: '8(' }
@@ -170,6 +170,7 @@ export function AthletesAdmin() {
                 maxLength={12}
                 pattern="\d{12}"
                 value={form.iin ?? ''}
+                onKeyDown={blockNonDigits}
                 onChange={(e) => setForm({ ...form, iin: e.target.value.replace(/\D/g, '').slice(0, 12) || undefined })}
                 className="w-40 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
               />
@@ -206,6 +207,10 @@ export function AthletesAdmin() {
               placeholder="Телефон 8(XXX)XXX-XX-XX"
               inputMode="tel"
               value={form.phone ?? '8('}
+              onKeyDown={(e) => {
+                blockPhonePrefix(e)
+                blockNonDigits(e)
+              }}
               onChange={(e) => setForm({ ...form, phone: formatPhoneChange(form.phone, e.target.value) })}
               className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
             />
@@ -270,7 +275,8 @@ export function AthletesAdmin() {
                           placeholder="ИИН: оставить прежний"
                           inputMode="numeric"
                           maxLength={12}
-                          defaultValue={a.iin ?? ''}
+                          value={editForm.iin ?? a.iin ?? ''}
+                          onKeyDown={blockNonDigits}
                           onChange={(e) =>
                             setEditForm({
                               ...editForm,
@@ -297,10 +303,19 @@ export function AthletesAdmin() {
                         ))}
                       </select>
                       <input
-                        placeholder="Телефон"
+                        placeholder="Телефон 8(XXX)XXX-XX-XX"
                         inputMode="tel"
-                        defaultValue={a.phone ?? ''}
-                        onChange={(e) => setEditForm({ ...editForm, phone: formatPhoneChange(editForm.phone, e.target.value) })}
+                        value={formatPhone(editForm.phone ?? a.phone ?? '')}
+                        onKeyDown={(e) => {
+                          blockPhonePrefix(e)
+                          blockNonDigits(e)
+                        }}
+                        onChange={(e) =>
+                          setEditForm({
+                            ...editForm,
+                            phone: formatPhoneChange(editForm.phone ?? a.phone ?? '', e.target.value),
+                          })
+                        }
                         className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
                       />
                       <select
