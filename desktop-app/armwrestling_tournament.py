@@ -2117,8 +2117,8 @@ class ParticipantCard(ctk.CTkFrame):
         local_photo = resolve_local_photo_path(p["photo_path"], only_cached=True) if PIL_AVAILABLE and p["photo_path"] else None
         if local_photo:
             try:
-                img = load_photo_thumbnail(local_photo, 100, 120)
-                photo = ctk.CTkImage(img, size=(50, 60))
+                img = load_photo_thumbnail(local_photo, 128, 140)
+                photo = ctk.CTkImage(img, size=(64, 70))
                 photo_label = ctk.CTkLabel(self, image=photo, text="")
                 photo_label._image = photo
             except Exception:
@@ -2152,7 +2152,7 @@ class ParticipantGroupCard(ctk.CTkFrame):
     отдельными строками (со своим весом/хватом/штрихкодом на каждую),
     вместо того чтобы дублировать карточку целиком на каждую категорию."""
 
-    PHOTO_W, PHOTO_H = 68, 82
+    PHOTO_W, PHOTO_H = 96, 110
 
     def __init__(self, master, participants, on_edit, on_delete, **kwargs):
         super().__init__(master, corner_radius=12, **kwargs)
@@ -3981,8 +3981,8 @@ class AthleteCard(ctk.CTkFrame):
         local_photo = resolve_local_photo_path(a["photo_path"], only_cached=True) if PIL_AVAILABLE and a["photo_path"] else None
         if local_photo:
             try:
-                img = load_photo_thumbnail(local_photo, 100, 120)
-                photo = ctk.CTkImage(img, size=(50, 60))
+                img = load_photo_thumbnail(local_photo, 128, 140)
+                photo = ctk.CTkImage(img, size=(64, 70))
                 photo_label = ctk.CTkLabel(self, image=photo, text="")
                 photo_label._image = photo
             except Exception:
@@ -4423,13 +4423,13 @@ class CoachCard(ctk.CTkFrame):
                         text_color="#556677", width=36).grid(row=0, column=0, rowspan=2, padx=(10, 0), pady=10)
             col = 1
 
-        photo_label = ctk.CTkLabel(self, text="🧑‍🏫", font=("Arial", 30), width=72)
+        photo_label = ctk.CTkLabel(self, text="🧑‍🏫", font=("Arial", 30), width=92)
         if PIL_AVAILABLE and c["photo_path"]:
             local_path = resolve_local_photo_path(c["photo_path"], only_cached=True)
             if local_path:
                 try:
-                    img = load_photo_thumbnail(local_path, 144, 176)
-                    photo = ctk.CTkImage(light_image=img, dark_image=img, size=(72, 88))
+                    img = load_photo_thumbnail(local_path, 184, 216)
+                    photo = ctk.CTkImage(light_image=img, dark_image=img, size=(92, 108))
                     photo_label.configure(image=photo, text="")
                     photo_label.image = photo  # держим ссылку — иначе GC уберёт картинку
                 except Exception:
