@@ -4165,9 +4165,46 @@ class AthletesWindow(ctk.CTkToplevel):
         lbl_entry(form, "ИИН* (12 цифр):", "iin", existing["iin"] if existing else "", row=2,
                   placeholder="12 цифр")
 
-        # ─── Дата рождения с автоматической маской дд.мм.гггг ───
-        lbl_entry(form, "Телефон:", "phone", existing["phone"] if existing else "", row=3,
-                  placeholder="8(702)313-53-83")
+        # ─── Телефон с маской 8(XXX)XXX-XX-XX ───
+        ctk.CTkLabel(form, text="Телефон:", anchor="e", width=110).grid(
+            row=3, column=0, padx=(15, 8), pady=8, sticky="e")
+        phone_var = ctk.StringVar(value="8(" if not existing else (existing["phone"] or "8("))
+        phone_entry = ctk.CTkEntry(form, textvariable=phone_var, width=260,
+                    placeholder_text="8(702)313-53-83")
+        phone_entry.grid(row=3, column=1, padx=(0, 15), pady=8, sticky="w")
+        fields["phone"] = phone_var
+
+        def format_phone(event=None):
+            raw = phone_entry.get()
+            body = raw[2:] if raw.startswith("8(") else raw
+            digits = "".join(ch for ch in body if ch.isdigit())
+            if len(digits) == 11 and digits[0] in "87":
+                digits = digits[1:]
+            digits = digits[:10]
+            if not digits:
+                result = "8("
+            elif len(digits) <= 3:
+                result = f"8({digits}"
+            elif len(digits) <= 6:
+                result = f"8({digits[:3]}){digits[3:]}"
+            elif len(digits) <= 8:
+                result = f"8({digits[:3]}){digits[3:6]}-{digits[6:]}"
+            else:
+                result = f"8({digits[:3]}){digits[3:6]}-{digits[6:8]}-{digits[8:]}"
+            phone_entry.delete(0, "end")
+            phone_entry.insert(0, result)
+            phone_entry.icursor(len(result))
+
+        def block_extra(event=None):
+            if not event.char or not event.char.isdigit():
+                return None
+            total = len("".join(ch for ch in phone_entry.get() if ch.isdigit()))
+            if total >= 11:
+                return "break"
+            return None
+
+        phone_entry.bind("<KeyRelease>", format_phone)
+        phone_entry.bind("<Key>", block_extra)
 
         ctk.CTkLabel(form, text="Дата рожд.*:", anchor="e", width=110).grid(
             row=4, column=0, padx=(15, 8), pady=8, sticky="e")

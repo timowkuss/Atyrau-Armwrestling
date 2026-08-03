@@ -16,9 +16,10 @@ import { FeedbackBanner } from '@/components/admin/FeedbackBanner'
 import { PhotoUploadField } from '@/components/admin/PhotoUploadField'
 import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 import { CityCombobox } from '@/components/admin/CityCombobox'
+import { formatPhone } from '@/lib/phoneMask'
 import type { AthleteInput, AthleteStatisticsUpdateInput, Gender } from '@/types/api'
 
-const EMPTY_FORM: AthleteInput = { full_name: '', gender: 'male' }
+const EMPTY_FORM: AthleteInput = { full_name: '', gender: 'male', phone: '8(' }
 
 export function AthletesAdmin() {
   const { user } = useAuth()
@@ -136,6 +137,13 @@ export function AthletesAdmin() {
               onChange={(e) => setForm({ ...form, rank: e.target.value || undefined })}
               className="w-32 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
             />
+            <input
+              placeholder="Телефон 8(XXX)XXX-XX-XX"
+              inputMode="tel"
+              value={form.phone ?? '8('}
+              onChange={(e) => setForm({ ...form, phone: formatPhone(e.target.value) })}
+              className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+            />
           </div>
           <div className="flex flex-wrap gap-3">
             <select
@@ -199,6 +207,13 @@ export function AthletesAdmin() {
                         defaultValue={a.rank ?? ''}
                         onChange={(e) => setEditForm({ ...editForm, rank: e.target.value || undefined })}
                         className="w-32 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+                      />
+                      <input
+                        placeholder="Телефон"
+                        inputMode="tel"
+                        defaultValue={a.phone ?? ''}
+                        onChange={(e) => setEditForm({ ...editForm, phone: formatPhone(e.target.value) })}
+                        className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
                       />
                       <select
                         defaultValue=""
