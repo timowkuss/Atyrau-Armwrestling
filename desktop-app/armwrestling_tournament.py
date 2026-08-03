@@ -2117,7 +2117,7 @@ class ParticipantCard(ctk.CTkFrame):
         local_photo = resolve_local_photo_path(p["photo_path"], only_cached=True) if PIL_AVAILABLE and p["photo_path"] else None
         if local_photo:
             try:
-                img = load_photo_thumbnail(local_photo, 50, 60)
+                img = load_photo_thumbnail(local_photo, 100, 120)
                 photo = ctk.CTkImage(img, size=(50, 60))
                 photo_label = ctk.CTkLabel(self, image=photo, text="")
                 photo_label._image = photo
@@ -3981,7 +3981,7 @@ class AthleteCard(ctk.CTkFrame):
         local_photo = resolve_local_photo_path(a["photo_path"], only_cached=True) if PIL_AVAILABLE and a["photo_path"] else None
         if local_photo:
             try:
-                img = load_photo_thumbnail(local_photo, 50, 60)
+                img = load_photo_thumbnail(local_photo, 100, 120)
                 photo = ctk.CTkImage(img, size=(50, 60))
                 photo_label = ctk.CTkLabel(self, image=photo, text="")
                 photo_label._image = photo
@@ -4428,7 +4428,7 @@ class CoachCard(ctk.CTkFrame):
             local_path = resolve_local_photo_path(c["photo_path"], only_cached=True)
             if local_path:
                 try:
-                    img = load_photo_thumbnail(local_path, 72, 88)
+                    img = load_photo_thumbnail(local_path, 144, 176)
                     photo = ctk.CTkImage(light_image=img, dark_image=img, size=(72, 88))
                     photo_label.configure(image=photo, text="")
                     photo_label.image = photo  # держим ссылку — иначе GC уберёт картинку
