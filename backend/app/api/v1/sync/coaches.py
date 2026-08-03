@@ -15,6 +15,7 @@ from app.schemas.sync import (
     CoachSyncCreate,
     CoachSyncUpdate,
 )
+from app.services.cloudinary_photos import delete_cloudinary_photo
 
 router = APIRouter(prefix="/coaches", tags=["sync:coaches"])
 
@@ -196,6 +197,7 @@ def update_coach(
     if coach is None:
         return {"error": "not_found"}, 404
 
+    old_photo_path = coach.photo_path
     data = payload.model_dump(exclude_unset=True)
     if "club_name" in data:
         coach.club_id = _find_or_create_club(db, data.pop("club_name"))
@@ -210,6 +212,13 @@ def update_coach(
         setattr(coach, field, value)
 
     db.commit()
+
+    # Старое фото удаляем только ПОСЛЕ успешного сохранения новой ссылки
+    # (зеркально админскому эндпоинту) — десктоп при замене фото пушит
+    # новый photo_path, а старый Cloudinary-файл больше не нужен.
+    if old_photo_path and old_photo_path != coach.photo_path:
+        delete_cloudinary_photo(old_photo_path)
+
     return {"status": "ok"}
 
 
@@ -228,7 +237,10 @@ def delete_coach(
     if coach is None:
         raise HTTPException(status_code=404, detail="Тренер не найден")
 
+    photo_path = coach.photo_path
     db.add(SyncTombstone(entity_type="coach", entity_id=coach_id))
     db.delete(coach)
     db.commit()
+    if photo_path:
+        delete_cloudinary_photo(photo_path)
     return {"status": "deleted"}

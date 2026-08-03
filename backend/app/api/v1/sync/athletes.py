@@ -19,6 +19,7 @@ from app.schemas.sync import (
     AthleteSyncUpdate,
 )
 from app.services.club_rating import apply_athlete_removed, mark_joined
+from app.services.cloudinary_photos import delete_cloudinary_photo
 from datetime import date, datetime, timezone
 
 router = APIRouter(prefix="/athletes", tags=["sync:athletes"])
@@ -247,6 +248,7 @@ def update_athlete(
         return {"error": "not_found"}, 404
 
     old_club_id = athlete.club_id
+    old_photo_path = athlete.photo_path
     data = payload.model_dump(exclude_unset=True)
     if "club_name" in data:
         athlete.club_id = _find_or_create_club(db, data.pop("club_name"))
@@ -278,6 +280,13 @@ def update_athlete(
         setattr(athlete, field, value)
 
     db.commit()
+
+    # Старое фото удаляем только ПОСЛЕ успешного сохранения новой ссылки
+    # (зеркально админскому эндпоинту) — десктоп при замене фото пушит
+    # новый photo_path, а старый Cloudinary-файл больше не нужен.
+    if old_photo_path and old_photo_path != athlete.photo_path:
+        delete_cloudinary_photo(old_photo_path)
+
     return {"status": "ok"}
 
 
@@ -316,7 +325,10 @@ def delete_athlete(
         db.commit()
         return {"status": "hidden", "reason": "has_participations"}
 
+    photo_path = athlete.photo_path
     db.add(SyncTombstone(entity_type="athlete", entity_id=athlete_id))
     db.delete(athlete)
     db.commit()
+    if photo_path:
+        delete_cloudinary_photo(photo_path)
     return {"status": "deleted"}
