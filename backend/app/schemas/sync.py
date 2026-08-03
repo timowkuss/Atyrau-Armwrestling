@@ -63,6 +63,7 @@ class CoachSyncCreate(_StrictModel):
     iin: str | None = None
     qualification: str | None = None
     city_name: str | None = None  # best-effort сопоставление с cities.name
+    phone: str | None = None
 
 
 class CoachSyncUpdate(_StrictModel):
@@ -78,6 +79,7 @@ class CoachSyncUpdate(_StrictModel):
     iin: str | None = None
     qualification: str | None = None
     city_name: str | None = None
+    phone: str | None = None
 
 
 class CompetitionSyncCreate(_StrictModel):
@@ -170,6 +172,7 @@ class CoachChangeItem(BaseModel):
     iin: str | None = None
     qualification: str | None = None
     city_name: str | None = None
+    phone: str | None = None
     updated_at: str
 
 

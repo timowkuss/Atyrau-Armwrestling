@@ -236,52 +236,54 @@ class SyncManager:
         return self._try("update_athlete", payload, go)
 
     # ── тренер: карточка из локальной таблицы coaches ────────────
-    def on_coach_created(self, cid, full_name, club, photo_path, bio,
-                          first_name=None, last_name=None, birth_date=None,
-                          iin=None, qualification=None, city=None):
-        payload = {"cid": cid, "full_name": full_name, "club": club,
-                   "photo_path": photo_path, "bio": bio,
-                   "first_name": first_name, "last_name": last_name,
-                   "birth_date": birth_date, "iin": iin,
-                   "qualification": qualification, "city": city}
+def on_coach_created(self, cid, full_name, club, photo_path, bio,
+                      first_name=None, last_name=None, birth_date=None,
+                      iin=None, qualification=None, city=None, phone=None):
+    payload = {"cid": cid, "full_name": full_name, "club": club,
+               "photo_path": photo_path, "bio": bio,
+               "first_name": first_name, "last_name": last_name,
+               "birth_date": birth_date, "iin": iin,
+               "qualification": qualification, "city": city, "phone": phone}
 
-        def go():
-            remote = self.api.create_coach(
-                full_name=full_name, club_name=club or None,
-                photo_path=photo_path or None, bio=bio or None,
-                first_name=first_name or None, last_name=last_name or None,
-                birth_date=birth_date or None, iin=iin or None,
-                qualification=qualification or None, city_name=city or None,
-            )
-            self.state.map_set("coach", cid, remote["id"])
-            return remote["id"]
+    def go():
+        remote = self.api.create_coach(
+            full_name=full_name, club_name=club or None,
+            photo_path=photo_path or None, bio=bio or None,
+            first_name=first_name or None, last_name=last_name or None,
+            birth_date=birth_date or None, iin=iin or None,
+            qualification=qualification or None, city_name=city or None,
+            phone=phone or None,
+        )
+        self.state.map_set("coach", cid, remote["id"])
+        return remote["id"]
 
-        return self._try("create_coach", payload, go)
+    return self._try("create_coach", payload, go)
 
-    def on_coach_updated(self, cid, full_name, club, photo_path, bio,
-                          first_name=None, last_name=None, birth_date=None,
-                          iin=None, qualification=None, city=None):
-        remote_coach_id = self.state.map_get("coach", cid)
-        payload = {"cid": cid, "full_name": full_name, "club": club,
-                   "photo_path": photo_path, "bio": bio,
-                   "first_name": first_name, "last_name": last_name,
-                   "birth_date": birth_date, "iin": iin,
-                   "qualification": qualification, "city": city}
-        if remote_coach_id is None:
-            self.state.enqueue("update_coach", payload)
-            return None
+def on_coach_updated(self, cid, full_name, club, photo_path, bio,
+                      first_name=None, last_name=None, birth_date=None,
+                      iin=None, qualification=None, city=None, phone=None):
+    remote_coach_id = self.state.map_get("coach", cid)
+    payload = {"cid": cid, "full_name": full_name, "club": club,
+               "photo_path": photo_path, "bio": bio,
+               "first_name": first_name, "last_name": last_name,
+               "birth_date": birth_date, "iin": iin,
+               "qualification": qualification, "city": city, "phone": phone}
+    if remote_coach_id is None:
+        self.state.enqueue("update_coach", payload)
+        return None
 
-        def go():
-            self.api.update_coach(
-                remote_coach_id, full_name=full_name, club_name=club or None,
-                photo_path=photo_path or None, bio=bio or None,
-                first_name=first_name or None, last_name=last_name or None,
-                birth_date=birth_date or None, iin=iin or None,
-                qualification=qualification or None, city_name=city or None,
-            )
-            return remote_coach_id
+    def go():
+        self.api.update_coach(
+            remote_coach_id, full_name=full_name, club_name=club or None,
+            photo_path=photo_path or None, bio=bio or None,
+            first_name=first_name or None, last_name=last_name or None,
+            birth_date=birth_date or None, iin=iin or None,
+            qualification=qualification or None, city_name=city or None,
+            phone=phone or None,
+        )
+        return remote_coach_id
 
-        return self._try("update_coach", payload, go)
+    return self._try("update_coach", payload, go)
 
     def on_coach_deleted(self, cid):
         # Та же схема, что on_athlete_deleted: гасим ещё не отправленные

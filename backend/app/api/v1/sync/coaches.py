@@ -107,6 +107,7 @@ def get_coach_changes(
             iin=c.iin,
             qualification=c.qualification,
             city_name=city_name,
+            phone=c.phone,
             updated_at=c.updated_at.isoformat(),
         )
         for c, club_name, city_name in rows
@@ -161,6 +162,8 @@ def create_coach(
             existing.iin = payload.iin
         if not existing.qualification and payload.qualification:
             existing.qualification = payload.qualification
+        if not existing.phone and payload.phone:
+            existing.phone = payload.phone
         db.commit()
         return {"id": existing.id, "status": "existing"}
 
@@ -175,6 +178,7 @@ def create_coach(
         birth_date=birth_date,
         iin=payload.iin,
         qualification=payload.qualification,
+        phone=payload.phone,
     )
     db.add(coach)
     db.commit()

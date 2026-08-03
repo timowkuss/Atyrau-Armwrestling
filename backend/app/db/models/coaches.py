@@ -25,6 +25,9 @@ class Coach(Base):
     # ИИН — 12 цифр. У старых записей может отсутствовать, поэтому nullable
     # на уровне БД, но обязателен в CoachCreate для новых тренеров.
     iin: Mapped[str | None] = mapped_column(String(12), unique=True)
+    # Телефон — виден только админу и десктопу (в публичных ответах не
+    # отдаётся). Нормализуется к виду 8(702)313-53-83.
+    phone: Mapped[str | None] = mapped_column(String(30))
     # Тренерское звание (не путать с Athlete.rank — спортивный разряд).
     qualification: Mapped[str | None] = mapped_column(String(100))
     city_id: Mapped[int | None] = mapped_column(

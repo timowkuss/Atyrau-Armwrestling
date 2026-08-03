@@ -239,14 +239,15 @@ class PullSyncManager:
         iin = item.get("iin")
         qualification = item.get("qualification")
         city = item.get("city_name")
+        phone = item.get("phone")
 
         local_id = self.state.map_get_local("coach", remote_id)
         if local_id is not None:
             conn.execute(
                 "UPDATE coaches SET full_name=?, club=?, photo_path=?, bio=?, "
-                "first_name=?, last_name=?, birth_date=?, iin=?, qualification=?, city=? WHERE id=?",
+                "first_name=?, last_name=?, birth_date=?, iin=?, qualification=?, city=?, phone=? WHERE id=?",
                 (full_name, club, photo_path, bio, first_name, last_name,
-                 birth_date, iin, qualification, city, local_id),
+                 birth_date, iin, qualification, city, phone, local_id),
             )
             return
 
@@ -261,18 +262,18 @@ class PullSyncManager:
             local_id = row[0]
             conn.execute(
                 "UPDATE coaches SET full_name=?, club=?, photo_path=?, bio=?, "
-                "first_name=?, last_name=?, birth_date=?, iin=?, qualification=?, city=? WHERE id=?",
+                "first_name=?, last_name=?, birth_date=?, iin=?, qualification=?, city=?, phone=? WHERE id=?",
                 (full_name, club, photo_path, bio, first_name, last_name,
-                 birth_date, iin, qualification, city, local_id),
+                 birth_date, iin, qualification, city, phone, local_id),
             )
             self.state.map_set("coach", local_id, remote_id)
             return
 
         cur = conn.execute(
             "INSERT INTO coaches (full_name, club, photo_path, bio, first_name, "
-            "last_name, birth_date, iin, qualification, city) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "last_name, birth_date, iin, qualification, city, phone) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (full_name, club, photo_path, bio, first_name, last_name,
-             birth_date, iin, qualification, city),
+             birth_date, iin, qualification, city, phone),
         )
         self.state.map_set("coach", cur.lastrowid, remote_id)
 

@@ -372,7 +372,8 @@ class Database:
             first_name TEXT,
             last_name TEXT,
             birth_date TEXT,                 -- 'YYYY-MM-DD' (для расчёта возраста)
-            iin TEXT,                        -- ИИН, 12 цифр
+iin TEXT,                        -- ИИН, 12 цифр
+            phone TEXT,                     -- телефон 8(XXX)XXX-XX-XX
             qualification TEXT,              -- тренерское звание
             city TEXT,                       -- Город/Район
             club TEXT,
@@ -455,9 +456,13 @@ class Database:
 
         # ─── Карточка тренера: Имя/Фамилия/возраст/ИИН/звание/город ───
         c_cols = [r[1] for r in self.conn.execute("PRAGMA table_info(coaches)").fetchall()]
-        for col in ("first_name", "last_name", "birth_date", "iin", "qualification", "city"):
+        for col in ("first_name", "last_name", "birth_date", "iin", "qualification", "city", "phone"):
             if col not in c_cols:
                 self.conn.execute(f"ALTER TABLE coaches ADD COLUMN {col} TEXT")
+        if "phone" in c_cols:
+            self.conn.execute(
+                "UPDATE coaches SET phone = '8(702)313-53-83' WHERE phone IS NULL OR phone = ''"
+            )
         self.conn.commit()
 
         a_cols = [r[1] for r in self.conn.execute("PRAGMA table_info(athletes)").fetchall()]
@@ -613,23 +618,24 @@ class Database:
     # ── тренеры ──────────────────────────────────────────────────
     def add_coach(self, full_name, club="", photo_path="", bio="",
                   first_name="", last_name="", birth_date="", iin="",
-                  qualification="", city="", club_id=None):
+                  qualification="", city="", phone="", club_id=None):
         cur = self.conn.execute(
             "INSERT INTO coaches (full_name, club, photo_path, bio, first_name, "
-            "last_name, birth_date, iin, qualification, city, club_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "last_name, birth_date, iin, qualification, city, phone, club_id) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (full_name, club, photo_path, bio, first_name, last_name,
-             birth_date, iin, qualification, city, club_id))
+             birth_date, iin, qualification, city, phone, club_id))
         self.conn.commit()
         return cur.lastrowid
 
     def update_coach(self, cid, full_name, club="", photo_path="", bio="",
                       first_name="", last_name="", birth_date="", iin="",
-                      qualification="", city="", club_id=None):
+                      qualification="", city="", phone="", club_id=None):
         self.conn.execute(
             "UPDATE coaches SET full_name=?, club=?, photo_path=?, bio=?, first_name=?, "
-            "last_name=?, birth_date=?, iin=?, qualification=?, city=?, club_id=? WHERE id=?",
+            "last_name=?, birth_date=?, iin=?, qualification=?, city=?, phone=?, club_id=? WHERE id=?",
             (full_name, club, photo_path, bio, first_name, last_name,
-             birth_date, iin, qualification, city, club_id, cid))
+             birth_date, iin, qualification, city, phone, club_id, cid))
         self.conn.commit()
 
     def delete_coach(self, cid):
@@ -993,30 +999,32 @@ def _synced_update_athlete(self, aid, first_name, last_name, birth_date,
 
 def _synced_add_coach(self, full_name, club="", photo_path="", bio="",
                        first_name="", last_name="", birth_date="", iin="",
-                       qualification="", city="", club_id=None):
+                       qualification="", city="", phone="", club_id=None):
     cid = _original_add_coach(self, full_name, club, photo_path, bio,
                                first_name, last_name, birth_date, iin,
-                               qualification, city, club_id)
+                               qualification, city, phone, club_id)
     try:
         sync_manager.on_coach_created(cid, full_name, club, photo_path, bio,
                                        first_name=first_name, last_name=last_name,
                                        birth_date=birth_date, iin=iin,
-                                       qualification=qualification, city=city)
+                                       qualification=qualification, city=city,
+                                       phone=phone)
     except Exception as e:
         print(f"[sync] add_coach: {e}")
     return cid
 
 def _synced_update_coach(self, cid, full_name, club="", photo_path="", bio="",
                           first_name="", last_name="", birth_date="", iin="",
-                          qualification="", city="", club_id=None):
+                          qualification="", city="", phone="", club_id=None):
     _original_update_coach(self, cid, full_name, club, photo_path, bio,
                             first_name, last_name, birth_date, iin,
-                            qualification, city, club_id)
+                            qualification, city, phone, club_id)
     try:
         sync_manager.on_coach_updated(cid, full_name, club, photo_path, bio,
                                        first_name=first_name, last_name=last_name,
                                        birth_date=birth_date, iin=iin,
-                                       qualification=qualification, city=city)
+                                       qualification=qualification, city=city,
+                                       phone=phone)
     except Exception as e:
         print(f"[sync] update_coach: {e}")
 
@@ -4473,9 +4481,14 @@ class CoachesWindow(ctk.CTkToplevel):
     def _add_coach_dialog(self, edit_id=None):
         dlg = tk.Toplevel(self)
         dlg.title("Редактировать тренера" if edit_id else "Добавить тренера")
-        dlg.geometry("1300x810")
-        dlg.minsize(1300, 650)
-        dlg.resizable(True, True)
+        if edit_id:
+            dlg.geometry("1300x810")
+            dlg.minsize(1300, 650)
+            dlg.resizable(True, True)
+        else:
+            dlg.geometry("720x700")
+            dlg.minsize(680, 640)
+            dlg.resizable(False, False)
         dlg.configure(bg=BG)
         dlg.transient(self)
         dlg.grab_set()
@@ -4502,7 +4515,7 @@ class CoachesWindow(ctk.CTkToplevel):
             var = ctk.StringVar(value=default)
             ctk.CTkEntry(parent, textvariable=var, width=width, placeholder_text=placeholder,
                         fg_color=BG, border_color=BORDER).grid(
-                row=row, column=1, padx=(0, 14), pady=7, sticky="w")
+                row=row, column=1, padx=(0, 14), pady=7, sticky="ew")
             fields[key] = var
             return var
 
@@ -4545,9 +4558,10 @@ class CoachesWindow(ctk.CTkToplevel):
         # ═══ ОСНОВНАЯ ЧАСТЬ: две колонки ═══════════════════════════
         body = ctk.CTkFrame(dlg, fg_color="transparent")
         body.pack(fill="both", expand=True, padx=14, pady=(10, 0))
-        body.grid_columnconfigure(0, weight=2, minsize=340)
-        body.grid_columnconfigure(1, weight=3)
+        body.grid_columnconfigure(0, weight=1, minsize=340)
         body.grid_rowconfigure(0, weight=1)
+        if edit_id:
+            body.grid_columnconfigure(1, weight=3)
 
         # ─── Левая колонка: анкета тренера ────────────────────────
         left_col = ScrollableFrame(body, fg_color="transparent")
@@ -4558,6 +4572,7 @@ class CoachesWindow(ctk.CTkToplevel):
 
         form_grid = ctk.CTkFrame(form_card, fg_color="transparent")
         form_grid.pack(fill="x", padx=4, pady=(0, 12))
+        form_grid.grid_columnconfigure(1, weight=1, minsize=240)
 
         lbl_entry(form_grid, "Имя*:", "first_name", existing["first_name"] if existing else "", row=0)
         lbl_entry(form_grid, "Фамилия*:", "last_name", existing["last_name"] if existing else "", row=1)
@@ -4567,7 +4582,7 @@ class CoachesWindow(ctk.CTkToplevel):
         birth_date_var = ctk.StringVar(value=existing["birth_date"] if existing else "")
         birth_entry = ctk.CTkEntry(form_grid, textvariable=birth_date_var, width=240,
                     placeholder_text="  .  .    ", fg_color=BG, border_color=BORDER)
-        birth_entry.grid(row=2, column=1, padx=(0, 14), pady=7, sticky="w")
+        birth_entry.grid(row=2, column=1, padx=(0, 14), pady=7, sticky="ew")
 
         def format_birthdate(event=None):
             value = "".join(ch for ch in birth_entry.get() if ch.isdigit())[:8]
@@ -4590,7 +4605,7 @@ class CoachesWindow(ctk.CTkToplevel):
         iin_var = ctk.StringVar(value=existing["iin"] if existing else "")
         iin_entry = ctk.CTkEntry(form_grid, textvariable=iin_var, width=240,
                     placeholder_text="12 цифр", fg_color=BG, border_color=BORDER)
-        iin_entry.grid(row=3, column=1, padx=(0, 14), pady=7, sticky="w")
+        iin_entry.grid(row=3, column=1, padx=(0, 14), pady=7, sticky="ew")
 
         def format_iin(event=None):
             value = "".join(ch for ch in iin_entry.get() if ch.isdigit())[:12]
@@ -4610,7 +4625,7 @@ class CoachesWindow(ctk.CTkToplevel):
                     values=COACH_QUALIFICATIONS, width=240,
                     fg_color=BG, button_color="#2d333b",
                     dropdown_fg_color=DROPDOWN_BG)
-        qualification_menu.grid(row=4, column=1, padx=(0, 14), pady=7, sticky="w")
+        qualification_menu.grid(row=4, column=1, padx=(0, 14), pady=7, sticky="ew")
 
         # ─── Клуб (выпадающий список из реестра «Клубы») ───
         _NO_CLUB = "— нет —"
@@ -4639,9 +4654,40 @@ class CoachesWindow(ctk.CTkToplevel):
                     values=list(club_display_to_id.keys()), width=240,
                     fg_color=BG, button_color="#2d333b",
                     dropdown_fg_color=DROPDOWN_BG
-                    ).grid(row=5, column=1, padx=(0, 14), pady=7, sticky="w")
+                    ).grid(row=5, column=1, padx=(0, 14), pady=7, sticky="ew")
 
         lbl_entry(form_grid, "Город/Район:", "city", (existing["city"] or "") if existing else "", row=6)
+
+        # ─── Телефон (формат 8(XXX)XXX-XX-XX) ───
+        ctk.CTkLabel(form_grid, text="Телефон:", anchor="e", width=90).grid(
+            row=7, column=0, padx=(14, 6), pady=7, sticky="e")
+        phone_var = ctk.StringVar(value=(existing["phone"] or "") if existing else "")
+        phone_entry = ctk.CTkEntry(form_grid, textvariable=phone_var, width=240,
+                    placeholder_text="8(702)313-53-83", fg_color=BG, border_color=BORDER)
+        phone_entry.grid(row=7, column=1, padx=(0, 14), pady=7, sticky="ew")
+
+        def format_phone(event=None):
+            digits = "".join(ch for ch in phone_entry.get() if ch.isdigit())
+            if len(digits) == 11 and digits[0] in "87":
+                digits = digits[1:]
+            digits = digits[:10]
+            if not digits:
+                phone_entry.delete(0, "end")
+                return
+            if len(digits) <= 3:
+                result = f"8({digits}"
+            elif len(digits) <= 6:
+                result = f"8({digits[:3]}){digits[3:]}"
+            elif len(digits) <= 8:
+                result = f"8({digits[:3]}){digits[3:6]}-{digits[6:]}"
+            else:
+                result = f"8({digits[:3]}){digits[3:6]}-{digits[6:8]}-{digits[8:]}"
+            cursor = len(result)
+            phone_entry.delete(0, "end")
+            phone_entry.insert(0, result)
+            phone_entry.icursor(cursor)
+
+        phone_entry.bind("<KeyRelease>", format_phone)
 
         # ─── Фото ───
         photo_card = make_card(left_col, fill="x", pady=(8, 0))
@@ -4884,17 +4930,18 @@ class CoachesWindow(ctk.CTkToplevel):
             club_id = club_display_to_id.get(club_var_value)
             club = club_var_value if club_var_value != _NO_CLUB else ""
             city = fields["city"].get().strip()
+            phone = phone_var.get().strip()
             full_name = f"{last_name} {first_name}".strip()
             photo_path = photo_path_var.get()
             nonlocal edit_id
             if edit_id:
                 self.db.update_coach(edit_id, full_name, club, photo_path, "",
                         first_name, last_name, birth_date, iin, qualification, city,
-                        club_id=club_id)
+                        phone, club_id=club_id)
             else:
                 edit_id = self.db.add_coach(full_name, club, photo_path, "",
                         first_name, last_name, birth_date, iin, qualification, city,
-                        club_id=club_id)
+                        phone, club_id=club_id)
             self._refresh_list()
             dlg.destroy()
 
@@ -5031,8 +5078,14 @@ class ClubsWindow(ctk.CTkToplevel):
     def _add_club_dialog(self, edit_id=None):
         dlg = tk.Toplevel(self)
         dlg.title("Редактировать клуб" if edit_id else "Добавить клуб")
-        dlg.geometry("1160x740")
-        dlg.minsize(920, 560)
+        if edit_id:
+            dlg.geometry("1160x740")
+            dlg.minsize(920, 560)
+            dlg.resizable(True, True)
+        else:
+            dlg.geometry("760x600")
+            dlg.minsize(700, 560)
+            dlg.resizable(False, False)
         dlg.configure(bg=BG)
         dlg.transient(self)
         dlg.grab_set()
@@ -5057,7 +5110,7 @@ class ClubsWindow(ctk.CTkToplevel):
             var = ctk.StringVar(value=default)
             ctk.CTkEntry(parent, textvariable=var, width=width, placeholder_text=placeholder,
                         fg_color=BG, border_color=BORDER).grid(
-                row=row, column=1, padx=(0, 14), pady=7, sticky="w")
+                row=row, column=1, padx=(0, 14), pady=7, sticky="ew")
             fields[key] = var
             return var
 
@@ -5090,7 +5143,7 @@ class ClubsWindow(ctk.CTkToplevel):
 
         form_grid = ctk.CTkFrame(form_card, fg_color="transparent")
         form_grid.pack(fill="x", padx=4, pady=(0, 12))
-
+        form_grid.grid_columnconfigure(1, weight=1, minsize=240)
         lbl_entry(form_grid, "Название*:", "name", existing["name"] if existing else "", row=0)
         lbl_entry(form_grid, "Город/Область:", "city", (existing["city"] or "") if existing else "", row=1)
         lbl_entry(form_grid, "Адрес зала:", "address", (existing["address"] or "") if existing else "", row=2)
@@ -5143,7 +5196,8 @@ class ClubsWindow(ctk.CTkToplevel):
 
         # ─── Правая колонка: спортсмены и тренеры клуба ────────
         right_col = ctk.CTkFrame(dlg, fg_color="transparent")
-        right_col.pack(side="right", fill="both", expand=True, padx=(7, 14), pady=14)
+        if edit_id:
+            right_col.pack(side="right", fill="both", expand=True, padx=(7, 14), pady=14)
 
         members_scroll = ScrollableFrame(right_col, fg_color=BG)
         members_scroll.pack(fill="both", expand=True)

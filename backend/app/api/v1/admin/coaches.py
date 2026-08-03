@@ -60,6 +60,7 @@ def list_coaches_admin(
             iin=coach.iin,
             first_name=coach.first_name,
             last_name=coach.last_name,
+            phone=coach.phone,
             athletes_count=athletes_count,
         )
         for coach, club_name, city_name, athletes_count in rows
@@ -89,6 +90,7 @@ def get_coach_admin(
         iin=coach.iin,
         first_name=coach.first_name,
         last_name=coach.last_name,
+        phone=coach.phone,
         athletes_count=athletes_count,
     )
 

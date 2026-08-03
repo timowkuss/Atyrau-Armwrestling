@@ -19,6 +19,7 @@ const EMPTY_FORM: CoachInput = {
   city_id: undefined,
   bio: '',
   photo_path: '',
+  phone: '',
 }
 
 const inputClass =
@@ -152,6 +153,13 @@ export function CoachesAdmin() {
               onChange={(e) => setForm({ ...form, iin: e.target.value.replace(/\D/g, '').slice(0, 12) })}
               className={`w-40 ${inputClass}`}
             />
+            <input
+              placeholder="Телефон 8(XXX)XXX-XX-XX"
+              inputMode="tel"
+              value={form.phone ?? ''}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              className={inputClass}
+            />
             <select
               value={form.qualification ?? COACH_QUALIFICATIONS[0]}
               onChange={(e) => setForm({ ...form, qualification: e.target.value })}
@@ -230,6 +238,13 @@ export function CoachesAdmin() {
                         defaultValue={coach.iin ?? ''}
                         onChange={(e) => setEditForm({ ...editForm, iin: e.target.value.replace(/\D/g, '').slice(0, 12) })}
                         className={`w-48 ${inputClass}`}
+                      />
+                      <input
+                        placeholder="Телефон"
+                        inputMode="tel"
+                        defaultValue={coach.phone ?? ''}
+                        onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                        className={inputClass}
                       />
                       <select
                         defaultValue=""
@@ -317,6 +332,7 @@ export function CoachesAdmin() {
                           {coach.qualification ?? 'без звания'} · {coach.athletes_count} спортсменов
                         </p>
                         <p className="font-mono text-xs text-steel-dim">ИИН: {coach.iin ?? '—'}</p>
+                        <p className="font-mono text-xs text-steel-dim">Телефон: {coach.phone ?? '—'}</p>
                       </div>
                     </div>
                     <div className="flex flex-shrink-0 gap-2">

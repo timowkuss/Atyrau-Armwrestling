@@ -1,3 +1,4 @@
+import re
 from datetime import date
 
 from pydantic import BaseModel, field_validator
@@ -33,6 +34,22 @@ def _validate_birth_date(value: date | None) -> date | None:
     return value
 
 
+# Телефон приводится к единому виду 8(702)313-53-83. Пробелы/скобки/дефисы/+
+# игнорируем; «8…» или «7…» в начале снимаем только когда это код страны
+# (всего 11 цифр), а десятизначный номер оставляем как есть.
+def _validate_phone(value: str | None) -> str | None:
+    if value is None:
+        return None
+    digits = re.sub(r"\D", "", value.strip())
+    if not digits:
+        return None
+    if len(digits) == 11 and digits[0] in "87":
+        digits = digits[1:]
+    if len(digits) != 10:
+        raise ValueError("Телефон должен быть в формате 8(XXX)XXX-XX-XX")
+    return f"8({digits[0:3]}){digits[3:6]}-{digits[6:8]}-{digits[8:]}"
+
+
 class CoachListOut(BaseModel):
     id: int
     full_name: str
@@ -64,12 +81,14 @@ class CoachAdminListOut(CoachListOut):
     iin: str | None
     first_name: str | None
     last_name: str | None
+    phone: str | None = None
 
 
 class CoachAdminDetailOut(CoachDetailOut):
     iin: str | None
     first_name: str | None
     last_name: str | None
+    phone: str | None = None
 
 
 class CoachCreate(BaseModel):
@@ -82,9 +101,11 @@ class CoachCreate(BaseModel):
     city_id: int | None = None
     photo_path: str | None = None
     bio: str | None = None
+    phone: str | None = None
 
     _validate_iin_field = field_validator("iin")(_validate_iin)
     _validate_birth_date_field = field_validator("birth_date")(_validate_birth_date)
+    _validate_phone_field = field_validator("phone")(_validate_phone)
 
     @field_validator("first_name", "last_name")
     @classmethod
@@ -105,6 +126,8 @@ class CoachUpdate(BaseModel):
     city_id: int | None = None
     photo_path: str | None = None
     bio: str | None = None
+    phone: str | None = None
 
     _validate_iin_field = field_validator("iin")(_validate_iin)
     _validate_birth_date_field = field_validator("birth_date")(_validate_birth_date)
+    _validate_phone_field = field_validator("phone")(_validate_phone)
