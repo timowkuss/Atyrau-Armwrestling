@@ -415,6 +415,7 @@ export interface AthleteAdminListItem {
   rank: string | null
   photo_path: string | null
   is_hidden: boolean
+  iin: string | null
   phone: string | null
 }
 
@@ -430,6 +431,7 @@ export interface AthleteInput {
   rank?: string | null
   photo_path?: string | null
   bio?: string | null
+  iin?: string | null
   phone?: string | null
 }
 
