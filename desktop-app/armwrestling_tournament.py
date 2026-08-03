@@ -3990,25 +3990,25 @@ class AthleteCard(ctk.CTkFrame):
         col = 0
         if index is not None:
             ctk.CTkLabel(self, text=f"#{index}", font=ctk.CTkFont(size=12, weight="bold"),
-                        text_color="#556677", width=36).grid(row=0, column=0, rowspan=3, padx=(10, 0), pady=10)
+                        text_color="#556677", width=36).grid(row=0, column=0, rowspan=4, padx=(10, 0), pady=10)
             col = 1
 
-        photo_label = ctk.CTkLabel(self, text="👤", font=("Arial", 28), width=92, height=112,
-                    fg_color="#0d1420", corner_radius=12)
+        photo_label = ctk.CTkLabel(self, text="👤", font=("Arial", 30), width=120, height=140,
+                    fg_color="#0d1420", corner_radius=14)
         local_photo = resolve_local_photo_path(a["photo_path"], only_cached=True) if PIL_AVAILABLE and a["photo_path"] else None
         if local_photo:
             try:
-                img = load_photo_thumbnail(local_photo, 184, 224)
-                photo = ctk.CTkImage(img, size=(92, 112))
-                photo_label = ctk.CTkLabel(self, image=photo, text="", width=92, height=112)
+                img = load_photo_thumbnail(local_photo, 240, 280)
+                photo = ctk.CTkImage(img, size=(120, 140))
+                photo_label.configure(image=photo, text="", fg_color="transparent", corner_radius=0)
                 photo_label._image = photo
             except Exception:
                 pass
-        photo_label.grid(row=0, column=col, rowspan=4, padx=(6, 3), pady=2)
+        photo_label.grid(row=0, column=col, rowspan=4, padx=(10, 8), pady=10)
 
         full_name = f"{a['last_name']} {a['first_name']}"
         ctk.CTkLabel(self, text=full_name, font=ctk.CTkFont(size=14, weight="bold"),
-                    anchor="w").grid(row=0, column=col + 1, sticky="w", padx=5, pady=(8, 0))
+                    anchor="w").grid(row=0, column=col + 1, sticky="w", padx=5, pady=(10, 0))
 
         gender_label = "Ж" if a["gender"] == "F" else "М"
         turning_age = datetime.now().year - extract_birth_year(a["birth_date"])
@@ -4026,10 +4026,10 @@ class AthleteCard(ctk.CTkFrame):
 
         coach_text = f"Тренер: {a['coach_name']}" if a["coach_name"] else "Тренер: отсутствует"
         ctk.CTkLabel(self, text=coach_text, font=ctk.CTkFont(size=11),
-                    text_color="#44aa77", anchor="w").grid(row=3, column=col + 1, sticky="w", padx=5, pady=(0, 8))
+                    text_color="#44aa77", anchor="w").grid(row=3, column=col + 1, sticky="w", padx=5, pady=(0, 10))
 
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        btn_frame.grid(row=0, column=col + 2, rowspan=3, padx=10, pady=10, sticky="e")
+        btn_frame.grid(row=0, column=col + 2, rowspan=4, padx=10, pady=10, sticky="e")
         ctk.CTkButton(btn_frame, text="✏️", width=36, height=32,
                     command=lambda: on_edit(a["id"])).pack(pady=2)
         ctk.CTkButton(btn_frame, text="🗑", width=36, height=32,
@@ -4172,6 +4172,7 @@ class AthletesWindow(ctk.CTkToplevel):
             entry = ctk.CTkEntry(parent, textvariable=var, width=260, placeholder_text=placeholder)
             entry.grid(row=row, column=1, padx=(0, 15), pady=8, sticky="w")
             fields[key] = var
+            fields[key + "_entry"] = entry
             return var
 
         form = ctk.CTkFrame(dlg, fg_color="transparent")
@@ -4181,6 +4182,16 @@ class AthletesWindow(ctk.CTkToplevel):
         lbl_entry(form, "Фамилия*:", "last_name", existing["last_name"] if existing else "", row=1)
         lbl_entry(form, "ИИН* (12 цифр):", "iin", existing["iin"] if existing else "", row=2,
                   placeholder="12 цифр")
+
+        def format_iin(event=None):
+            raw = fields["iin_entry"].get()
+            value = "".join(ch for ch in raw if ch.isdigit())[:12]
+            if value != raw:
+                fields["iin_entry"].delete(0, "end")
+                fields["iin_entry"].insert(0, value)
+                fields["iin_entry"].icursor(len(value))
+
+        fields["iin_entry"].bind("<KeyRelease>", format_iin)
 
         # ─── Телефон с маской 8(XXX)XXX-XX-XX ───
         ctk.CTkLabel(form, text="Телефон:", anchor="e", width=110).grid(
@@ -4228,10 +4239,18 @@ class AthletesWindow(ctk.CTkToplevel):
         birth_date_var = ctk.StringVar(value=existing["birth_date"] if existing else "")
         birth_entry = ctk.CTkEntry(form, textvariable=birth_date_var, width=260,
                     placeholder_text="  .  .    ")
-        birth_entry.grid(row=2, column=1, padx=(0, 15), pady=8, sticky="w")
+        birth_entry.grid(row=4, column=1, padx=(0, 15), pady=8, sticky="w")
 
         def format_birthdate(event=None):
+            now_year = datetime.now().year
             value = "".join(ch for ch in birth_entry.get() if ch.isdigit())[:8]
+
+            if len(value) >= 2:
+                value = f"{min(31, max(1, int(value[:2]))):02d}" + value[2:]
+            if len(value) >= 4:
+                value = value[:2] + f"{min(12, max(1, int(value[2:4]))):02d}" + value[4:]
+            if len(value) >= 8:
+                value = value[:4] + f"{min(now_year, max(1920, int(value[4:8]))):04d}"
 
             result = ""
             if len(value) >= 1:
@@ -4328,25 +4347,51 @@ class AthletesWindow(ctk.CTkToplevel):
         photo_row.grid(row=photo_row_num, column=1, padx=(0, 15), pady=8, sticky="w")
 
         photo_path_var.set(existing["photo_path"] or "" if existing else "")
-        photo_lbl = ctk.CTkLabel(photo_row,
-                    text=Path(photo_path_var.get()).name if photo_path_var.get() else "не выбрано",
-                    text_color="#445566", width=140, anchor="w")
-        photo_lbl.pack(side="left")
 
         def choose_photo():
-            if not PIL_AVAILABLE:
-                messagebox.showwarning("Нет PIL", "Установите Pillow:\npip install pillow")
+            p = filedialog.askopenfilename(
+                filetypes=[("Images", "*.png *.jpg *.jpeg *.webp")])
+            if not p:
                 return
-            p = filedialog.askopenfilename(filetypes=[("Images", "*.png *.jpg *.jpeg *.webp")])
-            if p:
-                dest = PHOTOS_DIR / Path(p).name
-                import shutil
-                shutil.copy2(p, dest)
-                photo_path_var.set(str(dest))
-                photo_lbl.configure(text=Path(p).name)
+            if not is_configured():
+                messagebox.showwarning(
+                    "Cloudinary не настроен",
+                    "Загрузка фото недоступна: на этом компьютере не заданы "
+                    "переменные окружения CLOUDINARY_CLOUD_NAME / "
+                    "CLOUDINARY_UPLOAD_PRESET.\n\nСпортсмен будет сохранён без фото.")
+                return
 
-        ctk.CTkButton(photo_row, text="📷 Выбрать", width=100, height=28,
-                    command=choose_photo).pack(side="left", padx=(10, 0))
+            photo_status_lbl.configure(text="Загружаем…", text_color="#c9a227")
+            upload_btn.configure(state="disabled")
+
+            def worker():
+                try:
+                    url = upload_photo(p, folder="athletes")
+                except CloudinaryUploadError as e:
+                    def on_error():
+                        photo_status_lbl.configure(text=f"Ошибка: {e}", text_color=ERR)
+                        upload_btn.configure(state="normal")
+                    dlg.after(0, on_error)
+                    return
+
+                def on_success():
+                    photo_path_var.set(url)
+                    photo_status_lbl.configure(text="✓ Загружено", text_color=OK)
+                    upload_btn.configure(state="normal")
+                dlg.after(0, on_success)
+
+            Thread(target=worker, daemon=True).start()
+
+        upload_btn = ctk.CTkButton(photo_row, text="📷 Выбрать", width=110, height=28,
+                    fg_color=ACCENT_DIM, hover_color=INFO_HOVER, command=choose_photo)
+        upload_btn.pack(side="left")
+
+        photo_status_lbl = ctk.CTkLabel(photo_row, text="не выбрано", text_color="#445566",
+                    anchor="w", padx=8)
+        photo_status_lbl.pack(side="left")
+
+        if photo_path_var.get():
+            photo_status_lbl.configure(text="✓ Фото есть", text_color=OK)
 
         preview_label = ctk.CTkLabel(form, text="", text_color="#5588bb",
                     font=ctk.CTkFont(size=11), anchor="w", justify="left")
@@ -4639,7 +4684,16 @@ class CoachesWindow(ctk.CTkToplevel):
         birth_entry.grid(row=2, column=1, padx=(0, 14), pady=7, sticky="ew")
 
         def format_birthdate(event=None):
+            now_year = datetime.now().year
             value = "".join(ch for ch in birth_entry.get() if ch.isdigit())[:8]
+
+            if len(value) >= 2:
+                value = f"{min(31, max(1, int(value[:2]))):02d}" + value[2:]
+            if len(value) >= 4:
+                value = value[:2] + f"{min(12, max(1, int(value[2:4]))):02d}" + value[4:]
+            if len(value) >= 8:
+                value = value[:4] + f"{min(now_year, max(1920, int(value[4:8]))):04d}"
+
             result = ""
             if len(value) >= 1:
                 result += value[:2]
@@ -6138,27 +6192,51 @@ class App(ctk.CTk):
         ctk.CTkLabel(form, text="Фото:", anchor="e", width=110).grid(
             row=4, column=0, padx=(15, 8), pady=6, sticky="e")
         photo_path_var.set(existing["photo_path"] or "" if existing else "")
-        photo_lbl = ctk.CTkLabel(form,
-                    text=Path(photo_path_var.get()).name if photo_path_var.get() else "не выбрано",
-                    text_color="#445566", width=160, anchor="w")
-        photo_lbl.grid(row=4, column=1, padx=(0, 0), pady=6, sticky="w")
 
         def choose_photo():
-            if not PIL_AVAILABLE:
-                messagebox.showwarning("Нет PIL", "Установите Pillow:\npip install pillow")
-                return
             p = filedialog.askopenfilename(
                 filetypes=[("Images", "*.png *.jpg *.jpeg *.webp")])
-            if p:
-                dest = PHOTOS_DIR / Path(p).name
-                import shutil
-                shutil.copy2(p, dest)
-                photo_path_var.set(str(dest))
-                photo_lbl.configure(text=Path(p).name)
+            if not p:
+                return
+            if not is_configured():
+                messagebox.showwarning(
+                    "Cloudinary не настроен",
+                    "Загрузка фото недоступна: на этом компьютере не заданы "
+                    "переменные окружения CLOUDINARY_CLOUD_NAME / "
+                    "CLOUDINARY_UPLOAD_PRESET.\n\nУчастник будет сохранён без фото.")
+                return
 
-        ctk.CTkButton(form, text="📷 Выбрать", width=80, height=28,
-                    command=choose_photo).grid(row=4, column=1, padx=(170, 0), pady=6,
-                    sticky="w")
+            photo_status_lbl.configure(text="Загружаем…", text_color="#c9a227")
+            upload_btn.configure(state="disabled")
+
+            def worker():
+                try:
+                    url = upload_photo(p, folder="athletes")
+                except CloudinaryUploadError as e:
+                    def on_error():
+                        photo_status_lbl.configure(text=f"Ошибка: {e}", text_color=ERR)
+                        upload_btn.configure(state="normal")
+                    dlg.after(0, on_error)
+                    return
+
+                def on_success():
+                    photo_path_var.set(url)
+                    photo_status_lbl.configure(text="✓ Загружено", text_color=OK)
+                    upload_btn.configure(state="normal")
+                dlg.after(0, on_success)
+
+            Thread(target=worker, daemon=True).start()
+
+        upload_btn = ctk.CTkButton(form, text="📷 Выбрать", width=90, height=28,
+                    fg_color=ACCENT_DIM, hover_color=INFO_HOVER, command=choose_photo)
+        upload_btn.grid(row=4, column=1, padx=(0, 0), pady=6, sticky="w")
+
+        photo_status_lbl = ctk.CTkLabel(form, text="не выбрано", text_color="#445566",
+                    anchor="w")
+        photo_status_lbl.grid(row=4, column=1, padx=(100, 0), pady=6, sticky="w")
+
+        if photo_path_var.get():
+            photo_status_lbl.configure(text="✓ Фото есть", text_color=OK)
 
         # ── кнопка выбора спортсмена (ставим ПОСЛЕ объявления всех полей формы,
         #    чтобы choose_athlete/update_categories видели fields["club"] и т.д.) ──
@@ -6192,7 +6270,7 @@ class App(ctk.CTk):
                             fields["club"].set(a["club"] or "")
                         if not photo_path_var.get() and a["photo_path"]:
                             photo_path_var.set(a["photo_path"])
-                            photo_lbl.configure(text=Path(a["photo_path"]).name)
+                            photo_status_lbl.configure(text="✓ Фото спортсмена", text_color=OK)
                         update_categories(a)
                         validate_form()
                         picker.destroy()
