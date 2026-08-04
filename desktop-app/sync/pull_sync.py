@@ -235,7 +235,7 @@ class PullSyncManager:
         founded_year = _to_founded_year(item.get("founded_date"))
         logo_path = item.get("logo_path")
 
-        local_id = self.state.map_get_local("club", remote_id)
+        local_id = self._mapped_local_id(conn, "club", remote_id, "clubs")
         if local_id is not None:
             return self._apply_club(conn, local_id, name, city, address,
                                     founded_year, logo_path, remote_id=remote_id)
@@ -277,6 +277,22 @@ class PullSyncManager:
         return True
 
     # ── тренеры ───────────────────────────────────────────────
+    def _mapped_local_id(self, conn: sqlite3.Connection, entity_type: str,
+                         remote_id: int, table: str):
+        """Локальный id по remote_id из id_map — НО только если карточка
+        реально существует в локальной БД. Протухший маппинг (локальную
+        запись удалили, а строка в id_map осталась) чистим: иначе UPDATE по
+        несуществующей строке молча терял бы данные, приходящие с сайта
+        (пример: спортсмен удалён локально, на сайте жив — и не доезжает)."""
+        local_id = self.state.map_get_local(entity_type, remote_id)
+        if local_id is None:
+            return None
+        row = conn.execute(f"SELECT id FROM {table} WHERE id=?", (local_id,)).fetchone()
+        if row is None:
+            self.state.map_delete(entity_type, local_id)
+            return None
+        return local_id
+
     def _poll_coaches(self, conn: sqlite3.Connection) -> int:
         # Полный ресинк (since=эпоха) вместо курьера раз в N опросов — лечит
         # записи, мимо которых инкрементальный курсор однажды «перескочил»
@@ -321,7 +337,7 @@ class PullSyncManager:
         # update_coach). Секция «Скрытые» в окне тренеров позволяет вернуть
         # её обратно. Если карточки тут ещё не было — не заводим.
         if item.get("is_hidden"):
-            local_id = self.state.map_get_local("coach", remote_id)
+            local_id = self._mapped_local_id(conn, "coach", remote_id, "coaches")
             if local_id is None:
                 return
             conn.execute("UPDATE athletes SET coach_id=NULL WHERE coach_id=?", (local_id,))
@@ -343,7 +359,7 @@ class PullSyncManager:
         city = item.get("city_name")
         phone = item.get("phone")
 
-        local_id = self.state.map_get_local("coach", remote_id)
+        local_id = self._mapped_local_id(conn, "coach", remote_id, "coaches")
         if local_id is not None:
             conn.execute(
                 "UPDATE coaches SET full_name=?, club=?, photo_path=?, bio=?, "
@@ -444,7 +460,7 @@ class PullSyncManager:
 
     def _upsert_athlete(self, conn: sqlite3.Connection, item: dict):
         remote_id = item["id"]
-        local_id = self.state.map_get_local("athlete", remote_id)
+        local_id = self._mapped_local_id(conn, "athlete", remote_id, "athletes")
 
         # Скрытую на сайте карточку (is_hidden=True — админка "удалила"
         # спортсмена, но сервер не смог стереть его физически из-за
@@ -454,6 +470,7 @@ class PullSyncManager:
         # карточки тут ещё не было — просто не заводим её (скрытую
         # запись незачем создавать впервые).
         if item.get("is_hidden"):
+            local_id = self._mapped_local_id(conn, "athlete", remote_id, "athletes")
             if local_id is None:
                 return
             # Сервер при скрытии отвязал спортсмена от клуба и тренера —

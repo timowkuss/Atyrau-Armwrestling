@@ -399,6 +399,30 @@ class PullSyncHiddenTest(unittest.TestCase):
         self.assertIsNone(a["club"])
 
 
+    def test_stale_id_map_recreates_deleted_local_athlete(self):
+        # Локальную карточку спортсмена удалили, но запись в id_map осталась
+        # (local -> remote 8080). Раньше _upsert_athlete делал UPDATE по
+        # несуществующей строке — карточка молча не доезжала с сайта.
+        aid = self.db.add_athlete("Петров", "Пётр", "01.01.2000", "M", club="Алга")
+        self.state.map_set("athlete", aid, 8080)
+        self.conn.execute("DELETE FROM athletes WHERE id=?", (aid,))
+        self.conn.commit()
+
+        self.mgr._upsert_athlete(self.conn, {
+            "id": 8080, "is_hidden": False, "full_name": "Петров Пётр",
+            "gender": "M", "birth_date": "2000-01-01", "club_name": "Алга",
+            "coach_name": None,
+        })
+        self.conn.commit()
+
+        rows = self.conn.execute(
+            "SELECT * FROM athletes WHERE first_name='Петров' AND last_name='Пётр'"
+        ).fetchall()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["is_hidden"], 0)
+        self.assertEqual(self.state.map_get_local("athlete", 8080), rows[0]["id"])
+
+
 class CursorSelfHealTest(unittest.TestCase):
     """Инкрементальный курсор может «перескочить» мимо записей (курсор
     ставится по server_time — моменту запроса; запись, изменённая на сервере
