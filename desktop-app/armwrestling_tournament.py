@@ -92,6 +92,62 @@ PHOTOS_DIR.mkdir(exist_ok=True)
 BARCODE_PREFIX = "ARM"
 DELETE_PASSWORD = "1234"  # смените на свой пароль
 
+# ── модальные диалоги на Windows ─────────────────────────────
+# Без parent=<окно приложения> messagebox/simpledialog создают диалог, не
+# привязанный к активному окну, и на Windows наше окно при этом уходит на
+# задний план (фокус возвращается не туда). Подменяем вызовы обёртками:
+# всегда передаём владельца — активный Toplevel приложения — и после
+# закрытия диалога возвращаем окно на передний план.
+import tkinter.messagebox as _tkmb
+import tkinter.simpledialog as _tksd
+
+
+def _messagebox_owner():
+    """Активный Toplevel приложения (окно, в котором сейчас фокус)."""
+    try:
+        root = ctk.CTk._default_root
+        if root is None:
+            root = tk._default_root
+        if root is None:
+            return None
+        w = root.focus_displayof()
+        while w is not None and not isinstance(w, tk.Toplevel) and w.master is not None:
+            w = w.master
+        return w if isinstance(w, tk.Toplevel) else root
+    except Exception:
+        return None
+
+
+def _front_after_dialog(win):
+    if win is None:
+        return
+    try:
+        win.lift()
+        win.focus_force()
+    except Exception:
+        pass
+
+
+def _with_owner(fn):
+    def wrapped(*args, **kwargs):
+        if "parent" not in kwargs:
+            owner = _messagebox_owner()
+            if owner is not None:
+                kwargs["parent"] = owner
+                _front_after_dialog(owner)
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            _front_after_dialog(kwargs.get("parent"))
+    return wrapped
+
+
+for _name in ("askyesno", "askokcancel", "askquestion", "askretrycancel",
+              "showinfo", "showwarning", "showerror"):
+    setattr(_tkmb, _name, _with_owner(getattr(_tkmb, _name)))
+for _name in ("askstring", "askinteger", "askfloat"):
+    setattr(_tksd, _name, _with_owner(getattr(_tksd, _name)))
+
 
 def get_barcode_value(participant_id):
     """Генерирует уникальное значение штрихкода для участника."""
