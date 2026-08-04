@@ -194,13 +194,13 @@ export function ClubProfile() {
 
               {/* Инфо */}
               <div className="flex-1 pt-1">
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-start justify-between gap-4">
                   <h1 className="font-display text-3xl font-bold leading-tight text-bone sm:text-4xl lg:text-5xl">
                     {c.name}
                   </h1>
-                  <span className="order-first sm:order-none inline-flex items-center gap-1.5 rounded-full border border-brass/30 bg-brass/5 px-3 py-1 font-mono text-xs font-medium tracking-wider text-brass">
-                    <span className="h-1.5 w-1.5 rounded-full bg-brass/60" />
-                    {c.rating_points} очк.
+                  <span className="flex flex-shrink-0 flex-col items-end gap-1">
+                    <span className="font-mono text-[10px] font-medium uppercase tracking-widest text-rust/60">Рейтинг</span>
+                    <span className="font-display text-3xl font-bold leading-none text-rust sm:text-4xl">{c.rating_points}</span>
                   </span>
                 </div>
 
