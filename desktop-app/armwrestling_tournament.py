@@ -4441,24 +4441,46 @@ class AthletesWindow(ctk.CTkToplevel):
         self._refresh_list()
 
     def _sync_now(self):
-        """Ручная отправка офлайн-очереди из окна реестра спортсменов —
-        не привязана к конкретному турниру."""
+        """Ручная синхронизация из окна реестра: отправка офлайн-очереди на
+        сайт + ПОЛНАЯ подтяжка карточек спортсменов/тренеров с сайта
+        (в т.ч. тех, что ещё не внесены в десктоп). Сетевую часть делаем в
+        фоне, чтобы не подвесить окно."""
         from sync.sync_manager import sync_manager
 
-        pending = sync_manager.state.pending_count()
-        if not pending:
-            messagebox.showinfo("Синхронизация", "Очередь пуста — всё уже отправлено.")
-            return
+        def worker():
+            pushed, remaining = 0, 0
+            try:
+                if sync_manager.state.pending_count() > 0:
+                    pushed, remaining = sync_manager.flush_pending()
+            except Exception as e:  # noqa: BLE001
+                self.after(0, lambda: messagebox.showerror(
+                    "Синхронизация", f"Ошибка отправки на сайт: {e}"))
+                return
+            try:
+                from sync import pull_sync
+                pulled = pull_sync.pull_sync_manager.sync_now()
+            except Exception as e:  # noqa: BLE001
+                self.after(0, lambda: messagebox.showerror(
+                    "Синхронизация", f"Ошибка загрузки с сайта: {e}"))
+                return
+            self.after(0, lambda: self._sync_done(pushed, remaining, pulled))
 
-        done, remaining = sync_manager.flush_pending()
+        Thread(target=worker, daemon=True).start()
+
+    def _sync_done(self, pushed, remaining, pulled):
+        self._refresh_list()
         if remaining:
             messagebox.showwarning(
                 "Синхронизация",
-                f"Отправлено {done} из {pending}.\n"
-                f"Осталось {remaining} — похоже, связи всё ещё нет."
+                f"Отправлено {pushed}, осталось {remaining} (похоже, связи всё ещё нет).\n"
+                f"С сайта подтянуто записей: {pulled}."
             )
         else:
-            messagebox.showinfo("Синхронизация", f"Готово! Отправлено {done} операций.")
+            messagebox.showinfo(
+                "Синхронизация",
+                f"Готово! Отправлено: {pushed}.\n"
+                f"С сайта подтянуто новых/изменённых записей: {pulled}."
+            )
 
 
     def _add_athlete_dialog(self, edit_id=None):
@@ -4902,6 +4924,9 @@ class CoachesWindow(ctk.CTkToplevel):
         ctk.CTkButton(ctrl, text="➕ Добавить тренера", width=180, height=38,
                     fg_color="#1a4a2a", hover_color="#2a6a3a",
                     command=lambda: self._add_coach_dialog()).pack(side="left", padx=5)
+        ctk.CTkButton(ctrl, text="🔄 Синхронизировать", width=170, height=38,
+                    fg_color="#2a2a5a", hover_color="#3a3a7a",
+                    command=self._sync_now).pack(side="left", padx=5)
 
         self.search_var = ctk.StringVar()
         self.search_var.trace_add("write", lambda *_: self._refresh_list())
@@ -4945,6 +4970,48 @@ class CoachesWindow(ctk.CTkToplevel):
                         on_delete=self._delete_coach,
                         on_show=self._show_coach, hidden=True, index=i)
                 card.pack(fill="x", padx=5, pady=4)
+
+    def _sync_now(self):
+        """Ручная синхронизация из окна реестра тренеров: отправка
+        офлайн-очереди на сайт + ПОЛНАЯ подтяжка карточек с сайта (в т.ч.
+        тех, что ещё не внесены в десктоп). Сетевую часть делаем в фоне,
+        чтобы не подвесить окно."""
+        from sync.sync_manager import sync_manager
+
+        def worker():
+            pushed, remaining = 0, 0
+            try:
+                if sync_manager.state.pending_count() > 0:
+                    pushed, remaining = sync_manager.flush_pending()
+            except Exception as e:  # noqa: BLE001
+                self.after(0, lambda: messagebox.showerror(
+                    "Синхронизация", f"Ошибка отправки на сайт: {e}"))
+                return
+            try:
+                from sync import pull_sync
+                pulled = pull_sync.pull_sync_manager.sync_now()
+            except Exception as e:  # noqa: BLE001
+                self.after(0, lambda: messagebox.showerror(
+                    "Синхронизация", f"Ошибка загрузки с сайта: {e}"))
+                return
+            self.after(0, lambda: self._sync_done(pushed, remaining, pulled))
+
+        Thread(target=worker, daemon=True).start()
+
+    def _sync_done(self, pushed, remaining, pulled):
+        self._refresh_list()
+        if remaining:
+            messagebox.showwarning(
+                "Синхронизация",
+                f"Отправлено {pushed}, осталось {remaining} (похоже, связи всё ещё нет).\n"
+                f"С сайта подтянуто записей: {pulled}."
+            )
+        else:
+            messagebox.showinfo(
+                "Синхронизация",
+                f"Готово! Отправлено: {pushed}.\n"
+                f"С сайта подтянуто новых/изменённых записей: {pulled}."
+            )
 
     def _show_coach(self, cid):
         """Вернуть тренера из «Скрытых» в обычный реестр (и на сайт)."""
@@ -5580,6 +5647,9 @@ class ClubsWindow(ctk.CTkToplevel):
         ctk.CTkButton(ctrl, text="➕ Добавить клуб", width=160, height=38,
                     fg_color="#1a4a2a", hover_color="#2a6a3a",
                     command=lambda: self._add_club_dialog()).pack(side="left", padx=5)
+        ctk.CTkButton(ctrl, text="🔄 Синхронизировать", width=170, height=38,
+                    fg_color="#2a2a5a", hover_color="#3a3a7a",
+                    command=self._sync_now).pack(side="left", padx=5)
 
         self.search_var = ctk.StringVar()
         self.search_var.trace_add("write", lambda *_: self._refresh_list())
@@ -5608,6 +5678,48 @@ class ClubsWindow(ctk.CTkToplevel):
                     on_edit=self._add_club_dialog,
                     on_delete=self._delete_club, index=i, db=self.db)
             card.pack(fill="x", padx=5, pady=4)
+
+    def _sync_now(self):
+        """Ручная синхронизация из окна реестра клубов: отправка офлайн-очереди
+        на сайт + ПОЛНАЯ подтяжка клубов/спортсменов/тренеров с сайта (в т.ч.
+        тех, что ещё не внесены в десктоп). Сетевую часть делаем в фоне,
+        чтобы не подвесить окно."""
+        from sync.sync_manager import sync_manager
+
+        def worker():
+            pushed, remaining = 0, 0
+            try:
+                if sync_manager.state.pending_count() > 0:
+                    pushed, remaining = sync_manager.flush_pending()
+            except Exception as e:  # noqa: BLE001
+                self.after(0, lambda: messagebox.showerror(
+                    "Синхронизация", f"Ошибка отправки на сайт: {e}"))
+                return
+            try:
+                from sync import pull_sync
+                pulled = pull_sync.pull_sync_manager.sync_now()
+            except Exception as e:  # noqa: BLE001
+                self.after(0, lambda: messagebox.showerror(
+                    "Синхронизация", f"Ошибка загрузки с сайта: {e}"))
+                return
+            self.after(0, lambda: self._sync_done(pushed, remaining, pulled))
+
+        Thread(target=worker, daemon=True).start()
+
+    def _sync_done(self, pushed, remaining, pulled):
+        self._refresh_list()
+        if remaining:
+            messagebox.showwarning(
+                "Синхронизация",
+                f"Отправлено {pushed}, осталось {remaining} (похоже, связи всё ещё нет).\n"
+                f"С сайта подтянуто записей: {pulled}."
+            )
+        else:
+            messagebox.showinfo(
+                "Синхронизация",
+                f"Готово! Отправлено: {pushed}.\n"
+                f"С сайта подтянуто новых/изменённых записей: {pulled}."
+            )
 
     def _delete_club(self, cid):
         cl = self.db.get_club(cid)
@@ -7266,18 +7378,9 @@ class App(ctk.CTk):
         изменённые через админку сайта (см. sync/pull_sync.py). В отличие
         от _start_auto_sync (тикает на UI-потоке через self.after), сама
         сетевая часть тут крутится в ОТДЕЛЬНОМ фоновом потоке — если сайт
-        недоступен/тормозит, интерфейс судьи это никак не подвесит.
-        on_changes_applied прилетает из того фонового потока, поэтому
-        обратно на UI-поток возвращаемся через self.after(0, ...) —
-        трогать виджеты Tkinter напрямую из чужого потока нельзя."""
+        недоступен/тормозит, интерфейс судьи это никак не подвесит."""
         from sync import pull_sync
-        pull_sync.configure(
-            db_path=str(DB_PATH),
-            poll_interval=10,
-            on_changes_applied=lambda: self.after(
-                0, lambda: self._show_sync_toast("Обновлены данные из админки сайта")
-            ),
-        )
+        pull_sync.configure(db_path=str(DB_PATH), poll_interval=10)
 
     def _auto_sync_tick(self):
         try:

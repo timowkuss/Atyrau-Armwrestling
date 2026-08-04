@@ -488,6 +488,18 @@ class CursorSelfHealTest(unittest.TestCase):
             self.state.get_cursor("coaches"), "2026-08-04T04:02:00+00:00")
         self.assertEqual(self.mgr._poll_coaches(self.conn), 0)
 
+    def test_sync_now_full_resync_pulls_skipped_records(self):
+        # Кнопка «Синхронизировать» = sync_now(): полный ресинк (since=эпоха)
+        # даже при «перескочившем» вперёд курсоре — все записи доедут.
+        self.state.set_cursor("coaches", "2026-08-04T04:03:00+00:00")
+        self.assertEqual(self.mgr.sync_now(), 3)
+        coaches = self._local_coaches()
+        self.assertEqual(len(coaches), 3)
+        for row in coaches:
+            self.assertIsNotNone(self.state.map_get("coach", row["id"]))
+        self.assertEqual(
+            self.state.get_cursor("coaches"), "2026-08-04T04:02:00+00:00")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

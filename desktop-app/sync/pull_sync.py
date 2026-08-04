@@ -142,6 +142,18 @@ class PullSyncManager:
         )
         self._thread.start()
 
+    def sync_now(self) -> int:
+        """Ручной ПОЛНЫЙ ресинк (кнопка «Синхронизировать» в реестре
+        спортсменов/тренеров): тянет с сайта ВСЕ карточки спортсменов/
+        тренеров/клубов (since=эпоха), а не только изменения с прошлого
+        курсора, и доотдаёт в десктоп те, что ещё не внесены. Сетевую часть
+        стоит вызывать из фонового потока — poll_once() сам при этом
+        безопасен (свой sqlite-коннектор, upsert идемпотентен)."""
+        if not config.SYNC_ENABLED:
+            return 0
+        self._force_full = True
+        return self.poll_once()
+
     def stop(self):
         self._stop_event.set()
 
@@ -162,7 +174,10 @@ class PullSyncManager:
             return 0
 
         self._polls_since_full += 1
-        self._force_full = self._polls_since_full >= _FULL_RESYNC_EVERY_POLLS
+        # OR важно: _force_full мог быть выставлен вручную (sync_now/кнопка
+        # «Синхронизировать») — это не должно затираться счётчиком.
+        self._force_full = (self._force_full
+                            or self._polls_since_full >= _FULL_RESYNC_EVERY_POLLS)
 
         applied = 0
         conn = sqlite3.connect(str(self.db_path), timeout=5)
