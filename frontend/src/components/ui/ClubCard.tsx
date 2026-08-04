@@ -64,24 +64,6 @@ export function ClubCard({ club }: { club: ClubListItem }) {
         <span className="truncate">Адрес: {club.address ?? 'отсутствует'}</span>
       </div>
 
-      <div className="mt-1.5 flex items-center gap-1.5 truncate font-mono text-xs text-steel-dim/80">
-        <svg width="11" height="11" viewBox="0 0 14 14" fill="none" className="flex-shrink-0">
-          <path d="M2 2.5h3l1.5 4L5 7.5c.6 1.2 1.6 2.2 2.8 2.8l1-1.5 3.7 1.5v3c0 .9-.7 1.6-1.6 1.6C5.8 15 1 10.2 1 4.1 1 3.2 1.7 2.5 2.6 2.5" stroke="currentColor" strokeWidth="1.2"/>
-        </svg>
-        <span>Связаться:&nbsp;</span>
-        {club.phone ? (
-          <a
-            href={`tel:${club.phone.replace(/\D/g, '')}`}
-            onClick={(e) => e.stopPropagation()}
-            className="truncate text-steel underline decoration-steel-dim/30 underline-offset-2 transition-colors hover:text-brass hover:decoration-brass/50"
-          >
-            {club.phone}
-          </a>
-        ) : (
-          <span className="truncate">не указан</span>
-        )}
-      </div>
-
       <div className="mt-5 grid grid-cols-2 divide-x divide-steel-dim/15 border-t border-steel-dim/15 pt-4">
         <div className="flex items-center gap-3 pr-4">
           <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-petrol-2/50 text-steel transition-colors group-hover:bg-petrol-2/70">

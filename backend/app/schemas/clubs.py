@@ -27,7 +27,6 @@ class ClubListOut(BaseModel):
     name: str
     logo_path: str | None
     address: str | None = None
-    phone: str | None = None
     city_name: str | None
     rating_points: int
     athletes_count: int
