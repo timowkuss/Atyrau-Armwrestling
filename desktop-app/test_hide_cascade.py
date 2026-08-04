@@ -194,8 +194,10 @@ class OfflineSyncTest(unittest.TestCase):
         self.mgr = SyncManager(
             api_client=self.api, state=SyncState(self.tmp.state_path))
         self.mgr.force_queue = True
+        self._orig_sync_manager = app.sync_manager
 
     def tearDown(self):
+        app.sync_manager = self._orig_sync_manager
         self.mgr.state.close()
         self.db.conn.close()
         self.tmp.cleanup()
@@ -278,6 +280,52 @@ class OfflineSyncTest(unittest.TestCase):
         delete_calls = [c for c in self.api.calls if c[0] == "delete_athlete"]
         self.assertEqual(len(delete_calls), 1)
         self.assertEqual(delete_calls[0][1], 8080)
+
+    def test_desktop_hide_coach_through_synced_wrapper(self):
+        # Кнопка «🙈 Скрыть» в окне тренеров зовёт db.set_coach_hidden(cid, True)
+        # (synced wrapper) — проверяем, что is_hidden=True доезжает до сервера.
+        app.sync_manager = self.mgr
+        cid = app._original_add_coach(
+            self.db, "Иванов Иван", club="Алга", phone="+77771112233")
+        self.mgr.state.map_set("coach", cid, 4242)
+        self.db.set_coach_hidden(cid, True)
+        succeeded, remaining = self._flush()
+        self.assertEqual(remaining, 0)
+        self.assertEqual(succeeded, 1)
+        update_calls = [c for c in self.api.calls if c[0] == "update_coach"]
+        self.assertEqual(len(update_calls), 1)
+        _, remote_id, kw = update_calls[0]
+        self.assertEqual(remote_id, 4242)
+        self.assertTrue(kw["is_hidden"])
+        self.assertEqual(kw["phone"], "+77771112233")
+
+    def test_desktop_show_coach_through_synced_wrapper(self):
+        # Кнопка «👁 Показать» зовёт db.set_coach_hidden(cid, False) — на
+        # сервер уходит is_hidden=False.
+        app.sync_manager = self.mgr
+        cid = app._original_add_coach(self.db, "Иванов Иван")
+        self.mgr.state.map_set("coach", cid, 4242)
+        self.db.set_coach_hidden(cid, False)
+        succeeded, remaining = self._flush()
+        self.assertEqual(remaining, 0)
+        self.assertEqual(succeeded, 1)
+        update_calls = [c for c in self.api.calls if c[0] == "update_coach"]
+        self.assertEqual(len(update_calls), 1)
+        self.assertFalse(update_calls[0][2]["is_hidden"])
+
+    def test_desktop_hide_athlete_through_synced_wrapper(self):
+        app.sync_manager = self.mgr
+        aid = app._original_add_athlete(
+            self.db, "Петров", "Пётр", "01.01.2000", "M", club="Алга",
+            phone="+77772223344")
+        self.mgr.state.map_set("athlete", aid, 8080)
+        self.db.set_athlete_hidden(aid, True)
+        succeeded, remaining = self._flush()
+        self.assertEqual(remaining, 0)
+        self.assertEqual(succeeded, 1)
+        update_calls = [c for c in self.api.calls if c[0] == "update_athlete"]
+        self.assertEqual(len(update_calls), 1)
+        self.assertTrue(update_calls[0][2]["is_hidden"])
 
 
 class PullSyncHiddenTest(unittest.TestCase):

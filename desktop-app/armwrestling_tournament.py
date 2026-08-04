@@ -4149,7 +4149,7 @@ class CombinedResultsWindow(ctk.CTkToplevel):
 
 class AthleteCard(ctk.CTkFrame):
     def __init__(self, master, athlete, on_edit, on_delete, index=None,
-                 on_show=None, hidden=False, **kwargs):
+                 on_show=None, on_hide=None, hidden=False, **kwargs):
         super().__init__(master, corner_radius=10, **kwargs)
         self.configure(fg_color=("#1e2a3a", "#1e2a3a"))
         a = athlete
@@ -4211,6 +4211,10 @@ class AthleteCard(ctk.CTkFrame):
             ctk.CTkButton(btn_frame, text="👁 Показать", width=90, height=32,
                         fg_color="#2a4a2a", hover_color="#3a6a3a",
                         command=lambda: on_show(a["id"])).pack(pady=2)
+        elif on_hide:
+            ctk.CTkButton(btn_frame, text="🙈 Скрыть", width=90, height=32,
+                        fg_color="#4a3a2a", hover_color="#6a5a3a",
+                        command=lambda: on_hide(a["id"])).pack(pady=2)
         ctk.CTkButton(btn_frame, text="✏️", width=36, height=32,
                     command=lambda: on_edit(a["id"])).pack(pady=2)
         ctk.CTkButton(btn_frame, text="🗑", width=36, height=32,
@@ -4294,7 +4298,8 @@ class AthletesWindow(ctk.CTkToplevel):
             for i, a in enumerate(athletes, start=1):
                 card = AthleteCard(self.list_frame, a,
                         on_edit=self._add_athlete_dialog,
-                        on_delete=self._delete_athlete, index=i)
+                        on_delete=self._delete_athlete,
+                        on_hide=self._hide_athlete, index=i)
                 card.pack(fill="x", padx=5, pady=4)
 
         hidden = self.db.search_hidden_athletes(self.search_var.get().strip())
@@ -4303,7 +4308,7 @@ class AthletesWindow(ctk.CTkToplevel):
         if hidden:
             ctk.CTkFrame(self.list_frame, height=2, fg_color="#334455").pack(fill="x", padx=5, pady=8)
             ctk.CTkLabel(self.list_frame,
-                        text=f"🙈 Скрытые — удалены через админку сайта ({len(hidden)})",
+                        text=f"🙈 Скрытые — убраны из реестра и с сайта ({len(hidden)})",
                         font=ctk.CTkFont(size=13, weight="bold"),
                         text_color="#cc8844", anchor="w").pack(fill="x", padx=5, pady=(4, 2))
             for i, a in enumerate(hidden, start=1):
@@ -4316,6 +4321,16 @@ class AthletesWindow(ctk.CTkToplevel):
     def _show_athlete(self, aid):
         """Вернуть спортсмена из «Скрытых» в обычный реестр (и на сайт)."""
         self.db.set_athlete_hidden(aid, False)
+        self._refresh_list()
+
+    def _hide_athlete(self, aid):
+        if not messagebox.askyesno("Скрыть спортсмена",
+                    "Скрыть спортсмена из реестра?\n\n"
+                    "Он исчезнет из реестра и с сайта.\n"
+                    "Можно вернуть кнопкой «👁 Показать» в секции «Скрытые».\n\n"
+                    "Спортсмен покинет свой клуб (рейтинг клуба −10) и останется без тренера."):
+            return
+        self.db.set_athlete_hidden(aid, True)
         self._refresh_list()
 
     def _delete_athlete(self, aid):
@@ -4699,7 +4714,7 @@ class AthletesWindow(ctk.CTkToplevel):
     # ════
 class CoachCard(ctk.CTkFrame):
     def __init__(self, master, coach, athletes_count, on_edit, on_delete, index=None,
-                 on_show=None, hidden=False, **kwargs):
+                 on_show=None, on_hide=None, hidden=False, **kwargs):
         super().__init__(master, corner_radius=10, **kwargs)
         self.configure(fg_color=("#1e2a3a", "#1e2a3a"))
         c = coach
@@ -4761,6 +4776,10 @@ class CoachCard(ctk.CTkFrame):
             ctk.CTkButton(btn_frame, text="👁 Показать", width=90, height=32,
                         fg_color="#2a4a2a", hover_color="#3a6a3a",
                         command=lambda: on_show(c["id"])).pack(pady=2)
+        elif on_hide:
+            ctk.CTkButton(btn_frame, text="🙈 Скрыть", width=90, height=32,
+                        fg_color="#4a3a2a", hover_color="#6a5a3a",
+                        command=lambda: on_hide(c["id"])).pack(pady=2)
         ctk.CTkButton(btn_frame, text="✏️", width=36, height=32,
                     command=lambda: on_edit(c["id"])).pack(pady=2)
         ctk.CTkButton(btn_frame, text="🗑", width=36, height=32,
@@ -4820,14 +4839,15 @@ class CoachesWindow(ctk.CTkToplevel):
                 count = len(self.db.get_athletes_by_coach(c["id"]))
                 card = CoachCard(self.list_frame, c, count,
                         on_edit=self._add_coach_dialog,
-                        on_delete=self._delete_coach, index=i)
+                        on_delete=self._delete_coach,
+                        on_hide=self._hide_coach, index=i)
                 card.pack(fill="x", padx=5, pady=4)
 
         hidden = self.db.search_hidden_coaches(self.search_var.get().strip())
         if hidden:
             ctk.CTkFrame(self.list_frame, height=2, fg_color="#334455").pack(fill="x", padx=5, pady=8)
             ctk.CTkLabel(self.list_frame,
-                        text=f"🙈 Скрытые — удалены через админку сайта ({len(hidden)})",
+                        text=f"🙈 Скрытые — убраны из реестра и с сайта ({len(hidden)})",
                         font=ctk.CTkFont(size=13, weight="bold"),
                         text_color="#cc8844", anchor="w").pack(fill="x", padx=5, pady=(4, 2))
             for i, c in enumerate(hidden, start=1):
@@ -4841,6 +4861,16 @@ class CoachesWindow(ctk.CTkToplevel):
     def _show_coach(self, cid):
         """Вернуть тренера из «Скрытых» в обычный реестр (и на сайт)."""
         self.db.set_coach_hidden(cid, False)
+        self._refresh_list()
+
+    def _hide_coach(self, cid):
+        if not messagebox.askyesno("Скрыть тренера",
+                    "Скрыть тренера из реестра?\n\n"
+                    "Он исчезнет из реестра и с сайта.\n"
+                    "Можно вернуть кнопкой «👁 Показать» в секции «Скрытые».\n\n"
+                    "Тренер покинет свой клуб, а его ученики останутся без тренера."):
+            return
+        self.db.set_coach_hidden(cid, True)
         self._refresh_list()
 
     def _delete_coach(self, cid):
