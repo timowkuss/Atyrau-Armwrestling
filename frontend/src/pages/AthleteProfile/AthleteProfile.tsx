@@ -97,77 +97,89 @@ export function AthleteProfile() {
                   )}
                 </div>
 
-                <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-sm">
-                  <span className="inline-flex items-center gap-2 text-steel">
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-steel-dim">
-                      <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.2"/>
-                      <path d="M7 4v3.5l2.5 1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                    </svg>
-                    {a.gender === 'male' ? 'Мужчины' : 'Женщины'}
-                  </span>
-                  {a.birth_date && (
-                    <span className="inline-flex items-center gap-2 text-steel">
+                {/* Пол · город                рейтинг */}
+                <div className="mt-4 flex items-start justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-sm text-steel">
+                    <span className="inline-flex items-center gap-2">
                       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-steel-dim">
-                        <rect x="2" y="3" width="10" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
-                        <path d="M4.5 1.5V5M9.5 1.5V5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                        <path d="M2 6.5h10" stroke="currentColor" strokeWidth="1.2"/>
+                        <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.2"/>
+                        <circle cx="7" cy="5" r="1.6" fill="currentColor"/>
+                        <path d="M7 7c-1.5 0-2.5 1-2.5 2.5 0 .8.4 1.3 1 1.8a5 5 0 013 0c.6-.5 1-1 1-1.8C9.5 8 8.5 7 7 7z" fill="currentColor" opacity="0.45"/>
                       </svg>
-                      {formatDate(a.birth_date)}
-                      {age(a.birth_date) !== null && (
-                        <span className="font-semibold text-bone">· {age(a.birth_date)} лет</span>
-                      )}
+                      {a.gender === 'male' ? 'Мужчины' : 'Женщины'}
                     </span>
-                  )}
-                  {a.city_name && <span className="text-steel-dim">·</span>}
-                  {a.city_name && (
-                    <span className="text-steel">
-                      {a.city_name}{a.region_name ? `, ${a.region_name}` : ''}
-                    </span>
-                  )}
+                    {a.city_name && (
+                      <span className="inline-flex items-center gap-2">
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-steel-dim">
+                          <path d="M7 1.5C5 1.5 3.5 3 3.5 5c0 3 3.5 7 3.5 7s3.5-4 3.5-7c0-2-1.5-3.5-3.5-3.5z" stroke="currentColor" strokeWidth="1.2"/>
+                          <circle cx="7" cy="5" r="1.3" stroke="currentColor" strokeWidth="1.2"/>
+                        </svg>
+                        {a.city_name}{a.region_name ? `, ${a.region_name}` : ''}
+                      </span>
+                    )}
+                  </div>
                   {stats && (
-                    <span className="ml-4 inline-flex items-center gap-2">
+                    <span className="inline-flex flex-shrink-0 flex-col items-end gap-0.5">
                       <span className="font-mono text-[10px] font-medium uppercase tracking-widest text-rust/60">Rating</span>
                       <span className="font-display text-3xl font-bold leading-none text-rust">{stats.elo_combined}</span>
                     </span>
                   )}
                 </div>
 
-                <div className="mt-5 flex flex-wrap gap-x-8 gap-y-2">
-                  {a.club_name && (
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-petrol-2/50">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                          <path d="M2 14V6l6-4 6 4v8H2z" stroke="var(--color-steel)" strokeWidth="1.3"/>
-                          <path d="M6 14V9h4v5" stroke="var(--color-steel)" strokeWidth="1.3"/>
-                        </svg>
+                {/* Год рождения · возраст */}
+                {a.birth_date && (
+                  <div className="mt-3 inline-flex items-center gap-2 font-mono text-sm text-steel">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-steel-dim">
+                      <rect x="2" y="3" width="10" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
+                      <path d="M4.5 1.5V5M9.5 1.5V5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                      <path d="M2 6.5h10" stroke="currentColor" strokeWidth="1.2"/>
+                    </svg>
+                    {formatDate(a.birth_date)}
+                    {age(a.birth_date) !== null && (
+                      <span className="font-semibold text-bone">· {age(a.birth_date)} лет</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Тренер · клуб */}
+                {(a.coach_name || a.club_name) && (
+                  <div className="mt-4 flex flex-wrap gap-x-8 gap-y-2 border-t border-steel-dim/15 pt-4">
+                    {a.coach_name && (
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-petrol-2/50">
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <circle cx="8" cy="5" r="3" stroke="var(--color-steel)" strokeWidth="1.3"/>
+                            <path d="M3 14c0-3 2.5-5.5 5-5.5s5 2.5 5 5.5" stroke="var(--color-steel)" strokeWidth="1.3"/>
+                          </svg>
+                        </div>
+                        <div>
+                          <div className="text-eyebrow text-steel-dim">Тренер</div>
+                          {a.coach_id ? (
+                            <Link to={`/coaches/${a.coach_id}`} className="text-sm font-medium text-bone transition-colors hover:text-brass">
+                              {a.coach_name}
+                            </Link>
+                          ) : (
+                            <div className="text-sm font-medium text-bone">{a.coach_name}</div>
+                          )}
+                        </div>
                       </div>
-                      <div>
-                        <div className="text-eyebrow text-steel-dim">Клуб</div>
-                        <div className="text-sm font-medium text-bone">{a.club_name}</div>
+                    )}
+                    {a.club_name && (
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-petrol-2/50">
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M2 14V6l6-4 6 4v8H2z" stroke="var(--color-steel)" strokeWidth="1.3"/>
+                            <path d="M6 14V9h4v5" stroke="var(--color-steel)" strokeWidth="1.3"/>
+                          </svg>
+                        </div>
+                        <div>
+                          <div className="text-eyebrow text-steel-dim">Клуб</div>
+                          <div className="text-sm font-medium text-bone">{a.club_name}</div>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                  {a.coach_name && (
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-petrol-2/50">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                          <circle cx="8" cy="5" r="3" stroke="var(--color-steel)" strokeWidth="1.3"/>
-                          <path d="M3 14c0-3 2.5-5.5 5-5.5s5 2.5 5 5.5" stroke="var(--color-steel)" strokeWidth="1.3"/>
-                        </svg>
-                      </div>
-                      <div>
-                        <div className="text-eyebrow text-steel-dim">Тренер</div>
-                        {a.coach_id ? (
-                          <Link to={`/coaches/${a.coach_id}`} className="text-sm font-medium text-bone transition-colors hover:text-brass">
-                            {a.coach_name}
-                          </Link>
-                        ) : (
-                          <div className="text-sm font-medium text-bone">{a.coach_name}</div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
 
                 {a.bio && (
                   <p className="mt-5 max-w-xl leading-relaxed text-steel">{a.bio}</p>
