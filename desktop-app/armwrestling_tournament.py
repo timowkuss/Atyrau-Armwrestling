@@ -6384,6 +6384,9 @@ class App(ctk.CTk):
 
         PLACEHOLDER = "— выберите —"
 
+        _tournament = self.db.get_tournament(self.current_tournament_id)
+        is_combined = bool(_tournament and _tournament["format_type"] == "combined")
+
         win = ctk.CTkToplevel(self)
         win.title("Мастер добавления категории")
         win.geometry("420x300")
@@ -6417,9 +6420,13 @@ class App(ctk.CTk):
                     values=[PLACEHOLDER], width=360, state="disabled")
         weight_menu.pack(padx=20)
 
-        ctk.CTkLabel(win, text="Рука:").pack(anchor="w", padx=20, pady=(15, 5))
-        OptionMenu(win, variable=hand_var,
-                    values=["Правая", "Левая", "Обе"], width=360).pack(padx=20)
+        if is_combined:
+            ctk.CTkLabel(win, text="Двоеборье — категория создаётся сразу на обе руки.",
+                         text_color="#445566").pack(anchor="w", padx=20, pady=(15, 5))
+        else:
+            ctk.CTkLabel(win, text="Рука:").pack(anchor="w", padx=20, pady=(15, 5))
+            OptionMenu(win, variable=hand_var,
+                        values=["Правая", "Левая", "Обе"], width=360).pack(padx=20)
 
         def confirm():
             age = age_var.get()
@@ -6427,7 +6434,7 @@ class App(ctk.CTk):
             if age == PLACEHOLDER or w == PLACEHOLDER:
                 messagebox.showwarning("Ошибка", "Выберите возрастную и весовую категорию.")
                 return
-            hand = hand_var.get()
+            hand = "Обе" if is_combined else hand_var.get()
             suffix = HAND_SUFFIX.get(hand, hand)
 
             if w == "Absolute":
