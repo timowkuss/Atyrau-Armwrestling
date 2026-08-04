@@ -200,7 +200,9 @@ class _DropdownToplevel(ctk.CTkToplevel):
             btn.pack(fill="x", padx=4, pady=2)
             self._buttons.append(btn)
 
-    def open(self, x, y, current=None):
+    def open(self, x, y, current=None, values=None):
+        if values is not None:
+            self._values = list(values)
         self._current = current
         self._rebuild()
         self.update_idletasks()
@@ -266,7 +268,8 @@ class _DropdownToplevel(ctk.CTkToplevel):
                 return
             if self._global_bind is not None:
                 try:
-                    self.unbind_all("<Button-1>", self._global_bind)
+                    self._root()._unbind(("bind", "all", "<Button-1>"),
+                                         self._global_bind)
                 except Exception:
                     pass
                 self._global_bind = None
@@ -358,18 +361,20 @@ class _LazyDropdown:
         self._menu = None
 
     def open(self, x, y):
-        old = self._menu
-        self._menu = None
-        if old is not None:
+        # Окно переиспользуем: на Windows создание нового CTkToplevel на
+        # каждый клик занимает ~100-300 мс, а повторное открытие — почти
+        # мгновенно. Значения обновляем каждый раз (меняются через configure).
+        if self._menu is None:
             try:
-                if old.winfo_exists():
-                    old.destroy()
+                if not self._menu.winfo_exists():
+                    self._menu = None
             except Exception:
-                pass
-        self._menu = _DropdownToplevel(self._om, self._om._values,
-                                       self._callback, self._fg,
-                                       self._hover, self._text, self._font)
-        self._menu.open(x, y, current=self._om.get())
+                self._menu = None
+        if self._menu is None:
+            self._menu = _DropdownToplevel(self._om, self._om._values,
+                                           self._callback, self._fg,
+                                           self._hover, self._text, self._font)
+        self._menu.open(x, y, current=self._om.get(), values=self._om._values)
 
     def close(self):
         if self._menu is not None and self._menu.winfo_exists():
