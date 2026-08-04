@@ -300,14 +300,15 @@ export function ClubsAdmin() {
                     />
                     <input
                       placeholder="Телефон 8(XXX)XXX-XX-XX"
-                      defaultValue={formatPhone(club.phone ?? '')}
+                      inputMode="tel"
+                      value={formatPhone(editForm.phone ?? club.phone ?? '')}
+                      onKeyDown={(e) => {
+                        blockPhonePrefix(e)
+                        blockNonDigits(e)
+                      }}
                       onChange={(e) =>
                         setEditForm({ ...editForm, phone: formatPhoneChange(editForm.phone ?? club.phone ?? '', e.target.value) })
                       }
-                      onKeyDown={(e) => {
-                        blockNonDigits(e)
-                        blockPhonePrefix(e)
-                      }}
                       className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
                     />
                     <div className="flex gap-2">
