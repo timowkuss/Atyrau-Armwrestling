@@ -64,6 +64,10 @@ export function ClubsAdmin() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
     setFeedback(null)
+    if (nameTaken) {
+      setFeedback({ kind: 'error', message: 'Клуб с таким названием уже существует.' })
+      return
+    }
     if (!form.city_id) {
       setFeedback({ kind: 'error', message: 'Укажите город/область клуба.' })
       return
@@ -109,6 +113,10 @@ export function ClubsAdmin() {
 
   const freeAthletes = (athletes.data ?? []).filter((a) => !memberAthleteIds.has(a.id))
   const freeCoaches = (coaches.data?.items ?? []).filter((c) => !memberCoachIds.has(c.id))
+
+  const nameTaken = form.name.trim().length > 0 && (clubs.data ?? []).some(
+    (c) => c.name.trim().toLowerCase() === form.name.trim().toLowerCase(),
+  )
 
   const [newAthleteId, setNewAthleteId] = useState('')
   const [newCoachId, setNewCoachId] = useState('')
@@ -178,13 +186,22 @@ export function ClubsAdmin() {
 
       {showCreate && (
         <form onSubmit={handleCreate} className="plate mt-4 flex flex-col gap-3 rounded-[var(--radius-rivet)] p-4">
-          <input
-            required
-            placeholder="Название клуба *"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
-          />
+          <div>
+            <input
+              required
+              placeholder="Название клуба *"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className={`w-full rounded-[var(--radius-rivet)] border bg-ink px-3 py-2 text-sm text-bone focus:outline-none ${
+                nameTaken
+                  ? 'border-danger focus:border-danger'
+                  : 'border-steel-dim focus:border-brass'
+              }`}
+            />
+            {nameTaken && (
+              <p className="mt-1 text-xs font-medium text-danger">Такой клуб уже существует</p>
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-3">
             <CityCombobox
               required
@@ -201,16 +218,10 @@ export function ClubsAdmin() {
             />
           </div>
           <textarea
-            placeholder="Описание"
-            value={form.description ?? ''}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-            rows={2}
-            className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
-          />
-          <input
             placeholder="Адрес зала"
             value={form.address ?? ''}
             onChange={(e) => setForm({ ...form, address: e.target.value })}
+            rows={2}
             className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
           />
           <input
