@@ -241,15 +241,13 @@ export function ClubProfile() {
                   </span>
                 </div>
 
-                {c.address && (
-                  <div className="mt-3 inline-flex items-center gap-2 font-mono text-sm text-steel-dim">
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                      <path d="M2 12V5.5L7 2l5 3.5V12H2z" stroke="currentColor" strokeWidth="1.2"/>
-                      <path d="M5.5 12V8h3v4" stroke="currentColor" strokeWidth="1.2"/>
-                    </svg>
-                    {c.address}
-                  </div>
-                )}
+                <div className="mt-3 inline-flex items-center gap-2 font-mono text-sm text-steel-dim">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M2 12V5.5L7 2l5 3.5V12H2z" stroke="currentColor" strokeWidth="1.2"/>
+                    <path d="M5.5 12V8h3v4" stroke="currentColor" strokeWidth="1.2"/>
+                  </svg>
+                  Адрес: {c.address ?? 'отсутствует'}
+                </div>
 
                 {c.description && (
                   <p className="mt-5 max-w-xl whitespace-pre-line leading-relaxed text-steel">{c.description}</p>
