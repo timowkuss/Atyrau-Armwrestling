@@ -193,6 +193,8 @@ export interface ClubListItem {
   id: number
   name: string
   logo_path: string | null
+  address: string | null
+  phone: string | null
   city_name: string | null
   rating_points: number
   athletes_count: number

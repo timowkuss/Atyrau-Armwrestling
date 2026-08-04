@@ -58,6 +58,7 @@ def list_clubs(
             name=club.name,
             logo_path=club.logo_path,
             address=club.address,
+            phone=club.phone,
             city_name=city_name,
             rating_points=club.rating_points,
             athletes_count=athletes_count,
