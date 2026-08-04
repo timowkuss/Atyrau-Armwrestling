@@ -215,16 +215,6 @@ export function ClubProfile() {
                       {c.city_name}
                     </span>
                   )}
-                  {formatDate(c.founded_date) && (
-                    <span className="inline-flex items-center gap-2">
-                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-steel-dim">
-                        <rect x="2" y="3" width="10" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
-                        <path d="M4.5 1.5V5M9.5 1.5V5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                        <path d="M2 6.5h10" stroke="currentColor" strokeWidth="1.2"/>
-                      </svg>
-                      осн. {formatDate(c.founded_date)}
-                    </span>
-                  )}
                   <span className="inline-flex items-center gap-2">
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-steel-dim">
                       <circle cx="7" cy="5" r="2.6" stroke="currentColor" strokeWidth="1.2"/>
