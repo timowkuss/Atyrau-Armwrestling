@@ -1,10 +1,17 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import type { CoachListItem } from '@/types/api'
 import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 import { ageText } from '@/lib/age'
 
 export function CoachCard({ coach }: { coach: CoachListItem }) {
   const at = ageText(coach.birth_date)
+  const navigate = useNavigate()
+  const openClub = (e: React.MouseEvent | React.KeyboardEvent) => {
+    if (!coach.club_id) return
+    e.preventDefault()
+    e.stopPropagation()
+    navigate(`/clubs/${coach.club_id}`)
+  }
   return (
     <Link
       to={`/coaches/${coach.id}`}
@@ -64,12 +71,22 @@ export function CoachCard({ coach }: { coach: CoachListItem }) {
       </div>
       <div className="mt-4 border-t border-steel-dim/15 pt-3">
         <div className="text-eyebrow text-steel-dim">Клуб</div>
-        <div className={`mt-1 flex items-center gap-1.5 text-sm ${coach.club_name ? 'font-medium text-bone' : 'text-steel-dim'}`}>
+        <div
+          role="link"
+          tabIndex={coach.club_id ? 0 : -1}
+          onClick={openClub}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') openClub(e)
+          }}
+          className={`mt-1 flex items-center gap-1.5 text-sm ${coach.club_name ? (coach.club_id ? 'cursor-pointer transition-colors hover:text-brass font-medium text-bone' : 'font-medium text-bone') : 'text-steel-dim'}`}
+        >
           <svg width="12" height="12" viewBox="0 0 14 14" fill="none" className="flex-shrink-0">
             <path d="M2 12V5.5L7 2l5 3.5V12H2z" stroke="currentColor" strokeWidth="1.2" />
             <path d="M5.5 12V8h3v4" stroke="currentColor" strokeWidth="1.2" />
           </svg>
-          <span className="truncate">{coach.club_name ?? 'не состоит'}</span>
+          <span className={`truncate ${coach.club_id ? 'underline decoration-steel-dim/30 underline-offset-2' : ''}`}>
+            {coach.club_name ?? 'не состоит'}
+          </span>
         </div>
       </div>
     </Link>

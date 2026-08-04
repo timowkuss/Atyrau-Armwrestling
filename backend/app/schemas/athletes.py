@@ -9,6 +9,7 @@ class AthleteListOut(BaseModel):
     birth_date: date | None
     gender: str | None
     club_name: str | None
+    club_id: int | None = None
     coach_name: str | None
     city_name: str | None
     rank: str | None
@@ -50,6 +51,7 @@ class AthleteDetailOut(BaseModel):
     birth_date: date | None
     gender: str | None
     club_name: str | None
+    club_id: int | None = None
     coach_name: str | None
     coach_id: int | None = None
     city_name: str | None

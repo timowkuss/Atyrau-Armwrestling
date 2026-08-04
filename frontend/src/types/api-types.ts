@@ -19,6 +19,7 @@ export interface AthleteListItem {
   birth_date: string | null
   gender: Gender
   club_name: string | null
+  club_id: number | null
   coach_name: string | null
   city_name: string | null
   rank: string | null
@@ -50,6 +51,7 @@ export interface AthleteDetail {
   birth_date: string | null
   gender: Gender
   club_name: string | null
+  club_id: number | null
   coach_name: string | null
   coach_id: number | null
   city_name: string | null
@@ -201,6 +203,7 @@ export interface CoachListItem {
   full_name: string
   photo_path: string | null
   club_name: string | null
+  club_id: number | null
   city_name: string | null
   qualification: string | null
   birth_date: string | null

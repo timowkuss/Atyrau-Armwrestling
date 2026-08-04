@@ -55,6 +55,7 @@ class CoachListOut(BaseModel):
     full_name: str
     photo_path: str | None
     club_name: str | None
+    club_id: int | None = None
     city_name: str | None
     qualification: str | None
     birth_date: date | None
@@ -70,6 +71,7 @@ class CoachDetailOut(BaseModel):
     photo_path: str | None
     bio: str | None
     club_name: str | None
+    club_id: int | None = None
     city_name: str | None
     qualification: str | None
     birth_date: date | None
