@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.deps import require_desktop_sync
 from app.api.v1.sync._common import parse_flexible_date
-from app.db.models.clubs import Club
+from app.db.models.clubs import Club, find_club_by_name
 from app.db.models.geo import City
 from app.db.session import get_db
 from app.schemas.sync import ClubSyncCreate, ClubSyncItem, ClubSyncUpdate
@@ -58,6 +58,13 @@ def create_club(
 ):
     if not payload.name.strip():
         raise HTTPException(status_code=400, detail="Название клуба обязательно")
+    # Дедуп по имени (без учёта регистра): повторная отправка одного и того же
+    # клуба (ретрай офлайн-очереди десктопа при потерянном ответе, импорт)
+    # НЕ плодит дубли — возвращаем существующий клуб. См. миграцию
+    # b1c2d3e4f5a6 (уникальный индекс на lower(name)).
+    existing = find_club_by_name(db, payload.name)
+    if existing is not None:
+        return {"id": existing.id, "duplicate": True}
     club = Club(
         name=payload.name.strip(),
         address=payload.address,

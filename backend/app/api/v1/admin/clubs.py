@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.deps import require_role
 from app.db.models.athletes import Athlete
-from app.db.models.clubs import Club
+from app.db.models.clubs import Club, find_club_by_name
 from app.db.models.coaches import Coach
 from app.db.models.geo import City
 from app.db.models.users import User
@@ -120,6 +120,11 @@ def create_club(
         raise HTTPException(status_code=400, detail="Название клуба обязательно")
     if not payload.city_id:
         raise HTTPException(status_code=400, detail="Укажите город/область клуба")
+    # Дедуп по имени (без учёта регистра) — повторное создание клуба с тем же
+    # именем возвращает существующий (см. b1c2d3e4f5a6, уникальный индекс).
+    existing = find_club_by_name(db, payload.name)
+    if existing is not None:
+        return {"id": existing.id, "duplicate": True}
     club = Club(**payload.model_dump())
     db.add(club)
     db.commit()

@@ -390,6 +390,14 @@ class SyncManager:
         payload = {"cid": cid, "name": name, "city": city, "address": address,
                    "founded_date": founded_date, "logo_path": logo_path}
 
+        # Если клуб уже синхронизирован (create ушёл ранее, но ответ
+        # потерялся и операция повисла в очереди) — не создаём второй раз,
+        # а просто проталкиваем pending-операции и возвращаем существующий id.
+        already = self.state.map_get("club", cid)
+        if already is not None:
+            self.state.purge_pending("create_club", "cid", cid)
+            return already
+
         def go():
             remote = self.api.create_club(
                 name=name, city_name=city or None, address=address or None,

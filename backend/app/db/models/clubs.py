@@ -28,3 +28,25 @@ class Club(Base):
     city = relationship("City")
     coaches: Mapped[list["Coach"]] = relationship(back_populates="club")
     athletes: Mapped[list["Athlete"]] = relationship(back_populates="club")
+
+
+def find_club_by_name(db, name: str | None) -> Club | None:
+    """Клуб с таким именем (без учёта регистра) или None.
+
+    Используется для дедупа в create_club (sync + admin): повторное создание
+    клуба с уже существующим именем возвращает существующий, а не плодит
+    дубли (см. миграцию b1c2d3e4f5a6 — уникальный индекс на lower(name)).
+
+    Сначала пробуем запрос через lower() — он корректен в Postgres (прод).
+    Фолбэк-скан в Python страхует SQLite (используется в тестах): там
+    lower() не понимает кириллицу и возвращает строку без изменений."""
+    norm = (name or "").strip().lower()
+    if not norm:
+        return None
+    club = db.query(Club).filter(func.lower(Club.name) == norm).first()
+    if club is not None:
+        return club
+    for candidate in db.query(Club).all():
+        if (candidate.name or "").strip().lower() == norm:
+            return candidate
+    return None
