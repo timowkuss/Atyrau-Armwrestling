@@ -174,6 +174,8 @@ class _DropdownToplevel(ctk.CTkToplevel):
         self._frame = ctk.CTkFrame(self, fg_color=fg_color, corner_radius=8,
                                    border_width=1, border_color="#3d444d")
         self._frame.pack(fill="both", expand=True)
+        self._prev_grab = None
+        self._bind_pending = None
         self._rebuild()
 
     def _rebuild(self):
@@ -206,11 +208,57 @@ class _DropdownToplevel(ctk.CTkToplevel):
         self.deiconify()
         self.lift()
         self.focus_force()
-        if self._global_bind is None:
-            self._global_bind = self.bind_all("<Button-1>", self._on_global_click, add="+")
+        # Если диалог модальный (grab_set), перехватываем grab на время показа
+        # списка, иначе события мыши до него не доходят и список не открывается.
+        self._grab_for_menu()
+        # bind_all регистрируем через after(): клик, который ОТКРЫЛ список,
+        # должен пройти мимо обработчика, иначе он сразу же закроет dropdown.
+        if self._global_bind is None and self._bind_pending is None:
+            self._bind_pending = self.after(10, self._bind_global_click)
+
+    def _bind_global_click(self):
+        self._bind_pending = None
+        try:
+            if not self.winfo_exists():
+                return
+        except Exception:
+            return
+        self._global_bind = self.bind_all("<Button-1>", self._on_global_click, add="+")
+
+    def _grab_for_menu(self):
+        try:
+            current = self.master.grab_current()
+        except Exception:
+            current = None
+        self._prev_grab = current
+        if current is not None:
+            try:
+                self.grab_set()
+            except Exception:
+                self._prev_grab = None
+
+    def _restore_grab(self):
+        prev, self._prev_grab = self._prev_grab, None
+        if prev is not None:
+            try:
+                if prev.winfo_exists():
+                    prev.grab_set()
+                return
+            except Exception:
+                pass
+        try:
+            self.grab_release()
+        except Exception:
+            pass
 
     def close(self):
         try:
+            if self._bind_pending is not None:
+                try:
+                    self.after_cancel(self._bind_pending)
+                except Exception:
+                    pass
+                self._bind_pending = None
             if not self.winfo_exists():
                 self._global_bind = None
                 return
@@ -220,10 +268,13 @@ class _DropdownToplevel(ctk.CTkToplevel):
                 except Exception:
                     pass
                 self._global_bind = None
+            self._restore_grab()
             self.withdraw()
         except Exception:
             self._global_bind = None
+            self._bind_pending = None
             try:
+                self._restore_grab()
                 self.withdraw()
             except Exception:
                 pass
