@@ -142,44 +142,46 @@ export function AthleteProfile() {
                 )}
 
                 {/* Тренер · клуб */}
-                {(a.coach_name || a.club_name) && (
-                  <div className="mt-4 flex flex-wrap gap-x-8 gap-y-2 border-t border-steel-dim/15 pt-4">
-                    {a.coach_name && (
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-petrol-2/50">
-                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                            <circle cx="8" cy="5" r="3" stroke="var(--color-steel)" strokeWidth="1.3"/>
-                            <path d="M3 14c0-3 2.5-5.5 5-5.5s5 2.5 5 5.5" stroke="var(--color-steel)" strokeWidth="1.3"/>
-                          </svg>
-                        </div>
-                        <div>
-                          <div className="text-eyebrow text-steel-dim">Тренер</div>
-                          {a.coach_id ? (
-                            <Link to={`/coaches/${a.coach_id}`} className="text-sm font-medium text-bone transition-colors hover:text-brass">
-                              {a.coach_name}
-                            </Link>
-                          ) : (
-                            <div className="text-sm font-medium text-bone">{a.coach_name}</div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    {a.club_name && (
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-petrol-2/50">
-                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                            <path d="M2 14V6l6-4 6 4v8H2z" stroke="var(--color-steel)" strokeWidth="1.3"/>
-                            <path d="M6 14V9h4v5" stroke="var(--color-steel)" strokeWidth="1.3"/>
-                          </svg>
-                        </div>
-                        <div>
-                          <div className="text-eyebrow text-steel-dim">Клуб</div>
-                          <div className="text-sm font-medium text-bone">{a.club_name}</div>
-                        </div>
-                      </div>
-                    )}
+                <div className="mt-4 flex flex-wrap gap-x-8 gap-y-2 border-t border-steel-dim/15 pt-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-petrol-2/50">
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <circle cx="8" cy="5" r="3" stroke="var(--color-steel)" strokeWidth="1.3"/>
+                        <path d="M3 14c0-3 2.5-5.5 5-5.5s5 2.5 5 5.5" stroke="var(--color-steel)" strokeWidth="1.3"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <div className="text-eyebrow text-steel-dim">Тренер</div>
+                      {a.coach_name ? (
+                        a.coach_id ? (
+                          <Link to={`/coaches/${a.coach_id}`} className="text-sm font-medium text-bone transition-colors hover:text-brass">
+                            {a.coach_name}
+                          </Link>
+                        ) : (
+                          <div className="text-sm font-medium text-bone">{a.coach_name}</div>
+                        )
+                      ) : (
+                        <div className="text-sm font-medium text-steel-dim">отсутствует</div>
+                      )}
+                    </div>
                   </div>
-                )}
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-petrol-2/50">
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M2 14V6l6-4 6 4v8H2z" stroke="var(--color-steel)" strokeWidth="1.3"/>
+                        <path d="M6 14V9h4v5" stroke="var(--color-steel)" strokeWidth="1.3"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <div className="text-eyebrow text-steel-dim">Клуб</div>
+                      {a.club_name ? (
+                        <div className="text-sm font-medium text-bone">{a.club_name}</div>
+                      ) : (
+                        <div className="text-sm font-medium text-steel-dim">не состоит</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
 
                 {a.bio && (
                   <p className="mt-5 max-w-xl leading-relaxed text-steel">{a.bio}</p>
