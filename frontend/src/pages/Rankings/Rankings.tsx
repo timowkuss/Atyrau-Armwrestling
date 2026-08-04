@@ -215,7 +215,11 @@ export function Rankings() {
             {clubs.data && clubs.data.length > 0 && (
               <div className="space-y-3">
                 {clubs.data.map((r) => (
-                  <div key={r.club_id} className="group relative block overflow-hidden rounded-2xl border border-steel-dim/15 bg-gradient-to-br from-petrol/30 to-ink-soft/70 p-4 transition-all duration-300 hover:-translate-y-0.5 hover:border-brass/25 hover:shadow-[0_8px_30px_-6px_rgba(201,162,39,0.1)] sm:p-5">
+                  <Link
+                    key={r.club_id}
+                    to={`/clubs/${r.club_id}`}
+                    className="group relative block overflow-hidden rounded-2xl border border-steel-dim/15 bg-gradient-to-br from-petrol/30 to-ink-soft/70 p-4 transition-all duration-300 hover:-translate-y-0.5 hover:border-brass/25 hover:shadow-[0_8px_30px_-6px_rgba(201,162,39,0.1)] sm:p-5"
+                  >
                     <div className="pointer-events-none absolute -right-12 -top-12 h-28 w-28 rounded-full bg-brass/5 blur-3xl transition-all duration-500 group-hover:bg-brass/10" />
                     <div className="flex items-center gap-4">
                       <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl font-display text-sm font-bold ${
@@ -243,7 +247,7 @@ export function Rankings() {
                         <span className="font-display text-xl font-bold text-brass sm:text-2xl">{r.points}</span>
                       </div>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             )}
