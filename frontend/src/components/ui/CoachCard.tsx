@@ -36,8 +36,8 @@ export function CoachCard({ coach }: { coach: CoachListItem }) {
             </span>
           )}
           <div className="flex flex-col items-end">
-            <span className="font-mono text-[10px] font-medium uppercase tracking-wider text-rust/60">спортсменов</span>
-            <span className="font-display text-2xl font-bold leading-none text-rust">{coach.athletes_count}</span>
+            <span className="font-mono text-[10px] font-medium uppercase tracking-wider text-rust/60">рейтинг</span>
+            <span className="font-display text-2xl font-bold leading-none text-rust">{coach.rating}</span>
           </div>
         </div>
       </div>
@@ -54,18 +54,24 @@ export function CoachCard({ coach }: { coach: CoachListItem }) {
             {coach.city_name}
           </span>
         )}
+        <span className="flex items-center gap-1">
+          <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
+            <circle cx="7" cy="5" r="2.6" stroke="currentColor" strokeWidth="1.2"/>
+            <path d="M2 12.5c0-2.8 2.2-5 5-5s5 2.2 5 5" stroke="currentColor" strokeWidth="1.2"/>
+          </svg>
+          {coach.athletes_count} спортсменов
+        </span>
       </div>
-      {coach.club_name && (
-        <div className="mt-4 border-t border-steel-dim/15 pt-3 text-sm text-steel-dim">
-          <div className="flex items-center gap-1.5 truncate">
-            <svg width="11" height="11" viewBox="0 0 14 14" fill="none" className="flex-shrink-0">
-              <path d="M2 12V5.5L7 2l5 3.5V12H2z" stroke="currentColor" strokeWidth="1.2" />
-              <path d="M5.5 12V8h3v4" stroke="currentColor" strokeWidth="1.2" />
-            </svg>
-            {coach.club_name}
-          </div>
+      <div className="mt-4 border-t border-steel-dim/15 pt-3">
+        <div className="text-eyebrow text-steel-dim">Клуб</div>
+        <div className={`mt-1 flex items-center gap-1.5 text-sm ${coach.club_name ? 'font-medium text-bone' : 'text-steel-dim'}`}>
+          <svg width="12" height="12" viewBox="0 0 14 14" fill="none" className="flex-shrink-0">
+            <path d="M2 12V5.5L7 2l5 3.5V12H2z" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M5.5 12V8h3v4" stroke="currentColor" strokeWidth="1.2" />
+          </svg>
+          <span className="truncate">{coach.club_name ?? 'не состоит'}</span>
         </div>
-      )}
+      </div>
     </Link>
   )
 }

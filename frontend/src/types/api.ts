@@ -243,6 +243,7 @@ export interface CoachListItem {
   qualification: string | null
   birth_date: string | null
   athletes_count: number
+  rating: number
 }
 
 export interface CoachDetail extends CoachListItem {

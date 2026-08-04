@@ -59,6 +59,9 @@ class CoachListOut(BaseModel):
     qualification: str | None
     birth_date: date | None
     athletes_count: int
+    # Рейтинг тренера (calculate_coach_rating). Админ-схемы наследуются от
+    # этой и не заполняют поле — для них действует дефолт 0.
+    rating: int = 0
 
 
 class CoachDetailOut(BaseModel):
@@ -71,6 +74,7 @@ class CoachDetailOut(BaseModel):
     qualification: str | None
     birth_date: date | None
     athletes_count: int
+    rating: int = 0
 
 
 class CoachAdminListOut(CoachListOut):

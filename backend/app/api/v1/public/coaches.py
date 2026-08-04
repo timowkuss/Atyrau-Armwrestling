@@ -9,6 +9,7 @@ from app.db.models.geo import City
 from app.db.session import get_db
 from app.schemas.coaches import CoachDetailOut, CoachListOut
 from app.schemas.common import Page
+from app.services.coach_rating import calculate_coach_rating
 
 router = APIRouter(prefix="/coaches", tags=["public:coaches"])
 
@@ -58,6 +59,7 @@ def list_coaches(
             qualification=coach.qualification,
             birth_date=coach.birth_date,
             athletes_count=athletes_count,
+            rating=calculate_coach_rating(db, coach.id)["rating"],
         )
         for coach, club_name, city_name, athletes_count in rows
     ]
@@ -84,4 +86,5 @@ def get_coach(coach_id: int, db: Session = Depends(get_db)):
         qualification=coach.qualification,
         birth_date=coach.birth_date,
         athletes_count=athletes_count,
+        rating=calculate_coach_rating(db, coach.id)["rating"],
     )
