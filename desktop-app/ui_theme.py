@@ -3,6 +3,8 @@
 одновременно во всех окнах. Бизнес-логики в этом модуле нет — только
 внешний вид (ctk-виджеты строятся теми же API, что и раньше)."""
 
+import tkinter as tk
+
 import customtkinter as ctk
 
 # ─── Палитра ──────────────────────────────────────────────────
@@ -329,6 +331,17 @@ class OptionMenu(ctk.CTkOptionMenu):
         self._dropdown_menu = _LazyDropdown(self, self._dropdown_callback,
                                             self._dd_fg, self._dd_hover,
                                             self._dd_text, self._dd_font)
+        # ctk хранит флаг _close_on_next_click и не сбрасывает его после
+        # выбора пункта — второй клик (без повторного <Enter>) «закрывал» уже
+        # закрытое меню вместо открытия. Полностью обходим его логику.
+        self._close_on_next_click = False
+
+    def _clicked(self, event=0):
+        if self._state is not tk.DISABLED and len(self._values) > 0:
+            if self._dropdown_menu.is_open():
+                self._dropdown_menu.close()
+            else:
+                self._open_dropdown_menu()
 
 
 class _LazyDropdown:
