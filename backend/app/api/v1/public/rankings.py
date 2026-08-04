@@ -10,7 +10,7 @@ from app.db.models.statistics import AthleteStatistic
 from app.db.session import get_db
 from app.schemas.common import AthleteRankingOut, ClubRankingOut, CoachRankingOut, EloRankingOut
 from app.services.coach_rating import calculate_coach_rating
-from app.services.ranking_compare import compute_rankings, medal_points
+from app.services.ranking_compare import compute_rankings, medal_points, registered_ts, winrate
 
 router = APIRouter(prefix="/rankings", tags=["public:rankings"])
 
@@ -24,17 +24,19 @@ def athlete_rankings(
 ):
     """Рейтинг спортсменов из снапшот-таблицы AthleteRanking.
 
-    Сортировка: очки → медальные очки → винрейт; при полном совпадении —
-    одинаковое место (см. ranking_compare.py).
+    Сортировка: очки → медальные очки → винрейт → победы → дата регистрации
+    → id (см. ranking_compare.py).
     """
     query = db.query(
         AthleteRanking,
         Athlete.full_name,
         Club.name.label("club_name"),
+        Athlete.created_at,
         AthleteStatistic.gold_count,
         AthleteStatistic.silver_count,
         AthleteStatistic.bronze_count,
-        AthleteStatistic.win_rate,
+        AthleteStatistic.total_wins,
+        AthleteStatistic.total_losses,
     ).join(
         Athlete, AthleteRanking.athlete_id == Athlete.id
     ).join(
@@ -46,7 +48,7 @@ def athlete_rankings(
         query = query.filter(AthleteRanking.scope_gender == gender)
 
     entries = []
-    for r, name, club_name, gold, silver, bronze, wr in query.all():
+    for r, name, club_name, created_at, gold, silver, bronze, wins, losses in query.all():
         entries.append({
             "athlete_id": r.athlete_id,
             "athlete_name": name,
@@ -56,12 +58,21 @@ def athlete_rankings(
             # Внутренние ключи сортировки (не попадают в ответ).
             "_rating": r.points,
             "_medal_points": medal_points(gold, silver, bronze),
-            "_winrate": wr or 0.0,
+            "_winrate": winrate(wins, losses),
+            "_wins": wins or 0,
+            "_registered": registered_ts(created_at),
         })
 
     ranked = compute_rankings(
         entries,
-        sort_key=lambda e: (e["_rating"], e["_medal_points"], e["_winrate"]),
+        sort_key=lambda e: (
+            e["_rating"],
+            e["_medal_points"],
+            e["_winrate"],
+            e["_wins"],
+            -e["_registered"],
+            -e["athlete_id"],
+        ),
         limit=limit,
     )
     return [
@@ -82,8 +93,8 @@ def coach_rankings(
     """Рейтинг тренеров.
 
     Основной критерий — рейтинг тренера (calculate_coach_rating). При равенстве
-    сравниваются суммарные медальные очки всех учеников, затем количество
-    активных учеников; при полном совпадении — одинаковое место.
+    — суммарные медальные очки всех учеников, затем количество активных
+    учеников, дата регистрации тренера и id.
     """
     coaches = db.query(Coach).outerjoin(Club, Coach.club_id == Club.id).add_columns(
         Club.name.label("club_name"),
@@ -133,11 +144,18 @@ def coach_rankings(
             "_rating": r["rating"],
             "_medal_points": student_medal_points.get(c.id, 0),
             "_active_students": active_students.get(c.id, 0),
+            "_registered": registered_ts(c.created_at),
         })
 
     ranked = compute_rankings(
         entries,
-        sort_key=lambda e: (e["_rating"], e["_medal_points"], e["_active_students"]),
+        sort_key=lambda e: (
+            e["_rating"],
+            e["_medal_points"],
+            e["_active_students"],
+            -e["_registered"],
+            -e["coach_id"],
+        ),
         limit=limit,
     )
     return [
@@ -156,8 +174,8 @@ def club_rankings(limit: int = Query(100, le=500), db: Session = Depends(get_db)
 
     Основной критерий — рейтинг клуба (clubs.rating_points, живая
     денормализованная колонка). При равенстве — суммарные медальные очки всех
-    спортсменов клуба, затем количество активных спортсменов; при полном
-    совпадении — одинаковое место.
+    спортсменов клуба, затем количество активных спортсменов, дата создания
+    клуба и id.
 
     Медальные очки и число активных спортсменов считаются по спортсменам
     клуба на лету (нескрытые карточки), таблица-снапшот ClubRanking
@@ -209,11 +227,18 @@ def club_rankings(limit: int = Query(100, le=500), db: Session = Depends(get_db)
             "_rating": club.rating_points,
             "_medal_points": medal_points(gold, silver, bronze),
             "_active_athletes": active_athletes.get(club.id, 0),
+            "_registered": registered_ts(club.created_at),
         })
 
     ranked = compute_rankings(
         entries,
-        sort_key=lambda e: (e["_rating"], e["_medal_points"], e["_active_athletes"]),
+        sort_key=lambda e: (
+            e["_rating"],
+            e["_medal_points"],
+            e["_active_athletes"],
+            -e["_registered"],
+            -e["club_id"],
+        ),
         limit=limit,
     )
     return [
@@ -237,8 +262,8 @@ def elo_rankings(
     """Рейтинг спортсменов по Эло (отображается на сайте).
 
     Сортировка: рейтинг (Эло по выбранной руке / усреднённое) → медальные
-    очки → винрейт; при полном совпадении — одинаковое место. Сами значения
-    Эло не пересчитываются здесь — только порядок мест.
+    очки → винрейт → количество побед → дата регистрации → id. Сами
+    значения Эло не пересчитываются здесь — только порядок мест.
     """
     query = (
         db.query(
@@ -246,12 +271,14 @@ def elo_rankings(
             Athlete.full_name,
             Club.name.label("club_name"),
             Athlete.photo_path,
+            Athlete.created_at,
             AthleteStatistic.elo_left,
             AthleteStatistic.elo_right,
             AthleteStatistic.gold_count,
             AthleteStatistic.silver_count,
             AthleteStatistic.bronze_count,
-            AthleteStatistic.win_rate,
+            AthleteStatistic.total_wins,
+            AthleteStatistic.total_losses,
         )
         .join(AthleteStatistic, Athlete.id == AthleteStatistic.athlete_id)
         .outerjoin(Club, Athlete.club_id == Club.id)
@@ -288,12 +315,21 @@ def elo_rankings(
             "elo_right": r.elo_right or 0,
             "_rating": rating,
             "_medal_points": medal_points(r.gold_count, r.silver_count, r.bronze_count),
-            "_winrate": r.win_rate or 0.0,
+            "_winrate": winrate(r.total_wins, r.total_losses),
+            "_wins": r.total_wins or 0,
+            "_registered": registered_ts(r.created_at),
         })
 
     ranked = compute_rankings(
         entries,
-        sort_key=lambda e: (e["_rating"], e["_medal_points"], e["_winrate"]),
+        sort_key=lambda e: (
+            e["_rating"],
+            e["_medal_points"],
+            e["_winrate"],
+            e["_wins"],
+            -e["_registered"],
+            -e["athlete_id"],
+        ),
         limit=limit,
     )
     return [
