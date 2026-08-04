@@ -106,6 +106,14 @@ export function Clubs() {
               </select>
             </div>
 
+            <button
+              type="button"
+              onClick={() => updateParam('name', nameInput.trim() || null)}
+              className="h-[42px] rounded-lg bg-rust px-5 text-sm font-semibold text-bone transition-all hover:bg-rust-dim hover:shadow-[0_4px_20px_-4px_rgba(193,85,44,0.4)]"
+            >
+              Найти
+            </button>
+
             {hasFilters && (
               <button
                 type="button"
