@@ -386,9 +386,9 @@ class SyncManager:
                                {"cid": cid, "remote_id": remote_id})
 
     # ── клуб ───────────────────────────────────────────────────
-    def on_club_created(self, cid, name, city=None, address=None, founded_date=None, logo_path=None):
+    def on_club_created(self, cid, name, city=None, address=None, founded_date=None, logo_path=None, phone=None):
         payload = {"cid": cid, "name": name, "city": city, "address": address,
-                   "founded_date": founded_date, "logo_path": logo_path}
+                   "founded_date": founded_date, "logo_path": logo_path, "phone": phone}
 
         # Если клуб уже синхронизирован (create ушёл ранее, но ответ
         # потерялся и операция повисла в очереди) — не создаём второй раз,
@@ -402,16 +402,17 @@ class SyncManager:
             remote = self.api.create_club(
                 name=name, city_name=city or None, address=address or None,
                 founded_date=founded_date, logo_path=logo_path or None,
+                phone=phone or None,
             )
             self.state.map_set("club", cid, remote["id"])
             return remote["id"]
 
         return self._try("create_club", payload, go)
 
-    def on_club_updated(self, cid, name=None, city=None, address=None, founded_date=None, logo_path=None):
+    def on_club_updated(self, cid, name=None, city=None, address=None, founded_date=None, logo_path=None, phone=None):
         remote_club_id = self.state.map_get("club", cid)
         payload = {"cid": cid, "name": name, "city": city, "address": address,
-                   "founded_date": founded_date, "logo_path": logo_path}
+                   "founded_date": founded_date, "logo_path": logo_path, "phone": phone}
         if remote_club_id is None:
             self.state.enqueue("update_club", payload)
             return None
@@ -421,6 +422,7 @@ class SyncManager:
                 remote_club_id,
                 name=name, city_name=city or None, address=address or None,
                 founded_date=founded_date, logo_path=logo_path or None,
+                phone=phone or None,
             )
             return remote_club_id
 
@@ -1049,6 +1051,7 @@ class SyncManager:
                     address=payload.get("address") or None,
                     founded_date=payload.get("founded_date"),
                     logo_path=payload.get("logo_path") or None,
+                    phone=payload.get("phone") or None,
                 )
                 self.state.map_set("club", payload["cid"], remote["id"])
                 return True
@@ -1070,6 +1073,7 @@ class SyncManager:
                         address=payload.get("address") or None,
                         founded_date=payload.get("founded_date"),
                         logo_path=payload.get("logo_path") or None,
+                        phone=payload.get("phone") or None,
                     )
                 except ApiClientError as e:
                     if e.status_code == 404:

@@ -232,13 +232,14 @@ class PullSyncManager:
         name = (item.get("name") or "").strip()
         city = item.get("city_name")
         address = item.get("address")
+        phone = item.get("phone")
         founded_year = _to_founded_year(item.get("founded_date"))
         logo_path = item.get("logo_path")
 
         local_id = self._mapped_local_id(conn, "club", remote_id, "clubs")
         if local_id is not None:
             return self._apply_club(conn, local_id, name, city, address,
-                                    founded_year, logo_path, remote_id=remote_id)
+                                    founded_year, logo_path, phone, remote_id=remote_id)
 
         # Клуб мог уже существовать локально под этим же именем (создан в
         # десктопе и ещё не успел уйти на сервер) — сопоставляем по имени,
@@ -248,30 +249,31 @@ class PullSyncManager:
         ).fetchone()
         if row is not None:
             return self._apply_club(conn, row[0], name, city, address,
-                                    founded_year, logo_path, remote_id=remote_id)
+                                    founded_year, logo_path, phone, remote_id=remote_id)
 
         cur = conn.execute(
-            "INSERT INTO clubs (name, city, address, founded_year, logo_path) "
-            "VALUES (?,?,?,?,?)",
-            (name, city, address, founded_year, logo_path),
+            "INSERT INTO clubs (name, city, address, founded_year, logo_path, phone) "
+            "VALUES (?,?,?,?,?,?)",
+            (name, city, address, founded_year, logo_path, phone),
         )
         self.state.map_set("club", cur.lastrowid, remote_id)
         return True
 
     def _apply_club(self, conn: sqlite3.Connection, local_id: int, name, city,
-                    address, founded_year, logo_path, remote_id: int) -> bool:
+                    address, founded_year, logo_path, phone, remote_id: int) -> bool:
         row = conn.execute(
-            "SELECT name, city, address, founded_year, logo_path FROM clubs WHERE id=?",
+            "SELECT name, city, address, founded_year, logo_path, phone FROM clubs WHERE id=?",
             (local_id,),
         ).fetchone()
-        current = (row["name"], row["city"], row["address"], row["founded_year"], row["logo_path"])
-        new = (name, city, address, founded_year, logo_path)
+        current = (row["name"], row["city"], row["address"], row["founded_year"],
+                   row["logo_path"], row["phone"])
+        new = (name, city, address, founded_year, logo_path, phone)
         if current == new:
             self.state.map_set("club", local_id, remote_id)
             return False
         conn.execute(
-            "UPDATE clubs SET name=?, city=?, address=?, founded_year=?, logo_path=? WHERE id=?",
-            (name, city, address, founded_year, logo_path, local_id),
+            "UPDATE clubs SET name=?, city=?, address=?, founded_year=?, logo_path=?, phone=? WHERE id=?",
+            (name, city, address, founded_year, logo_path, phone, local_id),
         )
         self.state.map_set("club", local_id, remote_id)
         return True

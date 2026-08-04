@@ -514,6 +514,7 @@ iin TEXT,                        -- ИИН, 12 цифр
             name TEXT NOT NULL,
             city TEXT,                       -- Город/Область
             address TEXT,                    -- Адрес зала
+            phone TEXT,                      -- телефон 8(XXX)XXX-XX-XX
             founded_year INTEGER,
             logo_path TEXT,
             created_at TEXT DEFAULT (datetime('now'))
@@ -578,6 +579,18 @@ iin TEXT,                        -- ИИН, 12 цифр
         cl_cols = [r[1] for r in self.conn.execute("PRAGMA table_info(clubs)").fetchall()]
         if "address" not in cl_cols:
             self.conn.execute("ALTER TABLE clubs ADD COLUMN address TEXT")
+        if "phone" not in cl_cols:
+            self.conn.execute("ALTER TABLE clubs ADD COLUMN phone TEXT")
+            # Бэкфилл случайным казахстанским номером (как на сервере), чтобы
+            # у существующих клубов был контакт для «Связаться».
+            import random as _random
+            for row in self.conn.execute("SELECT id FROM clubs").fetchall():
+                code = _random.choice(["700", "701", "702", "705", "708", "747", "775", "776", "777", "778"])
+                rest = f"{_random.randint(0, 9999999):07d}"
+                self.conn.execute(
+                    "UPDATE clubs SET phone=? WHERE id=?",
+                    (f"8({code}){rest[0:3]}-{rest[3:5]}-{rest[5:]}", row[0]),
+                )
         self.conn.commit()
 
         # ─── Карточка тренера: Имя/Фамилия/возраст/ИИН/звание/город ───
@@ -953,17 +966,17 @@ iin TEXT,                        -- ИИН, 12 цифр
     def get_club(self, cid):
         return self.conn.execute("SELECT * FROM clubs WHERE id=?", (cid,)).fetchone()
 
-    def add_club(self, name, city="", address="", founded_year=None, logo_path=""):
+    def add_club(self, name, city="", address="", founded_year=None, logo_path="", phone=""):
         cur = self.conn.execute(
-            "INSERT INTO clubs (name, city, address, founded_year, logo_path) VALUES (?,?,?,?,?)",
-            (name, city, address, founded_year, logo_path))
+            "INSERT INTO clubs (name, city, address, founded_year, logo_path, phone) VALUES (?,?,?,?,?,?)",
+            (name, city, address, founded_year, logo_path, phone))
         self.conn.commit()
         return cur.lastrowid
 
-    def update_club(self, cid, name, city="", address="", founded_year=None, logo_path=""):
+    def update_club(self, cid, name, city="", address="", founded_year=None, logo_path="", phone=""):
         self.conn.execute(
-            "UPDATE clubs SET name=?, city=?, address=?, founded_year=?, logo_path=? WHERE id=?",
-            (name, city, address, founded_year, logo_path, cid))
+            "UPDATE clubs SET name=?, city=?, address=?, founded_year=?, logo_path=?, phone=? WHERE id=?",
+            (name, city, address, founded_year, logo_path, phone, cid))
         # Переименование клуба должно обновить и карточки спортсменов/тренеров,
         # которые на него ссылаются (club_id), — иначе в реестре останется
         # старое название.
@@ -1329,22 +1342,22 @@ def _synced_delete_athlete(self, aid):
     except Exception as e:
         print(f"[sync] delete_athlete: {e}")
 
-def _synced_add_club(self, name, city="", address="", founded_year=None, logo_path=""):
-    cid = _original_add_club(self, name, city, address, founded_year, logo_path)
+def _synced_add_club(self, name, city="", address="", founded_year=None, logo_path="", phone=""):
+    cid = _original_add_club(self, name, city, address, founded_year, logo_path, phone)
     try:
         sync_manager.on_club_created(cid, name, city=city, address=address,
                                      founded_date=_founded_date(founded_year),
-                                     logo_path=logo_path)
+                                     logo_path=logo_path, phone=phone)
     except Exception as e:
         print(f"[sync] add_club: {e}")
     return cid
 
-def _synced_update_club(self, cid, name, city="", address="", founded_year=None, logo_path=""):
-    _original_update_club(self, cid, name, city, address, founded_year, logo_path)
+def _synced_update_club(self, cid, name, city="", address="", founded_year=None, logo_path="", phone=""):
+    _original_update_club(self, cid, name, city, address, founded_year, logo_path, phone)
     try:
         sync_manager.on_club_updated(cid, name, city=city, address=address,
                                      founded_date=_founded_date(founded_year),
-                                     logo_path=logo_path)
+                                     logo_path=logo_path, phone=phone)
     except Exception as e:
         print(f"[sync] update_club: {e}")
 
@@ -5591,6 +5604,8 @@ class ClubCard(ctk.CTkFrame):
             info_parts.append(f"📍 {c['city']}")
         if c["address"]:
             info_parts.append(f"🏢 {c['address']}")
+        if c["phone"]:
+            info_parts.append(f"📞 {c['phone']}")
         if c["founded_year"]:
             info_parts.append(f"📅 с {c['founded_year']}")
         info_parts.append(f"👤 спортсменов: {athletes_count}")
@@ -5805,6 +5820,47 @@ class ClubsWindow(ctk.CTkToplevel):
         lbl_entry(form_grid, "Год основания:", "founded_year",
                   str(existing["founded_year"]) if existing and existing["founded_year"] else "", row=3)
 
+        # ─── Телефон (формат 8(XXX)XXX-XX-XX) ───
+        ctk.CTkLabel(form_grid, text="Телефон:", anchor="e", width=110).grid(
+            row=4, column=0, padx=(14, 6), pady=7, sticky="e")
+        phone_var = ctk.StringVar(value="8(" if not existing else (existing["phone"] or "8("))
+        phone_entry = ctk.CTkEntry(form_grid, textvariable=phone_var, width=240,
+                    placeholder_text="8(702)313-53-83", fg_color=BG, border_color=BORDER)
+        phone_entry.grid(row=4, column=1, padx=(0, 14), pady=7, sticky="ew")
+
+        def format_phone(event=None):
+            raw = phone_entry.get()
+            body = raw[2:] if raw.startswith("8(") else raw
+            digits = "".join(ch for ch in body if ch.isdigit())
+            if len(digits) == 11 and digits[0] in "87":
+                digits = digits[1:]
+            digits = digits[:10]
+            if not digits:
+                result = "8("
+            elif len(digits) <= 3:
+                result = f"8({digits}"
+            elif len(digits) <= 6:
+                result = f"8({digits[:3]}){digits[3:]}"
+            elif len(digits) <= 8:
+                result = f"8({digits[:3]}){digits[3:6]}-{digits[6:]}"
+            else:
+                result = f"8({digits[:3]}){digits[3:6]}-{digits[6:8]}-{digits[8:]}"
+            phone_entry.delete(0, "end")
+            phone_entry.insert(0, result)
+            phone_entry.icursor(len(result))
+
+        phone_entry.bind("<KeyRelease>", format_phone)
+
+        def block_extra(event=None):
+            if not event.char or not event.char.isdigit():
+                return None
+            total = len("".join(ch for ch in phone_entry.get() if ch.isdigit()))
+            if total >= 11:
+                return "break"
+            return None
+
+        phone_entry.bind("<Key>", block_extra)
+
         # ─── Логотип ───
         logo_card = make_card(left_col, fill="x", pady=(8, 0))
         make_section_label(logo_card, "🖼 Логотип")
@@ -6007,11 +6063,12 @@ class ClubsWindow(ctk.CTkToplevel):
                     messagebox.showwarning("Ошибка", "Год основания — целое число (например, 2015).")
                     return
             logo_path = logo_path_var.get()
+            phone = phone_var.get().strip() or ""
             nonlocal edit_id
             if edit_id:
-                self.db.update_club(edit_id, name, city, address, founded_year, logo_path)
+                self.db.update_club(edit_id, name, city, address, founded_year, logo_path, phone)
             else:
-                edit_id = self.db.add_club(name, city, address, founded_year, logo_path)
+                edit_id = self.db.add_club(name, city, address, founded_year, logo_path, phone)
             self._refresh_list()
             dlg.destroy()
 

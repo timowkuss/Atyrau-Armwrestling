@@ -45,6 +45,7 @@ def list_clubs(
             city_name=city_name,
             founded_date=club.founded_date.isoformat() if club.founded_date else None,
             logo_path=club.logo_path,
+            phone=club.phone,
         )
         for club, city_name in rows
     ]
@@ -71,6 +72,7 @@ def create_club(
         city_id=_find_city_id(db, payload.city_name),
         founded_date=_parse_founded_date(payload.founded_date),
         logo_path=payload.logo_path,
+        phone=payload.phone,
     )
     db.add(club)
     db.commit()
