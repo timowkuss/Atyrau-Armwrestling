@@ -13,6 +13,7 @@ class ClubListOut(BaseModel):
     city_name: str | None
     rating_points: int
     athletes_count: int
+    coaches_count: int = 0
 
 
 class ClubDetailOut(BaseModel):

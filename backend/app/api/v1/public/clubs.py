@@ -33,9 +33,11 @@ def list_clubs(
             Club,
             City.name.label("city_name"),
             func.count(Athlete.id).label("athletes_count"),
+            func.count(Coach.id).label("coaches_count"),
         )
         .outerjoin(City, Club.city_id == City.id)
         .outerjoin(Athlete, (Athlete.club_id == Club.id) & (Athlete.is_hidden.is_(False)))
+        .outerjoin(Coach, Coach.club_id == Club.id)
         .group_by(Club.id, City.name)
     )
     if city_id is not None:
@@ -59,8 +61,9 @@ def list_clubs(
             city_name=city_name,
             rating_points=club.rating_points,
             athletes_count=athletes_count,
+            coaches_count=coaches_count,
         )
-        for club, city_name, athletes_count in rows
+        for club, city_name, athletes_count, coaches_count in rows
     ]
     return Page(items=items, total=total, page=page, page_size=page_size)
 

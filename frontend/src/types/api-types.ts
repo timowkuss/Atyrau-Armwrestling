@@ -196,6 +196,7 @@ export interface ClubListItem {
   city_name: string | null
   rating_points: number
   athletes_count: number
+  coaches_count: number
 }
 
 export interface CoachListItem {

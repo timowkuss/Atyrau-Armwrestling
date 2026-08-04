@@ -61,6 +61,15 @@ export function ClubCard({ club }: { club: ClubListItem }) {
           </svg>
           {club.athletes_count} спортсменов
         </span>
+        <span className="flex items-center gap-1">
+          <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
+            <path d="M7 8.5c2.2 0 4 1.8 4 4" stroke="currentColor" strokeWidth="1.2"/>
+            <path d="M7 8.5c-2.2 0-4 1.8-4 4" stroke="currentColor" strokeWidth="1.2"/>
+            <path d="M7 5.5v3" stroke="currentColor" strokeWidth="1.2"/>
+            <circle cx="7" cy="3.2" r="2" stroke="currentColor" strokeWidth="1.2"/>
+          </svg>
+          {club.coaches_count} тренеров
+        </span>
       </div>
 
       {club.address && (
