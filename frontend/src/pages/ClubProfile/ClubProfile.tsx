@@ -148,70 +148,143 @@ export function ClubProfile() {
   const c = club.data
 
   return (
-    <div className="mx-auto max-w-5xl px-5 py-12">
-      <Link to="/clubs" className="text-sm text-steel hover:text-brass">
-        ← ко всем клубам
-      </Link>
+    <div className="relative">
+      {/* Hero section */}
+      <div className="relative overflow-hidden border-b border-steel-dim/20">
+        <div className="pointer-events-none absolute inset-0 -z-10"
+          style={{
+            background: `
+              radial-gradient(1100px 500px at 70% 20%, rgba(201,162,39,0.10), transparent 60%),
+              radial-gradient(800px 600px at 10% 80%, rgba(193,85,44,0.08), transparent 55%),
+              radial-gradient(600px 400px at 50% 50%, rgba(18,54,59,0.6), transparent 70%)
+            `
+          }}
+        />
+        <div className="mx-auto max-w-5xl px-5 pb-16 pt-8 sm:pt-12">
+          <Link to="/clubs" className="group inline-flex items-center gap-1.5 text-sm text-steel-dim transition-colors hover:text-brass">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="transition-transform group-hover:-translate-x-0.5">
+              <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Ко всем клубам
+          </Link>
 
-      <div className="plate mt-4 flex flex-col gap-6 rounded-[var(--radius-rivet)] p-6 sm:flex-row sm:items-center">
-        <div className="flex h-32 w-32 flex-shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-rivet)] border-2 border-brass/50 bg-ink font-display text-2xl text-steel sm:h-36 sm:w-36">
-          {c.logo_path ? (
-            <img
-              src={cloudinaryLogo(c.logo_path, 144) ?? c.logo_path}
-              alt=""
-              className="h-full w-full object-contain p-2"
-              loading="lazy"
+          {/* Hero card */}
+          <div className="relative mt-6 overflow-hidden rounded-2xl border border-steel-dim/20 bg-gradient-to-br from-petrol/70 via-ink-soft/80 to-ink/90 backdrop-blur">
+            <div className="pointer-events-none absolute inset-0 -z-10"
+              style={{
+                background: 'radial-gradient(600px 300px at 30% 40%, rgba(201,162,39,0.06), transparent 70%)'
+              }}
             />
-          ) : (
-            initials(c.name)
-          )}
-        </div>
-        <div className="flex-1">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-display text-2xl text-bone sm:text-3xl">{c.name}</h1>
-            <span className="text-eyebrow whitespace-nowrap rounded-[var(--radius-rivet)] border border-brass/40 px-2 py-1 text-brass">
-              {c.rating_points} очк.
-            </span>
+            <div className="flex flex-col gap-8 p-6 sm:flex-row sm:items-start sm:p-8 lg:p-10">
+              {/* Лого */}
+              <div className="group relative flex-shrink-0">
+                <div className="absolute -inset-1 rounded-2xl bg-gradient-to-br from-brass/30 to-rust/30 opacity-0 blur transition-opacity duration-500 group-hover:opacity-100" />
+                <div className="relative flex h-40 w-40 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-brass/30 bg-ink sm:h-56 sm:w-56">
+                  {c.logo_path ? (
+                    <img
+                      src={cloudinaryLogo(c.logo_path, 224) ?? c.logo_path}
+                      alt=""
+                      className="h-full w-full object-contain p-3 transition-transform duration-700 group-hover:scale-105"
+                    />
+                  ) : (
+                    <span className="font-display text-3xl text-steel-dim sm:text-4xl">{initials(c.name)}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Инфо */}
+              <div className="flex-1 pt-1">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="font-display text-3xl font-bold leading-tight text-bone sm:text-4xl lg:text-5xl">
+                    {c.name}
+                  </h1>
+                  <span className="order-first sm:order-none inline-flex items-center gap-1.5 rounded-full border border-brass/30 bg-brass/5 px-3 py-1 font-mono text-xs font-medium tracking-wider text-brass">
+                    <span className="h-1.5 w-1.5 rounded-full bg-brass/60" />
+                    {c.rating_points} очк.
+                  </span>
+                </div>
+
+                {/* Город · основание · состав */}
+                <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-sm text-steel">
+                  {c.city_name && (
+                    <span className="inline-flex items-center gap-2">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-steel-dim">
+                        <path d="M7 1.5C5 1.5 3.5 3 3.5 5c0 3 3.5 7 3.5 7s3.5-4 3.5-7c0-2-1.5-3.5-3.5-3.5z" stroke="currentColor" strokeWidth="1.2"/>
+                        <circle cx="7" cy="5" r="1.3" stroke="currentColor" strokeWidth="1.2"/>
+                      </svg>
+                      {c.city_name}
+                    </span>
+                  )}
+                  {formatDate(c.founded_date) && (
+                    <span className="inline-flex items-center gap-2">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-steel-dim">
+                        <rect x="2" y="3" width="10" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
+                        <path d="M4.5 1.5V5M9.5 1.5V5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                        <path d="M2 6.5h10" stroke="currentColor" strokeWidth="1.2"/>
+                      </svg>
+                      осн. {formatDate(c.founded_date)}
+                    </span>
+                  )}
+                  <span className="inline-flex items-center gap-2">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-steel-dim">
+                      <circle cx="7" cy="5" r="2.6" stroke="currentColor" strokeWidth="1.2"/>
+                      <path d="M2 12.5c0-2.8 2.2-5 5-5s5 2.2 5 5" stroke="currentColor" strokeWidth="1.2"/>
+                    </svg>
+                    {c.athletes_count} спортсменов
+                  </span>
+                  <span className="inline-flex items-center gap-2">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-steel-dim">
+                      <circle cx="7" cy="3.5" r="2" stroke="currentColor" strokeWidth="1.2"/>
+                      <path d="M2 12.5c0-2.8 2.2-5 5-5s5 2.2 5 5" stroke="currentColor" strokeWidth="1.2"/>
+                    </svg>
+                    {c.coaches_count} тренеров
+                  </span>
+                </div>
+
+                {c.address && (
+                  <div className="mt-3 inline-flex items-center gap-2 font-mono text-sm text-steel-dim">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <path d="M2 12V5.5L7 2l5 3.5V12H2z" stroke="currentColor" strokeWidth="1.2"/>
+                      <path d="M5.5 12V8h3v4" stroke="currentColor" strokeWidth="1.2"/>
+                    </svg>
+                    {c.address}
+                  </div>
+                )}
+
+                {c.description && (
+                  <p className="mt-5 max-w-xl whitespace-pre-line leading-relaxed text-steel">{c.description}</p>
+                )}
+              </div>
+            </div>
           </div>
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-sm text-steel">
-            {c.city_name && <span>{c.city_name}</span>}
-            {formatDate(c.founded_date) && <span>осн. {formatDate(c.founded_date)}</span>}
-            <span>{c.athletes_count} спортсменов</span>
-            <span>{c.coaches_count} тренеров</span>
-          </div>
-          {c.address && <div className="mt-2 text-xs text-steel-dim">📍 {c.address}</div>}
         </div>
       </div>
 
-      {c.description && (
-        <div className="plate mt-6 rounded-[var(--radius-rivet)] p-6">
-          <h2 className="text-eyebrow text-rust">О клубе</h2>
-          <p className="mt-2 whitespace-pre-line text-steel">{c.description}</p>
+      {/* Тело страницы */}
+      <div className="mx-auto max-w-5xl px-5 py-10">
+        <div className="grid gap-6 lg:grid-cols-2">
+          <MemberList
+            title="Спортсмены"
+            subtitle="Члены клуба в реестре федерации"
+            members={c.athletes}
+            linkPrefix="/athletes"
+            emptyMessage="Пока нет спортсменов"
+          />
+          <MemberList
+            title="Тренеры"
+            subtitle="Тренерский состав клуба"
+            members={c.coaches}
+            linkPrefix="/coaches"
+            emptyMessage="Пока нет тренеров"
+          />
         </div>
-      )}
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
-        <MemberList
-          title="Спортсмены"
-          subtitle="Члены клуба в реестре федерации"
-          members={c.athletes}
-          linkPrefix="/athletes"
-          emptyMessage="Пока нет спортсменов"
-        />
-        <MemberList
-          title="Тренеры"
-          subtitle="Тренерский состав клуба"
-          members={c.coaches}
-          linkPrefix="/coaches"
-          emptyMessage="Пока нет тренеров"
-        />
+        {rating.data && rating.data.history.length > 0 && (
+          <div className="mt-8">
+            <RatingHistory items={rating.data.history} />
+          </div>
+        )}
       </div>
-
-      {rating.data && rating.data.history.length > 0 && (
-        <div className="mt-8">
-          <RatingHistory items={rating.data.history} />
-        </div>
-      )}
     </div>
   )
 }

@@ -3,10 +3,6 @@ import type { AthleteListItem } from '@/types/api'
 import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 import { ageText } from '@/lib/age'
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })
-}
-
 export function AthleteCard({ athlete }: { athlete: AthleteListItem }) {
   const at = ageText(athlete.birth_date)
   return (
@@ -49,16 +45,6 @@ export function AthleteCard({ athlete }: { athlete: AthleteListItem }) {
         {athlete.full_name}
       </h3>
       <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-sm text-steel-dim">
-        {athlete.birth_date && (
-          <span className="flex items-center gap-1">
-            <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
-              <rect x="2" y="3" width="10" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
-              <path d="M4.5 1.5V5M9.5 1.5V5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-              <path d="M2 6.5h10" stroke="currentColor" strokeWidth="1.2"/>
-            </svg>
-            {formatDate(athlete.birth_date)}
-          </span>
-        )}
         {at !== null && <span>{at}</span>}
         <span className="flex items-center gap-1">
           <span className={`h-2 w-2 rounded-full ${athlete.gender === 'male' ? 'bg-rust/60' : 'bg-brass/60'}`} />

@@ -6,6 +6,10 @@ import { LoadingState, ErrorState, EmptyState } from '@/components/ui/States'
 import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 import { ageText } from '@/lib/age'
 
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
 export function CoachProfile() {
   const { id } = useParams<{ id: string }>()
   const coachId = Number(id)
@@ -91,18 +95,21 @@ export function CoachProfile() {
                   )}
                 </div>
 
-                {/* Возраст · город */}
-                <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-sm text-steel">
-                  {at !== null && (
-                    <span className="inline-flex items-center gap-2">
-                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-steel-dim">
-                        <rect x="2" y="3" width="10" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
-                        <path d="M4.5 1.5V5M9.5 1.5V5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                        <path d="M2 6.5h10" stroke="currentColor" strokeWidth="1.2"/>
-                      </svg>
-                      {at}
-                    </span>
-                  )}
+                {/* Дата рождения · возраст */}
+                {c.birth_date && (
+                  <div className="mt-4 inline-flex items-center gap-2 font-mono text-sm text-steel">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-steel-dim">
+                      <rect x="2" y="3" width="10" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
+                      <path d="M4.5 1.5V5M9.5 1.5V5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                      <path d="M2 6.5h10" stroke="currentColor" strokeWidth="1.2"/>
+                    </svg>
+                    {formatDate(c.birth_date)}
+                    {at !== null && <span className="font-semibold text-bone">· {at}</span>}
+                  </div>
+                )}
+
+                {/* Город · спортсмены */}
+                <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-sm text-steel">
                   {c.city_name && (
                     <span className="inline-flex items-center gap-2">
                       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-steel-dim">
