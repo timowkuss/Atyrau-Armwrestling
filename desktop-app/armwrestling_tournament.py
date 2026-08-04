@@ -110,35 +110,67 @@ def _messagebox_owner():
             root = tk._default_root
         if root is None:
             return None
-        w = root.focus_displayof()
-        while w is not None and not isinstance(w, tk.Toplevel) and w.master is not None:
-            w = w.master
-        return w if isinstance(w, tk.Toplevel) else root
+        for w in (root.focus_get(), root.focus_displayof()):
+            while w is not None and not isinstance(w, tk.Toplevel) and w.master is not None:
+                w = w.master
+            if isinstance(w, tk.Toplevel):
+                return w
+        return root
     except Exception:
         return None
 
 
-def _front_after_dialog(win):
+def _pin_topmost(win, on):
     if win is None:
         return
     try:
-        win.lift()
-        win.focus_force()
+        win.attributes("-topmost", bool(on))
+    except Exception:
+        pass
+
+
+def _raise_all_windows():
+    """Поднимает все окна приложения на передний план (в т.ч. Toplevel'ы)."""
+    try:
+        root = ctk.CTk._default_root
+        if root is None:
+            root = tk._default_root
+        if root is None:
+            return
+        for child in root.winfo_children():
+            if isinstance(child, tk.Toplevel) and child.winfo_viewable():
+                child.lift()
+        root.lift()
+        root.focus_force()
     except Exception:
         pass
 
 
 def _with_owner(fn):
     def wrapped(*args, **kwargs):
-        if "parent" not in kwargs:
+        owner = kwargs.get("parent")
+        if owner is None:
             owner = _messagebox_owner()
             if owner is not None:
                 kwargs["parent"] = owner
-                _front_after_dialog(owner)
+        # Пока диалог открыт, держим окно-владельца поверх всех — тогда и сам
+        # модальный диалог гарантированно виден поверх других приложений.
+        if owner is not None:
+            _pin_topmost(owner, True)
         try:
             return fn(*args, **kwargs)
         finally:
-            _front_after_dialog(kwargs.get("parent"))
+            _pin_topmost(owner, False)
+            _raise_all_windows()
+            if owner is not None:
+                try:
+                    owner.focus_force()
+                    # Небольшой topmost-«толчок» после закрытия диалога:
+                    # Windows иногда не сразу отдаёт фокус/передний план.
+                    owner.after(150, lambda: _pin_topmost(owner, True))
+                    owner.after(500, lambda: _pin_topmost(owner, False))
+                except Exception:
+                    pass
     return wrapped
 
 
