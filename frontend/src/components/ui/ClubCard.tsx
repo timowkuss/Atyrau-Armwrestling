@@ -54,26 +54,10 @@ export function ClubCard({ club }: { club: ClubListItem }) {
             {club.city_name}
           </span>
         )}
-        <span className="flex items-center gap-1">
-          <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
-            <circle cx="7" cy="5" r="2.6" stroke="currentColor" strokeWidth="1.2"/>
-            <path d="M2 12.5c0-2.8 2.2-5 5-5s5 2.2 5 5" stroke="currentColor" strokeWidth="1.2"/>
-          </svg>
-          {club.athletes_count} спортсменов
-        </span>
-        <span className="flex items-center gap-1">
-          <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
-            <path d="M7 8.5c2.2 0 4 1.8 4 4" stroke="currentColor" strokeWidth="1.2"/>
-            <path d="M7 8.5c-2.2 0-4 1.8-4 4" stroke="currentColor" strokeWidth="1.2"/>
-            <path d="M7 5.5v3" stroke="currentColor" strokeWidth="1.2"/>
-            <circle cx="7" cy="3.2" r="2" stroke="currentColor" strokeWidth="1.2"/>
-          </svg>
-          {club.coaches_count} тренеров
-        </span>
       </div>
 
       {club.address && (
-        <div className="mt-4 flex items-center gap-1.5 truncate border-t border-steel-dim/15 pt-3 text-sm text-steel-dim">
+        <div className="mt-1.5 flex items-center gap-1.5 truncate font-mono text-xs text-steel-dim/80">
           <svg width="11" height="11" viewBox="0 0 14 14" fill="none" className="flex-shrink-0">
             <path d="M2 12V5.5L7 2l5 3.5V12H2z" stroke="currentColor" strokeWidth="1.2" />
             <path d="M5.5 12V8h3v4" stroke="currentColor" strokeWidth="1.2" />
@@ -81,6 +65,35 @@ export function ClubCard({ club }: { club: ClubListItem }) {
           <span className="truncate">{club.address}</span>
         </div>
       )}
+
+      <div className="mt-5 grid grid-cols-2 divide-x divide-steel-dim/15 border-t border-steel-dim/15 pt-4">
+        <div className="flex items-center gap-3 pr-4">
+          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-petrol-2/50 text-steel transition-colors group-hover:bg-petrol-2/70">
+            <svg width="16" height="16" viewBox="0 0 14 14" fill="none">
+              <circle cx="7" cy="5" r="2.6" stroke="currentColor" strokeWidth="1.2"/>
+              <path d="M2 12.5c0-2.8 2.2-5 5-5s5 2.2 5 5" stroke="currentColor" strokeWidth="1.2"/>
+            </svg>
+          </span>
+          <span>
+            <span className="block font-display text-xl font-bold leading-none text-bone">{club.athletes_count}</span>
+            <span className="mt-1 block font-mono text-[10px] font-medium uppercase tracking-wider text-steel-dim">спортсмены</span>
+          </span>
+        </div>
+        <div className="flex items-center gap-3 pl-4">
+          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-petrol-2/50 text-steel transition-colors group-hover:bg-petrol-2/70">
+            <svg width="16" height="16" viewBox="0 0 14 14" fill="none">
+              <path d="M7 8.5c2.2 0 4 1.8 4 4" stroke="currentColor" strokeWidth="1.2"/>
+              <path d="M7 8.5c-2.2 0-4 1.8-4 4" stroke="currentColor" strokeWidth="1.2"/>
+              <path d="M7 5.5v3" stroke="currentColor" strokeWidth="1.2"/>
+              <circle cx="7" cy="3.2" r="2" stroke="currentColor" strokeWidth="1.2"/>
+            </svg>
+          </span>
+          <span>
+            <span className="block font-display text-xl font-bold leading-none text-bone">{club.coaches_count}</span>
+            <span className="mt-1 block font-mono text-[10px] font-medium uppercase tracking-wider text-steel-dim">тренеры</span>
+          </span>
+        </div>
+      </div>
     </Link>
   )
 }
