@@ -91,7 +91,7 @@ export function Home() {
           <EmptyState title="Опубликованных турниров пока нет" message="Загляните позже — здесь появятся результаты." />
         )}
         {competitions.data && competitions.data.items.length > 0 && (
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-5 sm:grid-cols-2 2xl:grid-cols-3">
             {competitions.data.items.map((c) => (
               <CompetitionCard key={c.id} competition={c} />
             ))}
