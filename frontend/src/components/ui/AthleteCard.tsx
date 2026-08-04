@@ -1,17 +1,10 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import type { AthleteListItem } from '@/types/api'
 import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 import { ageText } from '@/lib/age'
 
 export function AthleteCard({ athlete }: { athlete: AthleteListItem }) {
   const at = ageText(athlete.birth_date)
-  const navigate = useNavigate()
-  const openClub = (e: React.MouseEvent | React.KeyboardEvent) => {
-    if (!athlete.club_id) return
-    e.preventDefault()
-    e.stopPropagation()
-    navigate(`/clubs/${athlete.club_id}`)
-  }
   return (
     <Link
       to={`/athletes/${athlete.id}`}
@@ -68,20 +61,7 @@ export function AthleteCard({ athlete }: { athlete: AthleteListItem }) {
       </div>
       {(athlete.club_name || athlete.coach_name) && (
         <div className="mt-4 border-t border-steel-dim/15 pt-3 text-sm text-steel-dim">
-          {athlete.club_name && (
-            <div
-              role="link"
-              tabIndex={athlete.club_id ? 0 : -1}
-              onClick={openClub}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') openClub(e)
-              }}
-              className={`flex items-center gap-1.5 truncate ${athlete.club_id ? 'cursor-pointer transition-colors hover:text-brass' : ''}`}
-            >
-              <svg width="11" height="11" viewBox="0 0 10 10" fill="none"><path d="M1 8V4l4-2.5L9 4v4z" stroke="currentColor" strokeWidth="1.2"/></svg>
-              <span className="truncate underline decoration-steel-dim/30 underline-offset-2">{athlete.club_name}</span>
-            </div>
-          )}
+          {athlete.club_name && <div className="flex items-center gap-1.5 truncate"><svg width="11" height="11" viewBox="0 0 10 10" fill="none"><path d="M1 8V4l4-2.5L9 4v4z" stroke="currentColor" strokeWidth="1.2"/></svg>{athlete.club_name}</div>}
           {athlete.coach_name && <div className="mt-1 flex items-center gap-1.5 truncate"><svg width="11" height="11" viewBox="0 0 10 10" fill="none"><circle cx="5" cy="3.5" r="2" stroke="currentColor" strokeWidth="1.2"/><path d="M1.5 9c0-2.2 1.8-4 3.5-4s3.5 1.8 3.5 4" stroke="currentColor" strokeWidth="1.2"/></svg>{athlete.coach_name}</div>}
         </div>
       )}

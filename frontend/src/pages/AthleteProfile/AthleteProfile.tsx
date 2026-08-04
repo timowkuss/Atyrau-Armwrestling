@@ -175,7 +175,16 @@ export function AthleteProfile() {
                     <div>
                       <div className="text-eyebrow text-steel-dim">Клуб</div>
                       {a.club_name ? (
-                        <div className="text-sm font-medium text-bone">{a.club_name}</div>
+                        a.club_id ? (
+                          <Link
+                            to={`/clubs/${a.club_id}`}
+                            className="text-sm font-medium text-bone underline decoration-steel-dim/30 underline-offset-2 transition-colors hover:text-brass hover:decoration-brass/50"
+                          >
+                            {a.club_name}
+                          </Link>
+                        ) : (
+                          <div className="text-sm font-medium text-bone">{a.club_name}</div>
+                        )
                       ) : (
                         <div className="text-sm font-medium text-steel-dim">не состоит</div>
                       )}

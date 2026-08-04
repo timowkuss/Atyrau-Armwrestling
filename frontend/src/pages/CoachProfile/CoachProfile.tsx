@@ -140,7 +140,16 @@ export function CoachProfile() {
                     <div>
                       <div className="text-eyebrow text-steel-dim">Клуб</div>
                       {c.club_name ? (
-                        <div className="text-sm font-medium text-bone">{c.club_name}</div>
+                        c.club_id ? (
+                          <Link
+                            to={`/clubs/${c.club_id}`}
+                            className="text-sm font-medium text-bone underline decoration-steel-dim/30 underline-offset-2 transition-colors hover:text-brass hover:decoration-brass/50"
+                          >
+                            {c.club_name}
+                          </Link>
+                        ) : (
+                          <div className="text-sm font-medium text-bone">{c.club_name}</div>
+                        )
                       ) : (
                         <div className="text-sm font-medium text-steel-dim">не состоит</div>
                       )}
