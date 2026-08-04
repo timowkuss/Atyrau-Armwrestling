@@ -1,8 +1,25 @@
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+
+# Телефон приводится к единому виду 8(702)313-53-83. Пробелы/скобки/дефисы/+
+# игнорируем; «8…» или «7…» в начале снимаем только когда это код страны
+# (всего 11 цифр), а десятизначный номер оставляем как есть.
+def _validate_phone(value: str | None) -> str | None:
+    if value is None:
+        return None
+    digits = re.sub(r"\D", "", value.strip())
+    if not digits:
+        return None
+    if len(digits) == 11 and digits[0] in "87":
+        digits = digits[1:]
+    if len(digits) != 10:
+        raise ValueError("Телефон должен быть в формате 8(XXX)XXX-XX-XX")
+    return f"8({digits[0:3]}){digits[3:6]}-{digits[6:8]}-{digits[8:]}"
 
 
 class ClubListOut(BaseModel):
@@ -22,6 +39,7 @@ class ClubDetailOut(BaseModel):
     logo_path: str | None
     description: str | None
     address: str | None = None
+    phone: str | None = None
     city_name: str | None
     founded_date: date | None
     rating_points: int
@@ -36,8 +54,19 @@ class ClubCreate(BaseModel):
     logo_path: str | None = None
     description: str | None = None
     address: str | None = None
+    phone: str | None = None
     city_id: int | None = None
     founded_date: date | None = None
+
+    _validate_phone_field = field_validator("phone")(_validate_phone)
+
+    @field_validator("name")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Поле не может быть пустым")
+        return value
 
 
 class ClubUpdate(BaseModel):
@@ -45,10 +74,13 @@ class ClubUpdate(BaseModel):
     logo_path: str | None = None
     description: str | None = None
     address: str | None = None
+    phone: str | None = None
     city_id: int | None = None
     founded_date: date | None = None
     # rating_points НЕ включён намеренно: это агрегат, который должен
     # считаться от результатов турниров, а не править руками напрямую.
+
+    _validate_phone_field = field_validator("phone")(_validate_phone)
 
 
 class ClubMemberOut(BaseModel):
@@ -63,6 +95,7 @@ class ClubAdminListOut(BaseModel):
     logo_path: str | None
     description: str | None
     address: str | None = None
+    phone: str | None = None
     city_id: int | None
     city_name: str | None
     founded_date: date | None

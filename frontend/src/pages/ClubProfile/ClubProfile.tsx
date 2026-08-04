@@ -249,6 +249,23 @@ export function ClubProfile() {
                   Адрес: {c.address ?? 'отсутствует'}
                 </div>
 
+                <div className="mt-1.5 inline-flex items-center gap-2 font-mono text-sm text-steel-dim">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M2 2.5h3l1.5 4L5 7.5c.6 1.2 1.6 2.2 2.8 2.8l1-1.5 3.7 1.5v3c0 .9-.7 1.6-1.6 1.6C5.8 15 1 10.2 1 4.1 1 3.2 1.7 2.5 2.6 2.5" stroke="currentColor" strokeWidth="1.2"/>
+                  </svg>
+                  <span>Связаться:&nbsp;</span>
+                  {c.phone ? (
+                    <a
+                      href={`tel:${c.phone.replace(/\D/g, '')}`}
+                      className="text-bone underline decoration-steel-dim/30 underline-offset-2 transition-colors hover:text-brass hover:decoration-brass/50"
+                    >
+                      {c.phone}
+                    </a>
+                  ) : (
+                    <span>не указан</span>
+                  )}
+                </div>
+
                 {c.description && (
                   <p className="mt-5 max-w-xl whitespace-pre-line leading-relaxed text-steel">{c.description}</p>
                 )}

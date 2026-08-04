@@ -99,6 +99,7 @@ def get_club(club_id: int, db: Session = Depends(get_db)):
         logo_path=club.logo_path,
         description=club.description,
         address=club.address,
+        phone=club.phone,
         city_name=city_name,
         founded_date=club.founded_date,
         rating_points=club.rating_points,

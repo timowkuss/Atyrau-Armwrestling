@@ -15,6 +15,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 os.environ.setdefault("DESKTOP_SYNC_TOKEN", "test-sync-token")
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 
+from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -51,15 +52,21 @@ class ClubDedupeTest(unittest.TestCase):
         sync_create_club(ClubSyncCreate(name="Олимп"), self.db, _=True)
         self.assertEqual(self.db.query(Club).count(), 2)
 
-    def test_admin_create_club_dedupes_by_name(self):
+    def test_admin_create_club_blocks_duplicate_name(self):
         first = admin_create_club(
             ClubCreate(name="Олимп", city_id=1), self.db, _=True
         )
-        second = admin_create_club(
-            ClubCreate(name="олимп", city_id=1), self.db, _=True
-        )
-        self.assertEqual(first["id"], second["id"])
+        self.assertEqual(first["id"], 1)
+        with self.assertRaises(HTTPException) as ctx:
+            admin_create_club(ClubCreate(name="олимп", city_id=1), self.db, _=True)
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("уже существует", ctx.exception.detail)
         self.assertEqual(self.db.query(Club).count(), 1)
+
+    def test_admin_create_club_different_names_ok(self):
+        admin_create_club(ClubCreate(name="Олимп", city_id=1), self.db, _=True)
+        admin_create_club(ClubCreate(name="Алга", city_id=1), self.db, _=True)
+        self.assertEqual(self.db.query(Club).count(), 2)
 
 
 if __name__ == "__main__":

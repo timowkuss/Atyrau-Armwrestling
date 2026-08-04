@@ -56,6 +56,7 @@ def list_clubs_admin(
             logo_path=club.logo_path,
             description=club.description,
             address=club.address,
+            phone=club.phone,
             city_id=club.city_id,
             city_name=city_name,
             founded_date=club.founded_date,
@@ -99,6 +100,7 @@ def get_club_admin(
         logo_path=club.logo_path,
         description=club.description,
         address=club.address,
+        phone=club.phone,
         city_id=club.city_id,
         city_name=city_name,
         founded_date=club.founded_date,
@@ -120,11 +122,13 @@ def create_club(
         raise HTTPException(status_code=400, detail="Название клуба обязательно")
     if not payload.city_id:
         raise HTTPException(status_code=400, detail="Укажите город/область клуба")
-    # Дедуп по имени (без учёта регистра) — повторное создание клуба с тем же
-    # именем возвращает существующий (см. b1c2d3e4f5a6, уникальный индекс).
+    # Дубль по имени (без учёта регистра): «Атырау», «АТырау» и «атырау» — это
+    # один клуб, создавать его второй раз нельзя (см. b1c2d3e4f5a6 — уникальный
+    # индекс на lower(name)). В отличие от sync (там ретрай офлайн-очереди
+    # идемпотентен), в админке повторное имя — ошибка, а не возврат существующего.
     existing = find_club_by_name(db, payload.name)
     if existing is not None:
-        return {"id": existing.id, "duplicate": True}
+        raise HTTPException(status_code=400, detail="Клуб с таким названием уже существует")
     club = Club(**payload.model_dump())
     db.add(club)
     db.commit()
@@ -145,6 +149,12 @@ def update_club(
     data = payload.model_dump(exclude_unset=True)
     if "name" in data and data["name"] is not None and not data["name"].strip():
         raise HTTPException(status_code=400, detail="Название клуба обязательно")
+    # Переименование в имя другого существующего клуба — запрещено
+    # (та же логика дедупа, что и при создании).
+    if "name" in data and data["name"] is not None:
+        existing = find_club_by_name(db, data["name"])
+        if existing is not None and existing.id != club.id:
+            raise HTTPException(status_code=400, detail="Клуб с таким названием уже существует")
     for field, value in data.items():
         setattr(club, field, value)
     db.commit()

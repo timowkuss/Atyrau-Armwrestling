@@ -306,6 +306,7 @@ export interface ClubInput {
   logo_path?: string | null
   description?: string | null
   address?: string | null
+  phone?: string | null
   city_id?: number | null
   founded_date?: string | null
 }

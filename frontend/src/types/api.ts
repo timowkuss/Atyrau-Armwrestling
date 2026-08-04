@@ -213,6 +213,7 @@ export interface ClubDetail {
   logo_path: string | null
   description: string | null
   address: string | null
+  phone: string | null
   city_name: string | null
   founded_date: string | null
   rating_points: number
@@ -356,6 +357,7 @@ export interface ClubInput {
   logo_path?: string | null
   description?: string | null
   address?: string | null
+  phone?: string | null
   city_id?: number | null
   founded_date?: string | null
 }
@@ -372,6 +374,7 @@ export interface ClubAdminListItem {
   logo_path: string | null
   description: string | null
   address: string | null
+  phone: string | null
   city_id: number | null
   city_name: string | null
   founded_date: string | null

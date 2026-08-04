@@ -16,9 +16,10 @@ import { FeedbackBanner } from '@/components/admin/FeedbackBanner'
 import { CityCombobox } from '@/components/admin/CityCombobox'
 import { PhotoUploadField } from '@/components/admin/PhotoUploadField'
 import { cloudinaryLogo } from '@/lib/cloudinaryImage'
+import { blockNonDigits, blockPhonePrefix, formatPhone, formatPhoneChange } from '@/lib/phoneMask'
 import type { ClubInput } from '@/types/api'
 
-const EMPTY_FORM: ClubInput = { name: '', description: '', address: '', city_id: undefined, founded_date: undefined, logo_path: '' }
+const EMPTY_FORM: ClubInput = { name: '', description: '', address: '', phone: '8(', city_id: undefined, founded_date: undefined, logo_path: '' }
 
 function LogoThumb({ url, name }: { url: string | null; name: string }) {
   return (
@@ -212,6 +213,16 @@ export function ClubsAdmin() {
             onChange={(e) => setForm({ ...form, address: e.target.value })}
             className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
           />
+          <input
+            placeholder="Телефон 8(XXX)XXX-XX-XX"
+            value={form.phone ?? '8('}
+            onChange={(e) => setForm({ ...form, phone: formatPhoneChange(form.phone, e.target.value) })}
+            onKeyDown={(e) => {
+              blockNonDigits(e)
+              blockPhonePrefix(e)
+            }}
+            className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+          />
           <div>
             <p className="mb-1 font-mono text-xs text-steel-dim">Логотип</p>
             <PhotoUploadField
@@ -276,6 +287,18 @@ export function ClubsAdmin() {
                       onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
                       className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
                     />
+                    <input
+                      placeholder="Телефон 8(XXX)XXX-XX-XX"
+                      defaultValue={formatPhone(club.phone ?? '')}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, phone: formatPhoneChange(editForm.phone ?? club.phone ?? '', e.target.value) })
+                      }
+                      onKeyDown={(e) => {
+                        blockNonDigits(e)
+                        blockPhonePrefix(e)
+                      }}
+                      className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+                    />
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleUpdate(club.id)}
@@ -305,6 +328,7 @@ export function ClubsAdmin() {
                           <p className="font-mono text-xs text-steel">
                             {club.city_name ?? 'город не указан'} · {club.athletes_count} спортсменов · {club.coaches_count} тренеров · рейтинг {club.rating_points}
                           </p>
+                          {club.phone && <p className="font-mono text-xs text-steel-dim">📞 {club.phone}</p>}
                           {club.address && <p className="font-mono text-xs text-steel-dim">📍 {club.address}</p>}
                           {formatDate(club.founded_date) && (
                             <p className="font-mono text-xs text-steel-dim">📅 осн. {formatDate(club.founded_date)}</p>
