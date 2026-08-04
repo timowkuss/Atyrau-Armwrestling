@@ -18,6 +18,7 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -396,6 +397,96 @@ class PullSyncHiddenTest(unittest.TestCase):
         self.assertIsNone(a["club_id"])
         self.assertIsNone(a["coach_id"])
         self.assertIsNone(a["club"])
+
+
+class CursorSelfHealTest(unittest.TestCase):
+    """Инкрементальный курсор может «перескочить» мимо записей (курсор
+    ставится по server_time — моменту запроса; запись, изменённая на сервере
+    до этого момента, но ещё не отданная, теряется навсегда). Лечим
+    периодическим полным ресинком (since=эпоха) + курсором от максимального
+    updated_at доставленных записей."""
+
+    class _ChangesApi:
+        """Имитация GET /coaches/changes: with since=None/эпоха отдаёт всех,
+        with since=текущий курсор — только тех, кто новее."""
+
+        def __init__(self, coaches):
+            self.coaches = coaches
+            self.server_time = "2099-01-01T00:00:00+00:00"
+
+        def get_clubs(self):
+            return []
+
+        def get_coach_changes(self, since):
+            since_dt = None
+            if since:
+                since_dt = datetime.fromisoformat(since)
+            updated = [
+                c for c in self.coaches
+                if since_dt is None
+                or datetime.fromisoformat(c["updated_at"]) > since_dt
+            ]
+            return {"updated": updated, "deleted": [], "server_time": self.server_time}
+
+        def get_athlete_changes(self, since):
+            return {"updated": [], "deleted": [], "server_time": self.server_time}
+
+    @staticmethod
+    def _coach(rid, ts):
+        return {
+            "id": rid, "updated_at": ts, "is_hidden": False,
+            "full_name": f"Тренер {rid}", "club": "Алга",
+        }
+
+    def setUp(self):
+        self.tmp = TempDb()
+        self.db = self.tmp.make_database()
+        self.api = self._ChangesApi([
+            self._coach(1, "2026-08-04T04:00:00+00:00"),
+            self._coach(2, "2026-08-04T04:01:00+00:00"),
+            self._coach(3, "2026-08-04T04:02:00+00:00"),
+        ])
+        self.state = SyncState(self.tmp.state_path)
+        self.mgr = PullSyncManager(
+            api_client=self.api, state=self.state, db_path=self.tmp.tournament_path)
+        self.conn = self.db.conn
+
+    def tearDown(self):
+        self.state.close()
+        self.conn.close()
+        self.tmp.cleanup()
+
+    def _local_coaches(self):
+        return self.conn.execute("SELECT * FROM coaches").fetchall()
+
+    def test_drifted_cursor_heals_on_full_resync(self):
+        # Курсор «перескочил» мимо всех записей (см. баг с 5 тренерами
+        # на сайте против 3 в десктопе): обычный опрос ничего не вернёт.
+        self.state.set_cursor("coaches", "2026-08-04T04:03:00+00:00")
+        self.assertEqual(self.mgr._poll_coaches(self.conn), 0)
+        self.assertEqual(len(self._local_coaches()), 0)
+
+        # Полный ресинк (раз в N опросов) идёт по since=эпоха — догоняет всех.
+        self.mgr._force_full = True
+        applied = self.mgr._poll_coaches(self.conn)
+        self.assertEqual(applied, 3)
+        coaches = self._local_coaches()
+        self.assertEqual(len(coaches), 3)
+        for row in coaches:
+            self.assertIsNotNone(self.state.map_get("coach", row["id"]))
+
+        # Курсор ставится по максимальному updated_at доставленного, а не по
+        # server_time — иначе дрейф воспроизводится на следующем опросе.
+        self.assertEqual(
+            self.state.get_cursor("coaches"), "2026-08-04T04:02:00+00:00")
+
+    def test_cursor_advances_to_max_delivered_not_server_time(self):
+        # Первый опрос (since=None) тянет всех; курсор = max updated_at, а не
+        # server_time (2099) — повторно всю таблицу не перетягиваем.
+        self.assertEqual(self.mgr._poll_coaches(self.conn), 3)
+        self.assertEqual(
+            self.state.get_cursor("coaches"), "2026-08-04T04:02:00+00:00")
+        self.assertEqual(self.mgr._poll_coaches(self.conn), 0)
 
 
 if __name__ == "__main__":

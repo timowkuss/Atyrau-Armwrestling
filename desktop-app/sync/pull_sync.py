@@ -26,6 +26,28 @@ from .photo_cache import resolve_local_photo_path
 _CURSOR_ATHLETES = "athletes"
 _CURSOR_COACHES = "coaches"
 
+# Периодический полный ресинк (см. PullSyncManager._force_full): каждый
+# _FULL_RESYNC_EVERY_POLLS-й опрос идёт не по курсору, а по since=эпоха —
+# сервер тогда отдаёт ВСЕ текущие записи + все удаления, и любые записи,
+# мимо которых инкрементальный курсор однажды «перескочил», догоняются
+# заново. 90 опросов × 10 c ≈ 15 минут — страховка от навсегда потерянных
+# правок админки. since=эпоха важен: пустой since (None) сервер трактует
+# как "отдай всё", но БЕЗ удалений.
+_FULL_RESYNC_EVERY_POLLS = 90
+_FULL_RESYNC_SINCE = "1970-01-01T00:00:00+00:00"
+
+
+def _max_updated_at(items, server_time):
+    """Новый курсор = максимальный updated_at доставленных записей. Если
+    изменений не было (пустой список), курсор берём из server_time (момента
+    запроса) — иначе, вернув None/старый курсор, следующий опрос получит
+    уже просмотренные записи заново."""
+    vals = [i.get("updated_at") for i in items if i.get("updated_at")]
+    if not vals:
+        return server_time
+    return max(vals)
+
+
 def _warm_photo(photo_path):
     """Скачивает облачную фотку (Cloudinary URL) в локальный кэш, чтобы на
     десктопе она показалась сразу, а не при первом запросе с экрана."""
@@ -106,6 +128,11 @@ class PullSyncManager:
         self.on_changes_applied = on_changes_applied
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
+        # Самолечение инкрементального курсора: раз в _FULL_RESYNC_EVERY_POLLS
+        # опросов делаем ПОЛНЫЙ ресинк (since=эпоха), чтобы запись, которую
+        # курсор когда-то «перескочил» мимо, не потерялась навсегда.
+        self._polls_since_full = 0
+        self._force_full = False
 
     def start(self):
         if self._thread is not None:
@@ -134,6 +161,9 @@ class PullSyncManager:
         if not config.SYNC_ENABLED:
             return 0
 
+        self._polls_since_full += 1
+        self._force_full = self._polls_since_full >= _FULL_RESYNC_EVERY_POLLS
+
         applied = 0
         conn = sqlite3.connect(str(self.db_path), timeout=5)
         conn.row_factory = sqlite3.Row
@@ -149,6 +179,10 @@ class PullSyncManager:
                     print(f"[pull-sync] {poller.__name__}: {e}")
         finally:
             conn.close()
+
+        if self._force_full:
+            self._polls_since_full = 0
+            self._force_full = False
 
         if applied and self.on_changes_applied:
             try:
@@ -229,7 +263,11 @@ class PullSyncManager:
 
     # ── тренеры ───────────────────────────────────────────────
     def _poll_coaches(self, conn: sqlite3.Connection) -> int:
-        since = self.state.get_cursor(_CURSOR_COACHES)
+        # Полный ресинк (since=эпоха) вместо курьера раз в N опросов — лечит
+        # записи, мимо которых инкрементальный курсор однажды «перескочил»
+        # (сервер при since=эпоха отдаёт всех + все удаления).
+        since = (_FULL_RESYNC_SINCE if self._force_full
+                 else self.state.get_cursor(_CURSOR_COACHES))
         try:
             data = self.api.get_coach_changes(since)
         except ApiClientError as e:
@@ -251,7 +289,12 @@ class PullSyncManager:
             self._delete_coach(conn, remote_id)
         conn.commit()
 
-        self.state.set_cursor(_CURSOR_COACHES, data["server_time"])
+        # Курсор — по максимальному updated_at ДОСТАВЛЕННЫХ записей, а не по
+        # server_time (моменту запроса): так нельзя «перепрыгнуть» запись,
+        # которая успела создаться/измениться на сервере позже нашего
+        # запроса, но раньше, чем мы сохранили курсор.
+        self.state.set_cursor(_CURSOR_COACHES,
+                              _max_updated_at(updated, data["server_time"]))
         return len(updated) + len(deleted)
 
     def _upsert_coach(self, conn: sqlite3.Connection, item: dict):
@@ -335,7 +378,11 @@ class PullSyncManager:
 
     # ── спортсмены ────────────────────────────────────────────
     def _poll_athletes(self, conn: sqlite3.Connection) -> int:
-        since = self.state.get_cursor(_CURSOR_ATHLETES)
+        # Полный ресинк (since=эпоха) вместо курсора раз в N опросов — лечит
+        # записи, мимо которых инкрементальный курсор однажды «перескочил»
+        # (сервер при since=эпоха отдаёт всех + все удаления).
+        since = (_FULL_RESYNC_SINCE if self._force_full
+                 else self.state.get_cursor(_CURSOR_ATHLETES))
         try:
             data = self.api.get_athlete_changes(since)
         except ApiClientError as e:
@@ -354,7 +401,11 @@ class PullSyncManager:
             self._delete_athlete(conn, remote_id)
         conn.commit()
 
-        self.state.set_cursor(_CURSOR_ATHLETES, data["server_time"])
+        # Курсор — по максимальному updated_at доставленных записей (см.
+        # комментарий в _poll_coaches): нельзя «перепрыгнуть» запись, что
+        # изменилась на сервере между нашим запросом и сохранением курсора.
+        self.state.set_cursor(_CURSOR_ATHLETES,
+                              _max_updated_at(updated, data["server_time"]))
         return len(updated) + len(deleted)
 
     def _resolve_local_coach_id(self, conn: sqlite3.Connection, coach_name: str | None):
