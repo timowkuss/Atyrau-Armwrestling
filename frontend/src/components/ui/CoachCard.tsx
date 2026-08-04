@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom'
 import type { CoachListItem } from '@/types/api'
 import { cloudinaryThumb } from '@/lib/cloudinaryImage'
-import { age } from '@/lib/age'
+import { ageText } from '@/lib/age'
 
 export function CoachCard({ coach }: { coach: CoachListItem }) {
-  const a = age(coach.birth_date)
+  const at = ageText(coach.birth_date)
   return (
     <Link
       to={`/coaches/${coach.id}`}
@@ -37,7 +37,7 @@ export function CoachCard({ coach }: { coach: CoachListItem }) {
         {coach.full_name}
       </h3>
       <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-xs text-steel">
-        {a !== null && <span>{a} лет</span>}
+        {at !== null && <span>{at}</span>}
         {coach.city_name && <span>{coach.city_name}</span>}
         <span>{coach.athletes_count} спортсменов</span>
       </div>

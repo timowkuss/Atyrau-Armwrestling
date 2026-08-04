@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom'
 import type { AthleteListItem } from '@/types/api'
 import { cloudinaryThumb } from '@/lib/cloudinaryImage'
-import { age } from '@/lib/age'
+import { ageText } from '@/lib/age'
 
 export function AthleteCard({ athlete }: { athlete: AthleteListItem }) {
-  const a = age(athlete.birth_date)
+  const at = ageText(athlete.birth_date)
   return (
     <Link
       to={`/athletes/${athlete.id}`}
@@ -45,7 +45,7 @@ export function AthleteCard({ athlete }: { athlete: AthleteListItem }) {
         {athlete.full_name}
       </h3>
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-xs text-steel-dim">
-        {a !== null && <span>{a} лет</span>}
+        {at !== null && <span>{at}</span>}
         <span className="flex items-center gap-1">
           <span className={`h-2 w-2 rounded-full ${athlete.gender === 'male' ? 'bg-rust/60' : 'bg-brass/60'}`} />
           {athlete.gender === 'male' ? 'муж' : 'жен'}

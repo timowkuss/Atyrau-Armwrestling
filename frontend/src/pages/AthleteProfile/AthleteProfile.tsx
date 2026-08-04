@@ -5,7 +5,7 @@ import { Gauge } from '@/components/ui/Gauge'
 import { EloRating } from '@/components/ui/EloRating'
 import { MedalBadge } from '@/components/ui/Medal'
 import { cloudinaryThumb } from '@/lib/cloudinaryImage'
-import { age } from '@/lib/age'
+import { ageText } from '@/lib/age'
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -135,8 +135,8 @@ export function AthleteProfile() {
                       <path d="M2 6.5h10" stroke="currentColor" strokeWidth="1.2"/>
                     </svg>
                     {formatDate(a.birth_date)}
-                    {age(a.birth_date) !== null && (
-                      <span className="font-semibold text-bone">· {age(a.birth_date)} лет</span>
+                    {ageText(a.birth_date) !== null && (
+                      <span className="font-semibold text-bone">· {ageText(a.birth_date)}</span>
                     )}
                   </div>
                 )}

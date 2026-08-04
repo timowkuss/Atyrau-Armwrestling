@@ -4,7 +4,7 @@ import { useAthletes } from '@/features/athletes/useAthletes'
 import { AthleteCard } from '@/components/ui/AthleteCard'
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/States'
 import { cloudinaryThumb } from '@/lib/cloudinaryImage'
-import { age } from '@/lib/age'
+import { ageText } from '@/lib/age'
 
 export function CoachProfile() {
   const { id } = useParams<{ id: string }>()
@@ -28,7 +28,7 @@ export function CoachProfile() {
   if (!coach.data) return null
 
   const c = coach.data
-  const a = age(c.birth_date)
+  const at = ageText(c.birth_date)
 
   return (
     <div className="mx-auto max-w-5xl px-5 py-12">
@@ -58,7 +58,7 @@ export function CoachProfile() {
             )}
           </div>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-sm text-steel">
-            {a !== null && <span>{a} лет</span>}
+            {at !== null && <span>{at}</span>}
             {c.city_name && <span>{c.city_name}</span>}
             {c.club_name && <span>Клуб: {c.club_name}</span>}
             <span>{c.athletes_count} спортсменов</span>
