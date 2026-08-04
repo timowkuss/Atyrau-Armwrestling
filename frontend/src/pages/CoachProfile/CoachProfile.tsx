@@ -165,7 +165,7 @@ export function CoachProfile() {
             <EmptyState title="Пока нет учеников" message="У тренера ещё нет привязанных спортсменов." />
           )}
           {athletes.data && athletes.data.items.length > 0 && (
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-5 sm:grid-cols-2 2xl:grid-cols-3">
               {athletes.data.items.map((ath) => (
                 <AthleteCard key={ath.id} athlete={ath} />
               ))}

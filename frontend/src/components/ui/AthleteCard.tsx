@@ -8,14 +8,14 @@ export function AthleteCard({ athlete }: { athlete: AthleteListItem }) {
   return (
     <Link
       to={`/athletes/${athlete.id}`}
-      className="group relative overflow-hidden rounded-xl border border-steel-dim/15 bg-gradient-to-br from-petrol/40 to-ink-soft/70 p-5 transition-all duration-300 hover:-translate-y-1 hover:border-brass/30 hover:shadow-[0_12px_40px_-8px_rgba(201,162,39,0.12)]"
+      className="group relative overflow-hidden rounded-xl border border-steel-dim/15 bg-gradient-to-br from-petrol/40 to-ink-soft/70 p-6 transition-all duration-300 hover:-translate-y-1 hover:border-brass/30 hover:shadow-[0_12px_40px_-8px_rgba(201,162,39,0.12)]"
     >
       <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-brass/5 blur-3xl transition-all duration-500 group-hover:bg-brass/10" />
       <div className="flex items-start justify-between">
-        <div className="relative flex h-24 w-24 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-steel-dim/20 bg-ink font-display text-xl text-steel transition-all duration-300 group-hover:border-brass/30 sm:h-28 sm:w-28 sm:text-2xl">
+        <div className="relative flex h-28 w-28 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-steel-dim/20 bg-ink font-display text-2xl text-steel transition-all duration-300 group-hover:border-brass/30 sm:h-32 sm:w-32 sm:text-3xl">
           {athlete.photo_path ? (
             <img
-              src={cloudinaryThumb(athlete.photo_path, 112) ?? athlete.photo_path}
+              src={cloudinaryThumb(athlete.photo_path, 128) ?? athlete.photo_path}
               alt=""
               className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
               loading="lazy"
@@ -30,21 +30,21 @@ export function AthleteCard({ athlete }: { athlete: AthleteListItem }) {
         </div>
         <div className="flex flex-col items-end gap-2">
           {athlete.rank && (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-brass/20 bg-brass/5 px-2.5 py-1 font-mono text-[10px] font-medium tracking-wider text-brass/80">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-brass/20 bg-brass/5 px-3 py-1 font-mono text-[11px] font-medium tracking-wider text-brass/80">
               <span className="h-1.5 w-1.5 rounded-full bg-brass/40" />
               {athlete.rank}
             </span>
           )}
           <div className="flex flex-col items-end">
             <span className="font-mono text-[10px] font-medium uppercase tracking-wider text-rust/60">Rating</span>
-            <span className="font-display text-xl font-bold leading-none text-rust">{athlete.elo_combined}</span>
+            <span className="font-display text-2xl font-bold leading-none text-rust">{athlete.elo_combined}</span>
           </div>
         </div>
       </div>
-      <h3 className="mt-4 font-display text-lg font-semibold leading-snug text-bone transition-colors group-hover:text-brass">
+      <h3 className="mt-5 font-display text-xl font-semibold leading-snug text-bone transition-colors group-hover:text-brass">
         {athlete.full_name}
       </h3>
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-xs text-steel-dim">
+      <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-sm text-steel-dim">
         {at !== null && <span>{at}</span>}
         <span className="flex items-center gap-1">
           <span className={`h-2 w-2 rounded-full ${athlete.gender === 'male' ? 'bg-rust/60' : 'bg-brass/60'}`} />
@@ -52,7 +52,7 @@ export function AthleteCard({ athlete }: { athlete: AthleteListItem }) {
         </span>
         {athlete.city_name && (
           <span className="flex items-center gap-1">
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <svg width="11" height="11" viewBox="0 0 10 10" fill="none">
               <path d="M5 1C3.06 1 1.5 2.56 1.5 4.5c0 2.62 3.5 5 3.5 5s3.5-2.38 3.5-5C8.5 2.56 6.94 1 5 1zm0 5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" fill="currentColor" opacity="0.5"/>
             </svg>
             {athlete.city_name}
@@ -60,9 +60,9 @@ export function AthleteCard({ athlete }: { athlete: AthleteListItem }) {
         )}
       </div>
       {(athlete.club_name || athlete.coach_name) && (
-        <div className="mt-4 border-t border-steel-dim/15 pt-3 text-xs text-steel-dim">
-          {athlete.club_name && <div className="flex items-center gap-1.5 truncate"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1 8V4l4-2.5L9 4v4z" stroke="currentColor" strokeWidth="1.2"/></svg>{athlete.club_name}</div>}
-          {athlete.coach_name && <div className="mt-0.5 flex items-center gap-1.5 truncate"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><circle cx="5" cy="3.5" r="2" stroke="currentColor" strokeWidth="1.2"/><path d="M1.5 9c0-2.2 1.8-4 3.5-4s3.5 1.8 3.5 4" stroke="currentColor" strokeWidth="1.2"/></svg>{athlete.coach_name}</div>}
+        <div className="mt-4 border-t border-steel-dim/15 pt-3 text-sm text-steel-dim">
+          {athlete.club_name && <div className="flex items-center gap-1.5 truncate"><svg width="11" height="11" viewBox="0 0 10 10" fill="none"><path d="M1 8V4l4-2.5L9 4v4z" stroke="currentColor" strokeWidth="1.2"/></svg>{athlete.club_name}</div>}
+          {athlete.coach_name && <div className="mt-1 flex items-center gap-1.5 truncate"><svg width="11" height="11" viewBox="0 0 10 10" fill="none"><circle cx="5" cy="3.5" r="2" stroke="currentColor" strokeWidth="1.2"/><path d="M1.5 9c0-2.2 1.8-4 3.5-4s3.5 1.8 3.5 4" stroke="currentColor" strokeWidth="1.2"/></svg>{athlete.coach_name}</div>}
         </div>
       )}
     </Link>

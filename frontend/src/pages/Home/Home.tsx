@@ -114,7 +114,7 @@ export function Home() {
           <ErrorState message={(athletes.error as Error).message} onRetry={() => athletes.refetch()} />
         )}
         {athletes.data && athletes.data.items.length > 0 && (
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-5 sm:grid-cols-2 2xl:grid-cols-3">
             {athletes.data.items.map((a) => (
               <AthleteCard key={a.id} athlete={a} />
             ))}

@@ -149,7 +149,7 @@ export function Athletes() {
           )}
           {data && data.items.length > 0 && (
             <div
-              className="grid gap-5 transition-all duration-300 sm:grid-cols-2 lg:grid-cols-3"
+              className="grid gap-5 transition-all duration-300 sm:grid-cols-2 2xl:grid-cols-3"
               style={{ opacity: isPlaceholderData ? 0.6 : 1 }}
             >
               {data.items.map((a) => (
