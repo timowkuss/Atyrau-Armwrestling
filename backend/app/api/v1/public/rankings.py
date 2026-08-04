@@ -22,18 +22,26 @@ def athlete_rankings(
 ):
     query = db.query(AthleteRanking, Athlete.full_name, Club.name.label("club_name")).join(
         Athlete, AthleteRanking.athlete_id == Athlete.id
+    ).join(AthleteStatistic, Athlete.id == AthleteStatistic.athlete_id
     ).outerjoin(Club, Athlete.club_id == Club.id)
     if period:
         query = query.filter(AthleteRanking.period == period)
     if gender:
         query = query.filter(AthleteRanking.scope_gender == gender)
-    rows = query.order_by(AthleteRanking.points.desc()).limit(limit).all()
+    rows = query.order_by(
+        AthleteRanking.points.desc(),
+        AthleteStatistic.win_rate.desc(),
+        AthleteStatistic.gold_count.desc(),
+        AthleteStatistic.silver_count.desc(),
+        AthleteStatistic.bronze_count.desc(),
+        Athlete.id.asc(),
+    ).limit(limit).all()
     return [
         AthleteRankingOut(
-            position=r.position, athlete_id=r.athlete_id, athlete_name=name,
+            position=i + 1, athlete_id=r.athlete_id, athlete_name=name,
             club_name=club_name, points=r.points, period=r.period,
         )
-        for r, name, club_name in rows
+        for i, (r, name, club_name) in enumerate(rows)
     ]
 
 
@@ -61,7 +69,7 @@ def coach_rankings(
             "athletes_count": r["student_count"],
             "points": r["rating"],
         })
-    rankings.sort(key=lambda x: x["points"], reverse=True)
+    rankings.sort(key=lambda x: (x["points"], x["athletes_count"], -x["coach_id"]), reverse=True)
     return [
         CoachRankingOut(position=i + 1, **r)
         for i, r in enumerate(rankings[:limit])
@@ -73,16 +81,22 @@ def club_rankings(limit: int = Query(100, le=500), db: Session = Depends(get_db)
     rows = (
         db.query(ClubRanking, Club.name)
         .join(Club, ClubRanking.club_id == Club.id)
-        .order_by(ClubRanking.points.desc())
+        .order_by(
+            ClubRanking.points.desc(),
+            ClubRanking.gold_count.desc(),
+            ClubRanking.silver_count.desc(),
+            ClubRanking.bronze_count.desc(),
+            Club.id.asc(),
+        )
         .limit(limit)
         .all()
     )
     return [
         ClubRankingOut(
-            position=r.position, club_id=r.club_id, club_name=name, points=r.points,
+            position=i + 1, club_id=r.club_id, club_name=name, points=r.points,
             gold_count=r.gold_count, silver_count=r.silver_count, bronze_count=r.bronze_count,
         )
-        for r, name in rows
+        for i, (r, name) in enumerate(rows)
     ]
 
 
@@ -102,6 +116,7 @@ def elo_rankings(
             Athlete.photo_path,
             AthleteStatistic.elo_left,
             AthleteStatistic.elo_right,
+            AthleteStatistic.win_rate,
         )
         .join(AthleteStatistic, Athlete.id == AthleteStatistic.athlete_id)
         .outerjoin(Club, Athlete.club_id == Club.id)
@@ -113,24 +128,28 @@ def elo_rankings(
         query = query.filter(Athlete.full_name.ilike(f"%{name}%"))
     rows = query.all()
     if hand == "left":
-        key_fn = lambda r: r.elo_left or 0
+        key_fn = lambda r: (r.elo_left or 0, r.elo_right or 0, r.win_rate or 0.0, -r.id)
     elif hand == "right":
-        key_fn = lambda r: r.elo_right or 0
+        key_fn = lambda r: (r.elo_right or 0, r.elo_left or 0, r.win_rate or 0.0, -r.id)
     else:
-        key_fn = lambda r: (r.elo_left + r.elo_right) / 2 if r.elo_left is not None and r.elo_right is not None else 0
+        key_fn = lambda r: (
+            (r.elo_left + r.elo_right) / 2 if r.elo_left is not None and r.elo_right is not None else 0,
+            r.win_rate or 0.0,
+            -r.id,
+        )
     ranked = sorted(rows, key=key_fn, reverse=True)[:limit]
     return [
         EloRankingOut(
             position=i + 1,
-            athlete_id=athlete_id,
-            athlete_name=full_name,
-            club_name=club_name,
-            photo_path=photo_path,
-            elo_combined=round((elo_left + elo_right) / 2) if elo_left is not None and elo_right is not None else 0,
-            elo_left=elo_left or 0,
-            elo_right=elo_right or 0,
+            athlete_id=r.id,
+            athlete_name=r.full_name,
+            club_name=r.club_name,
+            photo_path=r.photo_path,
+            elo_combined=round((r.elo_left + r.elo_right) / 2) if r.elo_left is not None and r.elo_right is not None else 0,
+            elo_left=r.elo_left or 0,
+            elo_right=r.elo_right or 0,
         )
-        for i, (athlete_id, full_name, club_name, photo_path, elo_left, elo_right) in enumerate(ranked)
+        for i, r in enumerate(ranked)
     ]
 
 
