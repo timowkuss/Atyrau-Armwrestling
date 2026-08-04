@@ -1,13 +1,7 @@
 import { Link } from 'react-router-dom'
 import type { AthleteListItem } from '@/types/api'
 import { cloudinaryThumb } from '@/lib/cloudinaryImage'
-
-function age(birthDate: string | null): number | null {
-  if (!birthDate) return null
-  const b = new Date(birthDate)
-  const diff = Date.now() - b.getTime()
-  return Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000))
-}
+import { age } from '@/lib/age'
 
 export function AthleteCard({ athlete }: { athlete: AthleteListItem }) {
   const a = age(athlete.birth_date)
