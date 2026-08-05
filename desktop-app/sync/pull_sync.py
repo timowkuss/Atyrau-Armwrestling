@@ -188,9 +188,9 @@ class PullSyncManager:
                             or self._polls_since_full >= _FULL_RESYNC_EVERY_POLLS)
 
         applied = 0
-        conn = sqlite3.connect(str(self.db_path), timeout=5)
+        conn = sqlite3.connect(str(self.db_path), timeout=15)
         conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA busy_timeout = 5000")
+        conn.execute("PRAGMA busy_timeout = 15000")
         try:
             # Каждый поллёр оборачиваем отдельно: сбой одной сущности
             # (например, временное падение/деплой сервера) не должен ронять
