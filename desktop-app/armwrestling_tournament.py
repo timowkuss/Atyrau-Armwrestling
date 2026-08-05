@@ -1624,14 +1624,16 @@ class BadgeGenerator:
     def _draw_category_table(c, tx, top, rows, tw):
         """Таблица категорий Left/Right в области (tx..tx+tw), привязана к верху
         top и растёт вниз. rows: [(label, left_bool, right_bool)].
-        Между колонками рисуется «|», внизу — строка-разделитель «-- | --»
-        (если категорий ≤ 2)."""
+
+        Таблица всегда рисует минимум 2 строки: пустая ячейка показывается
+        «--», а категория вписывается вместо «--» в те руки, где участвует
+        спортсмен. Между колонками — «|»."""
         S = BadgeGenerator
         header_h = 0.32 * cm
         cat_h = 0.36 * cm
-        bottom_h = 0.22 * cm
-        show_bottom = len(rows) <= 2
-        table_h = header_h + len(rows) * cat_h + (bottom_h if show_bottom else 0)
+        if len(rows) < 2:
+            rows = list(rows) + [("", False, False)] * (2 - len(rows))
+        table_h = header_h + len(rows) * cat_h
         col_w = tw / 2
         pipe_color = colors.HexColor("#66737a")
 
@@ -1655,23 +1657,10 @@ class BadgeGenerator:
             _row_rect(ry, cat_h)
             c.setFillColor(colors.HexColor(S.TEXT_MAIN))
             c.setFont("Arial-Bold", 9.5)
-            c.drawCentredString(tx + col_w / 2, ry + cat_h / 2 - 0.08 * cm, label if left else "—")
-            c.drawCentredString(tx + col_w * 1.5, ry + cat_h / 2 - 0.08 * cm, label if right else "—")
+            c.drawCentredString(tx + col_w / 2, ry + cat_h / 2 - 0.08 * cm, label if left else "--")
+            c.drawCentredString(tx + col_w * 1.5, ry + cat_h / 2 - 0.08 * cm, label if right else "--")
             c.setFillColor(pipe_color)
             c.drawCentredString(tx + col_w, ry + cat_h / 2 - 0.08 * cm, "|")
-
-        # Нижняя строка-разделитель (контрастнее — видно сетку ячеек)
-        if show_bottom:
-            ry = top - header_h - len(rows) * cat_h - bottom_h
-            c.setFillColor(colors.HexColor("#d9dfe5"))
-            c.roundRect(tx, ry, tw, bottom_h, 4, fill=1, stroke=0)
-            c.rect(tx, ry + bottom_h * 0.4, tw, bottom_h * 0.6, fill=1, stroke=0)
-            c.setFillColor(colors.HexColor(S.HEADER_COLOR))
-            c.setFont("Arial-Bold", 8)
-            c.drawCentredString(tx + col_w / 2, ry + bottom_h / 2 - 0.06 * cm, "--")
-            c.drawCentredString(tx + col_w * 1.5, ry + bottom_h / 2 - 0.06 * cm, "--")
-            c.setFillColor(pipe_color)
-            c.drawCentredString(tx + col_w, ry + bottom_h / 2 - 0.06 * cm, "|")
 
         # Сетка поверх
         c.setStrokeColor(colors.HexColor(S.TABLE_GRID))
@@ -1680,9 +1669,6 @@ class BadgeGenerator:
         c.line(tx, top - header_h, tx + tw, top - header_h)
         for i in range(1, len(rows)):
             yy = top - header_h - i * cat_h
-            c.line(tx, yy, tx + tw, yy)
-        if show_bottom:
-            yy = top - header_h - len(rows) * cat_h
             c.line(tx, yy, tx + tw, yy)
 
     @staticmethod
