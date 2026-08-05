@@ -1459,18 +1459,18 @@ Database.delete_club = _synced_delete_club
 # ════
 
 class BadgeGenerator:
-    """Генерирует PDF с бейджиками участников (4 шт на A4, сетка 2×2).
+    """Генерирует PDF с бейджиками участников (6 шт на A4, сетка 2×3).
 
     Один бейджик — один спортсмен: если человек зарегистрирован в двух
     категориях, обе показываются в таблице Left/Right на одном бейджике.
     """
 
-    BADGE_W = 8.6 * cm
-    BADGE_H = 13.2 * cm
+    BADGE_W = 9.1 * cm
+    BADGE_H = 8.75 * cm
     COLS = 2
-    ROWS = 2
-    MARGIN_LEFT = 1.3 * cm
-    MARGIN_TOP = 1.3 * cm
+    ROWS = 3
+    MARGIN_LEFT = 1.2 * cm
+    MARGIN_TOP = 1.2 * cm
     GAP_X = 0.4 * cm
     GAP_Y = 0.5 * cm
 
@@ -1621,72 +1621,68 @@ class BadgeGenerator:
             return None
 
     @staticmethod
-    def _draw_category_table(c, x, y, rows):
-        """Таблица категорий Left/Right. rows: [(label, left_bool, right_bool)].
-
-        Низ таблицы прижат к верху штрихкода, но сама таблица привязана
-        к верху (под клубом) — при большем числе строк она растёт вниз.
-        Между колонками рисуется «|», внизу — строка-разделитель «-- | --».
-        """
+    def _draw_category_table(c, tx, top, rows, tw):
+        """Таблица категорий Left/Right в области (tx..tx+tw), привязана к верху
+        top и растёт вниз. rows: [(label, left_bool, right_bool)].
+        Между колонками рисуется «|», внизу — строка-разделитель «-- | --»
+        (если категорий ≤ 2)."""
         S = BadgeGenerator
-        table_top = y + 4.35 * cm
-        header_h = 0.4 * cm
-        cat_h = 0.45 * cm
-        bottom_h = 0.25 * cm
+        header_h = 0.32 * cm
+        cat_h = 0.36 * cm
+        bottom_h = 0.22 * cm
         show_bottom = len(rows) <= 2
         table_h = header_h + len(rows) * cat_h + (bottom_h if show_bottom else 0)
-        tb = table_top - table_h
-        tw = 6.6 * cm
-        tx = x + (BadgeGenerator.BADGE_W - tw) / 2
         col_w = tw / 2
         pipe_color = colors.HexColor("#66737a")
 
         # Шапка таблицы (petrol)
         c.setFillColor(colors.HexColor(S.TABLE_HEADER_BG))
-        c.roundRect(tx, tb + table_h - header_h, tw, header_h, 6, fill=1, stroke=0)
-        c.rect(tx, tb + table_h - header_h, tw, header_h / 2, fill=1, stroke=0)
+        c.roundRect(tx, top - header_h, tw, header_h, 5, fill=1, stroke=0)
+        c.rect(tx, top - header_h, tw, header_h / 2, fill=1, stroke=0)
         c.setFillColor(colors.white)
-        c.setFont("Arial-Bold", 7)
-        c.drawCentredString(tx + col_w / 2, tb + table_h - header_h / 2 - 0.08 * cm, "Left")
-        c.drawCentredString(tx + col_w * 1.5, tb + table_h - header_h / 2 - 0.08 * cm, "Right")
+        c.setFont("Arial-Bold", 6.5)
+        c.drawCentredString(tx + col_w / 2, top - header_h / 2 - 0.06 * cm, "Left")
+        c.drawCentredString(tx + col_w * 1.5, top - header_h / 2 - 0.06 * cm, "Right")
 
         def _row_rect(ry, rh):
             c.setFillColor(colors.HexColor(S.FOOTER_BG))
-            c.roundRect(tx, ry, tw, rh, 5, fill=1, stroke=0)
+            c.roundRect(tx, ry, tw, rh, 4, fill=1, stroke=0)
             c.rect(tx, ry + rh * 0.4, tw, rh * 0.6, fill=1, stroke=0)
 
         # Строки категорий
         for i, (label, left, right) in enumerate(rows):
-            ry = tb + table_h - header_h - (i + 1) * cat_h
+            ry = top - header_h - (i + 1) * cat_h
             _row_rect(ry, cat_h)
             c.setFillColor(colors.HexColor(S.TEXT_MAIN))
-            c.setFont("Arial-Bold", 11)
-            c.drawCentredString(tx + col_w / 2, ry + cat_h / 2 - 0.10 * cm, label if left else "—")
-            c.drawCentredString(tx + col_w * 1.5, ry + cat_h / 2 - 0.10 * cm, label if right else "—")
+            c.setFont("Arial-Bold", 9.5)
+            c.drawCentredString(tx + col_w / 2, ry + cat_h / 2 - 0.08 * cm, label if left else "—")
+            c.drawCentredString(tx + col_w * 1.5, ry + cat_h / 2 - 0.08 * cm, label if right else "—")
             c.setFillColor(pipe_color)
-            c.drawCentredString(tx + col_w, ry + cat_h / 2 - 0.10 * cm, "|")
+            c.drawCentredString(tx + col_w, ry + cat_h / 2 - 0.08 * cm, "|")
 
-        # Нижняя строка-разделитель
+        # Нижняя строка-разделитель (контрастнее — видно сетку ячеек)
         if show_bottom:
-            ry = tb + table_h - header_h - len(rows) * cat_h - bottom_h
-            _row_rect(ry, bottom_h)
-            c.setFillColor(colors.HexColor("#8a939b"))
+            ry = top - header_h - len(rows) * cat_h - bottom_h
+            c.setFillColor(colors.HexColor("#d9dfe5"))
+            c.roundRect(tx, ry, tw, bottom_h, 4, fill=1, stroke=0)
+            c.rect(tx, ry + bottom_h * 0.4, tw, bottom_h * 0.6, fill=1, stroke=0)
+            c.setFillColor(colors.HexColor(S.HEADER_COLOR))
             c.setFont("Arial-Bold", 8)
-            c.drawCentredString(tx + col_w / 2, ry + bottom_h / 2 - 0.08 * cm, "--")
-            c.drawCentredString(tx + col_w * 1.5, ry + bottom_h / 2 - 0.08 * cm, "--")
+            c.drawCentredString(tx + col_w / 2, ry + bottom_h / 2 - 0.06 * cm, "--")
+            c.drawCentredString(tx + col_w * 1.5, ry + bottom_h / 2 - 0.06 * cm, "--")
             c.setFillColor(pipe_color)
-            c.drawCentredString(tx + col_w, ry + bottom_h / 2 - 0.08 * cm, "|")
+            c.drawCentredString(tx + col_w, ry + bottom_h / 2 - 0.06 * cm, "|")
 
         # Сетка поверх
         c.setStrokeColor(colors.HexColor(S.TABLE_GRID))
         c.setLineWidth(0.8)
-        c.roundRect(tx, tb, tw, table_h, 6, fill=0, stroke=1)
-        c.line(tx, tb + table_h - header_h, tx + tw, tb + table_h - header_h)
+        c.roundRect(tx, top - table_h, tw, table_h, 5, fill=0, stroke=1)
+        c.line(tx, top - header_h, tx + tw, top - header_h)
         for i in range(1, len(rows)):
-            yy = tb + table_h - header_h - i * cat_h
+            yy = top - header_h - i * cat_h
             c.line(tx, yy, tx + tw, yy)
         if show_bottom:
-            yy = tb + table_h - header_h - len(rows) * cat_h
+            yy = top - header_h - len(rows) * cat_h
             c.line(tx, yy, tx + tw, yy)
 
     @staticmethod
@@ -1703,7 +1699,7 @@ class BadgeGenerator:
         c.roundRect(x, y, bw, bh, 10, fill=1, stroke=1)
 
         # ── 2. Шапка турнира + логотип города ──
-        header_h = 1.6 * cm
+        header_h = 1.5 * cm
         c.setFillColor(colors.HexColor(S.HEADER_COLOR))
         c.roundRect(x, y + bh - header_h, bw, header_h, 10, fill=1, stroke=0)
         # Закрываем нижние скругления шапки
@@ -1715,34 +1711,67 @@ class BadgeGenerator:
         logo_drawn = False
         if os.path.exists(S.LOGO_PATH):
             try:
-                logo_w = 1.15 * cm
-                logo_h = 1.15 * cm
-                c.drawImage(S.LOGO_PATH, x + 0.4 * cm, y + bh - 0.3 * cm - logo_h,
+                logo_w = 1.05 * cm
+                logo_h = 1.05 * cm
+                c.drawImage(S.LOGO_PATH, x + 0.3 * cm, y + bh - 0.32 * cm - logo_h,
                             logo_w, logo_h, mask="auto")
                 logo_drawn = True
             except Exception as e:
                 print(f"[badges] логотип не отрисован: {e}")
 
         # Название турнира (со сдвигом вправо, чтобы не наезжало на логотип)
-        t_name = str(tournament["name"])[:46] if tournament else "Турнир"
-        name_cx = x + bw / 2 + (0.4 * cm if logo_drawn else 0)
+        t_name = str(tournament["name"])[:44] if tournament else "Турнир"
+        name_cx = x + bw / 2 + (0.3 * cm if logo_drawn else 0)
         c.setFillColor(colors.white)
-        c.setFont("Arial-Bold", 9)
-        if len(t_name) > 44:
+        c.setFont("Arial-Bold", 8.5)
+        if len(t_name) > 40:
             c.setFont("Arial-Bold", 7.5)
-        c.drawCentredString(name_cx, y + bh - 1.10 * cm, t_name)
+        c.drawCentredString(name_cx, y + bh - 1.02 * cm, t_name)
 
         t_date = str(tournament["date"]) if tournament else ""
         if t_date:
-            c.setFont("Arial", 7)
+            c.setFont("Arial", 6.5)
             c.setFillColor(colors.HexColor("#b7c2c7"))
-            c.drawCentredString(name_cx, y + bh - 1.46 * cm, t_date)
+            c.drawCentredString(name_cx, y + bh - 1.36 * cm, t_date)
 
-        # ── 3. Фото спортсмена ──
-        photo_w = 4.2 * cm
-        photo_h = 5.1 * cm
-        px = x + (bw - photo_w) / 2
-        py = y + 6.0 * cm
+        # ── 3. Зона имени (на всю ширину, под шапкой) ──
+        name = str(participant["name"])
+        body_top = y + bh - 2.85 * cm          # верх зоны фото/таблицы
+        name_pt = 13
+        two_lines = False
+        if len(name) > 28:
+            name_pt = 11
+        if len(name) > 40:
+            name_pt = 10
+            two_lines = True
+        c.setFillColor(colors.HexColor(S.TEXT_MAIN))
+        c.setFont("Arial-Bold", name_pt)
+        if two_lines:
+            half = len(name) // 2
+            split = name.rfind(" ", 0, half)
+            if split <= 0:
+                split = name.find(" ", half)
+            if split > 0:
+                c.drawCentredString(x + bw / 2, y + bh - 1.70 * cm, name[:split].strip())
+                c.drawCentredString(x + bw / 2, y + bh - 2.35 * cm, name[split:].strip())
+            else:
+                c.drawCentredString(x + bw / 2, y + bh - 2.00 * cm, name)
+        else:
+            c.drawCentredString(x + bw / 2, y + bh - 1.95 * cm, name)
+
+        # Клуб (скрывается полностью, если клуба нет)
+        club = next((p["club"] for p in person if p["club"]), "")
+        if club:
+            c.setFillColor(colors.HexColor(S.TEXT_DIM))
+            c.setFont("Arial", 8)
+            c.drawCentredString(x + bw / 2, y + bh - 2.58 * cm, f"Клуб: {club}")
+
+        # ── 4. Фото спортсмена (слева) ──
+        fb_top = y + 2.3 * cm                   # верх нижней плашки
+        photo_h = body_top - fb_top
+        photo_w = 4.0 * cm
+        px = x + 0.3 * cm
+        py = fb_top
 
         photo_stream = BadgeGenerator._photo_stream(participant, photo_w, photo_h)
         if photo_stream is not None:
@@ -1750,7 +1779,7 @@ class BadgeGenerator:
                 # Скруглённое фото через clip-область
                 c.saveState()
                 clip_path = c.beginPath()
-                clip_path.roundRect(px, py, photo_w, photo_h, 14)
+                clip_path.roundRect(px, py, photo_w, photo_h, 12)
                 c.clipPath(clip_path, stroke=0, fill=0)
                 c.drawImage(photo_stream, px, py, photo_w, photo_h, mask="auto")
                 c.restoreState()
@@ -1761,56 +1790,27 @@ class BadgeGenerator:
                     pass
             c.setStrokeColor(colors.HexColor(S.PHOTO_FRAME))
             c.setLineWidth(1.1)
-            c.roundRect(px, py, photo_w, photo_h, 14, fill=0, stroke=1)
+            c.roundRect(px, py, photo_w, photo_h, 12, fill=0, stroke=1)
         else:
             # Плейсхолдер: мягкая плашка + монограмма в круге
             c.setFillColor(colors.HexColor(S.PLACEHOLDER_BG))
-            c.roundRect(px, py, photo_w, photo_h, 14, fill=1, stroke=0)
+            c.roundRect(px, py, photo_w, photo_h, 12, fill=1, stroke=0)
             cx, cy = px + photo_w / 2, py + photo_h / 2
-            dia = 3.2 * cm
+            dia = 2.7 * cm
             c.setFillColor(colors.white)
             c.setStrokeColor(colors.HexColor("#c9d1d8"))
             c.setLineWidth(1.2)
             c.circle(cx, cy, dia / 2, fill=1, stroke=1)
             c.setFillColor(colors.HexColor(S.PLACEHOLDER_TEXT))
-            c.setFont("Arial-Bold", 30)
-            c.drawCentredString(cx, cy - 0.35 * cm, BadgeGenerator._initials(participant["name"]))
+            c.setFont("Arial-Bold", 26)
+            c.drawCentredString(cx, cy - 0.3 * cm, BadgeGenerator._initials(participant["name"]))
             c.setStrokeColor(colors.HexColor(S.PHOTO_FRAME))
             c.setLineWidth(1.1)
-            c.roundRect(px, py, photo_w, photo_h, 14, fill=0, stroke=1)
+            c.roundRect(px, py, photo_w, photo_h, 12, fill=0, stroke=1)
 
-        # ── 4. Имя участника (крупно, при необходимости — в две строки) ──
-        name = str(participant["name"])
-        name_pt = 16
-        two_lines = False
-        if len(name) > 22:
-            name_pt = 13
-        if len(name) > 42:
-            name_pt = 11
-            two_lines = True
-        c.setFillColor(colors.HexColor(S.TEXT_MAIN))
-        c.setFont("Arial-Bold", name_pt)
-        if two_lines:
-            half = len(name) // 2
-            split = name.rfind(" ", 0, half)
-            if split <= 0:
-                split = name.find(" ", half)
-            if split > 0:
-                c.drawCentredString(x + bw / 2, y + 5.65 * cm, name[:split].strip())
-                c.drawCentredString(x + bw / 2, y + 4.95 * cm, name[split:].strip())
-            else:
-                c.drawCentredString(x + bw / 2, y + 4.95 * cm, name)
-        else:
-            c.drawCentredString(x + bw / 2, y + 5.35 * cm, name)
-
-        # ── 5. Клуб (скрывается полностью, если клуба нет) ──
-        club = next((p["club"] for p in person if p["club"]), "")
-        if club:
-            c.setFillColor(colors.HexColor(S.TEXT_DIM))
-            c.setFont("Arial", 9)
-            c.drawCentredString(x + bw / 2, y + 4.6 * cm, f"Клуб: {club}")
-
-        # ── 6. Таблица категорий Left/Right ──
+        # ── 5. Таблица категорий Left/Right (справа от фото) ──
+        tx = px + photo_w + 0.25 * cm
+        tw = x + bw - 0.3 * cm - tx
         cat_hands = OrderedDict()
         for p in person:
             cid = p["category_id"]
@@ -1822,11 +1822,11 @@ class BadgeGenerator:
             left = bool(hs & {"Обе", "Левая", "Both", "Left"})
             right = bool(hs & {"Обе", "Правая", "Both", "Right"})
             rows.append((label, left, right))
-        BadgeGenerator._draw_category_table(c, x, y, rows)
+        if rows:
+            BadgeGenerator._draw_category_table(c, tx, body_top, rows, tw)
 
-        # ── 7. Нижняя плашка со штрихкодом ──
-        fb_bottom = y + 0.55 * cm
-        fb_top = y + 2.5 * cm
+        # ── 6. Нижняя плашка со штрихкодом ──
+        fb_bottom = y + 0.4 * cm
         c.setFillColor(colors.HexColor(S.FOOTER_BG))
         c.roundRect(x + 0.45 * cm, fb_bottom, bw - 0.9 * cm, fb_top - fb_bottom, 8, fill=1, stroke=0)
         c.setStrokeColor(colors.HexColor(S.FOOTER_BORDER))
@@ -1834,10 +1834,10 @@ class BadgeGenerator:
         c.roundRect(x + 0.45 * cm, fb_bottom, bw - 0.9 * cm, fb_top - fb_bottom, 8, fill=0, stroke=1)
 
         barcode_value = get_barcode_value(participant["id"])
-        barcode = Code128(barcode_value, barHeight=1.0 * cm, barWidth=1.15)
+        barcode = Code128(barcode_value, barHeight=0.8 * cm, barWidth=1.0)
         barcode_width = barcode.width
         bx = x + (bw - barcode_width) / 2
-        by = y + 1.15 * cm
+        by = y + 1.02 * cm
         # Code128 рисует штрихи текущим fill-цветом — явно ставим чёрный,
         # иначе на светлой плашке штрихи сливаются с фоном.
         c.setFillColor(colors.black)
@@ -1847,18 +1847,18 @@ class BadgeGenerator:
         c.setFillColor(colors.white)
         txt_w = pdfmetrics.stringWidth(barcode_value, "Arial-Bold", 8)
         pill_w = txt_w + 0.8 * cm
-        pill_h = 0.5 * cm
+        pill_h = 0.42 * cm
         pill_x = x + (bw - pill_w) / 2
-        pill_y = y + 0.6 * cm
+        pill_y = y + 0.45 * cm
         c.roundRect(pill_x, pill_y, pill_w, pill_h, 9, fill=1, stroke=0)
         c.setStrokeColor(colors.HexColor(S.FOOTER_BORDER))
         c.setLineWidth(0.6)
         c.roundRect(pill_x, pill_y, pill_w, pill_h, 9, fill=0, stroke=1)
         c.setFillColor(colors.HexColor("#222222"))
         c.setFont("Arial-Bold", 8)
-        c.drawCentredString(x + bw / 2, y + 0.8 * cm, barcode_value)
+        c.drawCentredString(x + bw / 2, y + 0.6 * cm, barcode_value)
 
-        # ── 8. Пунктирные линии для вырезания ──
+        # ── 7. Пунктирные линии для вырезания ──
         c.setStrokeColor(colors.HexColor("#cccccc"))
         c.setLineWidth(0.3)
         c.setDash(3, 3)
