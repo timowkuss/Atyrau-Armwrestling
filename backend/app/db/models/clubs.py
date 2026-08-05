@@ -31,8 +31,17 @@ class Club(Base):
     athletes: Mapped[list["Athlete"]] = relationship(back_populates="club")
 
 
+def _normalize_club_name(name: str) -> str:
+    """Канонический вид названия клуба для сравнения дублей: регистр вниз,
+    схлопываем лишние пробелы + слова по алфавиту. Так «Спортивный клуб
+    Алга» и «Алга Спортивный клуб» считаются одним клубом — раньше порядок
+    слов не учитывался, и тот же клуб мог уехать на сервер второй раз под
+    новым id после потери id_map на десктопе (как у спортсменов/тренеров)."""
+    return " ".join(sorted(name.strip().lower().split()))
+
+
 def find_club_by_name(db, name: str | None) -> Club | None:
-    """Клуб с таким именем (без учёта регистра) или None.
+    """Клуб с таким именем (без учёта регистра и порядка слов) или None.
 
     Используется для дедупа в create_club (sync + admin): повторное создание
     клуба с уже существующим именем возвращает существующий, а не плодит
@@ -44,10 +53,13 @@ def find_club_by_name(db, name: str | None) -> Club | None:
     norm = (name or "").strip().lower()
     if not norm:
         return None
+    key = _normalize_club_name(norm)
+    if not key:
+        return None
     club = db.query(Club).filter(func.lower(Club.name) == norm).first()
     if club is not None:
         return club
     for candidate in db.query(Club).all():
-        if (candidate.name or "").strip().lower() == norm:
+        if _normalize_club_name(candidate.name or "") == key:
             return candidate
     return None

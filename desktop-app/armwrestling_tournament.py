@@ -20,7 +20,10 @@ import sqlite3
 import os
 import sys
 import math
+import io
 import json
+import tempfile
+import re
 from datetime import datetime
 from pathlib import Path
 import random
@@ -1456,21 +1459,44 @@ Database.delete_club = _synced_delete_club
 # ════
 
 class BadgeGenerator:
-    """Генерирует PDF с бейджиками участников (8 шт на A4)."""
+    """Генерирует PDF с бейджиками участников (4 шт на A4, сетка 2×2).
 
-    BADGE_W = 9 * cm
-    BADGE_H = 6.2 * cm
+    Один бейджик — один спортсмен: если человек зарегистрирован в двух
+    категориях, обе показываются в таблице Left/Right на одном бейджике.
+    """
+
+    BADGE_W = 8.6 * cm
+    BADGE_H = 13.2 * cm
     COLS = 2
-    ROWS = 4
-    MARGIN_LEFT = 1.5 * cm
-    MARGIN_TOP = 2.5 * cm
-    GAP_X = 0.5 * cm
-    GAP_Y = 0.4 * cm
+    ROWS = 2
+    MARGIN_LEFT = 1.3 * cm
+    MARGIN_TOP = 1.3 * cm
+    GAP_X = 0.4 * cm
+    GAP_Y = 0.5 * cm
+
+    # Логотип города Атырау — всегда на бейджике (копия лежит рядом со скриптом)
+    LOGO_PATH = str(Path(__file__).resolve().parent / "assets" / "logo-atyrau-city.png")
+
+    # Палитра бейджика — продолжение фирменной гаммы приложения:
+    # нефтепромысловый Атырау (petrol/brass/rust).
+    HEADER_COLOR = "#12363B"   # petrol — каспийская глубина
+    HEADER_ACCENT = "#C9A227"  # brass — латунь манометра
+    PHOTO_FRAME = "#2a4a6c"
+    TEXT_MAIN = "#111111"
+    TEXT_DIM = "#555555"
+    INFO_BLUE = "#336699"
+    FOOTER_BG = "#eef1f5"
+    FOOTER_BORDER = "#d5dae0"
+    PLACEHOLDER_BG = "#e8edf1"
+    PLACEHOLDER_TEXT = "#8a939b"
+    TABLE_HEADER_BG = "#12363B"
+    TABLE_GRID = "#c8cdd3"
 
     @staticmethod
     def generate(filepath, tournament, participants, categories_map):
         """
-        Генерирует PDF с бейджиками.
+        Генерирует PDF с бейджиками (4 шт на лист A4). Возвращает число
+        выведенных бейджиков (по одному на спортсмена).
         participants: список dict-подобных объектов (sqlite3.Row)
         categories_map: {category_id: category_name}
         """
@@ -1480,17 +1506,18 @@ class BadgeGenerator:
         c = pdf_canvas.Canvas(filepath, pagesize=A4)
         page_w, page_h = A4
 
+        persons = BadgeGenerator._group_participants(participants)
         badge_idx = 0
-        total = len(participants)
+        total = len(persons)
 
-        for i, p in enumerate(participants):
+        for i, person in enumerate(persons):
             col = badge_idx % BadgeGenerator.COLS
             row = (badge_idx // BadgeGenerator.COLS) % BadgeGenerator.ROWS
 
             x = BadgeGenerator.MARGIN_LEFT + col * (BadgeGenerator.BADGE_W + BadgeGenerator.GAP_X)
             y = page_h - BadgeGenerator.MARGIN_TOP - (row + 1) * BadgeGenerator.BADGE_H - row * BadgeGenerator.GAP_Y
 
-            BadgeGenerator._draw_badge(c, x, y, p, tournament, categories_map)
+            BadgeGenerator._draw_badge(c, x, y, person, tournament, categories_map)
 
             badge_idx += 1
             if badge_idx % (BadgeGenerator.COLS * BadgeGenerator.ROWS) == 0 and i < total - 1:
@@ -1498,71 +1525,340 @@ class BadgeGenerator:
                 badge_idx = 0
 
         c.save()
+        return total
 
     @staticmethod
-    def _draw_badge(c, x, y, participant, tournament, categories_map):
+    def _group_participants(participants):
+        """Группирует строки-регистрации по спортсмену: один бейджик на человека."""
+        groups = OrderedDict()
+        for p in participants:
+            key = p["athlete_id"] if p["athlete_id"] else ("anon", p["name"])
+            groups.setdefault(key, []).append(p)
+        return list(groups.values())
+
+    @staticmethod
+    def _age_abbrev(name):
+        """Сокращение возрастной группы: Sub-Junior→SJ, Junior→J,
+        Youth→YM, Senior→S, Absolute→A. Для девочек те же буквы."""
+        a = str(name or "").lower().replace("-", " ")
+        if "sub" in a and "junior" in a:
+            return "SJ"
+        if "junior" in a:
+            return "J"
+        if "youth" in a:
+            return "YM"
+        if "senior" in a:
+            return "S"
+        if "absolute" in a:
+            return "A"
+        return ""
+
+    @staticmethod
+    def _category_label(cat_name, age_category):
+        """Метка категории вида 'J70', 'S75', 'S110+', 'A' (абсолютка)."""
+        age = BadgeGenerator._age_abbrev(age_category)
+        if not age:
+            age = BadgeGenerator._age_abbrev(cat_name)
+        m = re.search(r"(\d+\+?)\s*kg\b", str(cat_name or ""))
+        if m:
+            return f"{age}{m.group(1)}"
+        return age or "?"
+
+    @staticmethod
+    def _initials(name):
+        parts = [p for p in str(name).split() if p]
+        if not parts:
+            return "?"
+        return "".join(p[0].upper() for p in parts[:2])
+
+    @staticmethod
+    def _photo_stream(participant, photo_w, photo_h):
+        """Возвращает путь к временному PNG (центр-кроп под пропорции фото)
+        либо None. Вызывающий обязан удалить файл после отрисовки.
+
+        photo_w/photo_h — размеры в пунктах. Готовое фото не растягивается:
+        сначала центр-кроп до нужных пропорций, затем LANCZOS-ресайз.
+        reportlab.drawImage принимает путь на диске, а не BytesIO, поэтому
+        итог сохраняем во временный файл.
+        """
+        if not PIL_AVAILABLE:
+            return None
+        try:
+            photo_path = participant["photo_path"] if participant["photo_path"] else None
+        except Exception:
+            return None
+        if not photo_path:
+            return None
+        try:
+            local_photo = resolve_local_photo_path(photo_path)
+        except Exception:
+            return None
+        if not local_photo:
+            return None
+        try:
+            img = Image.open(local_photo)
+            img = ImageOps.exif_transpose(img)  # уважаем поворот с камеры телефона
+            src_w, src_h = img.size
+            target_ratio = photo_w / photo_h
+            src_ratio = src_w / src_h
+            if src_ratio > target_ratio:
+                new_w = int(src_h * target_ratio)
+                left = (src_w - new_w) // 2
+                img = img.crop((left, 0, left + new_w, src_h))
+            else:
+                new_h = int(src_w / target_ratio)
+                top = (src_h - new_h) // 2
+                img = img.crop((0, top, src_w, top + new_h))
+            img = img.resize((max(1, int(photo_w / 0.25)), max(1, int(photo_h / 0.25))), Image.LANCZOS)
+            buf = io.BytesIO()
+            img.convert("RGB").save(buf, format="PNG")
+            tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+            tmp.write(buf.getvalue())
+            tmp.close()
+            return tmp.name
+        except Exception as e:
+            print(f"[badges] фото недоступно ({photo_path}): {e}")
+            return None
+
+    @staticmethod
+    def _draw_category_table(c, x, y, rows):
+        """Таблица категорий Left/Right. rows: [(label, left_bool, right_bool)].
+
+        Низ таблицы прижат к верху штрихкода, но сама таблица привязана
+        к верху (под клубом) — при большем числе строк она растёт вниз.
+        Между колонками рисуется «|», внизу — строка-разделитель «-- | --».
+        """
+        S = BadgeGenerator
+        table_top = y + 4.35 * cm
+        header_h = 0.4 * cm
+        cat_h = 0.45 * cm
+        bottom_h = 0.25 * cm
+        show_bottom = len(rows) <= 2
+        table_h = header_h + len(rows) * cat_h + (bottom_h if show_bottom else 0)
+        tb = table_top - table_h
+        tw = 6.6 * cm
+        tx = x + (BadgeGenerator.BADGE_W - tw) / 2
+        col_w = tw / 2
+        pipe_color = colors.HexColor("#66737a")
+
+        # Шапка таблицы (petrol)
+        c.setFillColor(colors.HexColor(S.TABLE_HEADER_BG))
+        c.roundRect(tx, tb + table_h - header_h, tw, header_h, 6, fill=1, stroke=0)
+        c.rect(tx, tb + table_h - header_h, tw, header_h / 2, fill=1, stroke=0)
+        c.setFillColor(colors.white)
+        c.setFont("Arial-Bold", 7)
+        c.drawCentredString(tx + col_w / 2, tb + table_h - header_h / 2 - 0.08 * cm, "Left")
+        c.drawCentredString(tx + col_w * 1.5, tb + table_h - header_h / 2 - 0.08 * cm, "Right")
+
+        def _row_rect(ry, rh):
+            c.setFillColor(colors.HexColor(S.FOOTER_BG))
+            c.roundRect(tx, ry, tw, rh, 5, fill=1, stroke=0)
+            c.rect(tx, ry + rh * 0.4, tw, rh * 0.6, fill=1, stroke=0)
+
+        # Строки категорий
+        for i, (label, left, right) in enumerate(rows):
+            ry = tb + table_h - header_h - (i + 1) * cat_h
+            _row_rect(ry, cat_h)
+            c.setFillColor(colors.HexColor(S.TEXT_MAIN))
+            c.setFont("Arial-Bold", 11)
+            c.drawCentredString(tx + col_w / 2, ry + cat_h / 2 - 0.10 * cm, label if left else "—")
+            c.drawCentredString(tx + col_w * 1.5, ry + cat_h / 2 - 0.10 * cm, label if right else "—")
+            c.setFillColor(pipe_color)
+            c.drawCentredString(tx + col_w, ry + cat_h / 2 - 0.10 * cm, "|")
+
+        # Нижняя строка-разделитель
+        if show_bottom:
+            ry = tb + table_h - header_h - len(rows) * cat_h - bottom_h
+            _row_rect(ry, bottom_h)
+            c.setFillColor(colors.HexColor("#8a939b"))
+            c.setFont("Arial-Bold", 8)
+            c.drawCentredString(tx + col_w / 2, ry + bottom_h / 2 - 0.08 * cm, "--")
+            c.drawCentredString(tx + col_w * 1.5, ry + bottom_h / 2 - 0.08 * cm, "--")
+            c.setFillColor(pipe_color)
+            c.drawCentredString(tx + col_w, ry + bottom_h / 2 - 0.08 * cm, "|")
+
+        # Сетка поверх
+        c.setStrokeColor(colors.HexColor(S.TABLE_GRID))
+        c.setLineWidth(0.8)
+        c.roundRect(tx, tb, tw, table_h, 6, fill=0, stroke=1)
+        c.line(tx, tb + table_h - header_h, tx + tw, tb + table_h - header_h)
+        for i in range(1, len(rows)):
+            yy = tb + table_h - header_h - i * cat_h
+            c.line(tx, yy, tx + tw, yy)
+        if show_bottom:
+            yy = tb + table_h - header_h - len(rows) * cat_h
+            c.line(tx, yy, tx + tw, yy)
+
+    @staticmethod
+    def _draw_badge(c, x, y, person, tournament, categories_map):
         bw = BadgeGenerator.BADGE_W
         bh = BadgeGenerator.BADGE_H
+        S = BadgeGenerator
+        participant = person[0]
 
-        # Фон и рамка
-        c.setStrokeColor(colors.HexColor("#2a4a6c"))
-        c.setLineWidth(1.5)
-        c.setFillColor(colors.HexColor("#f8fafc"))
-        c.roundRect(x, y, bw, bh, 8, fill=1, stroke=1)
-
-        # Верхняя полоса (заголовок)
-        c.setFillColor(colors.HexColor("#1a3a5c"))
-        c.roundRect(x, y + bh - 1.4 * cm, bw, 1.4 * cm, 8, fill=1, stroke=0)
-        # Закрываем нижние скругления заголовка
-        c.rect(x, y + bh - 1.4 * cm, bw, 0.5 * cm, fill=1, stroke=0)
-
-        # Название турнира
+        # ── 1. Белая основа с рамкой ──
+        c.setStrokeColor(colors.HexColor(S.PHOTO_FRAME))
+        c.setLineWidth(1.4)
         c.setFillColor(colors.white)
-        c.setFont("Arial-Bold", 8)
-        t_name = str(tournament["name"])[:40] if tournament else "Турнир"
-        c.drawCentredString(x + bw / 2, y + bh - 0.7 * cm, t_name)
+        c.roundRect(x, y, bw, bh, 10, fill=1, stroke=1)
+
+        # ── 2. Шапка турнира + логотип города ──
+        header_h = 1.6 * cm
+        c.setFillColor(colors.HexColor(S.HEADER_COLOR))
+        c.roundRect(x, y + bh - header_h, bw, header_h, 10, fill=1, stroke=0)
+        # Закрываем нижние скругления шапки
+        c.rect(x, y + bh - header_h, bw, 0.4 * cm, fill=1, stroke=0)
+        # Латунная линия-акцент под шапкой
+        c.setFillColor(colors.HexColor(S.HEADER_ACCENT))
+        c.rect(x, y + bh - header_h - 0.10 * cm, bw, 0.10 * cm, fill=1, stroke=0)
+
+        logo_drawn = False
+        if os.path.exists(S.LOGO_PATH):
+            try:
+                logo_w = 1.15 * cm
+                logo_h = 1.15 * cm
+                c.drawImage(S.LOGO_PATH, x + 0.4 * cm, y + bh - 0.3 * cm - logo_h,
+                            logo_w, logo_h, mask="auto")
+                logo_drawn = True
+            except Exception as e:
+                print(f"[badges] логотип не отрисован: {e}")
+
+        # Название турнира (со сдвигом вправо, чтобы не наезжало на логотип)
+        t_name = str(tournament["name"])[:46] if tournament else "Турнир"
+        name_cx = x + bw / 2 + (0.4 * cm if logo_drawn else 0)
+        c.setFillColor(colors.white)
+        c.setFont("Arial-Bold", 9)
+        if len(t_name) > 44:
+            c.setFont("Arial-Bold", 7.5)
+        c.drawCentredString(name_cx, y + bh - 1.10 * cm, t_name)
 
         t_date = str(tournament["date"]) if tournament else ""
-        c.setFont("Arial", 6)
-        c.drawCentredString(x + bw / 2, y + bh - 1.1 * cm, t_date)
+        if t_date:
+            c.setFont("Arial", 7)
+            c.setFillColor(colors.HexColor("#b7c2c7"))
+            c.drawCentredString(name_cx, y + bh - 1.46 * cm, t_date)
 
-        # Имя участника (крупно)
-        c.setFillColor(colors.HexColor("#111111"))
-        c.setFont("Arial-Bold", 14)
+        # ── 3. Фото спортсмена ──
+        photo_w = 4.2 * cm
+        photo_h = 5.1 * cm
+        px = x + (bw - photo_w) / 2
+        py = y + 6.0 * cm
+
+        photo_stream = BadgeGenerator._photo_stream(participant, photo_w, photo_h)
+        if photo_stream is not None:
+            try:
+                # Скруглённое фото через clip-область
+                c.saveState()
+                clip_path = c.beginPath()
+                clip_path.roundRect(px, py, photo_w, photo_h, 14)
+                c.clipPath(clip_path, stroke=0, fill=0)
+                c.drawImage(photo_stream, px, py, photo_w, photo_h, mask="auto")
+                c.restoreState()
+            finally:
+                try:
+                    os.unlink(photo_stream)
+                except OSError:
+                    pass
+            c.setStrokeColor(colors.HexColor(S.PHOTO_FRAME))
+            c.setLineWidth(1.1)
+            c.roundRect(px, py, photo_w, photo_h, 14, fill=0, stroke=1)
+        else:
+            # Плейсхолдер: мягкая плашка + монограмма в круге
+            c.setFillColor(colors.HexColor(S.PLACEHOLDER_BG))
+            c.roundRect(px, py, photo_w, photo_h, 14, fill=1, stroke=0)
+            cx, cy = px + photo_w / 2, py + photo_h / 2
+            dia = 3.2 * cm
+            c.setFillColor(colors.white)
+            c.setStrokeColor(colors.HexColor("#c9d1d8"))
+            c.setLineWidth(1.2)
+            c.circle(cx, cy, dia / 2, fill=1, stroke=1)
+            c.setFillColor(colors.HexColor(S.PLACEHOLDER_TEXT))
+            c.setFont("Arial-Bold", 30)
+            c.drawCentredString(cx, cy - 0.35 * cm, BadgeGenerator._initials(participant["name"]))
+            c.setStrokeColor(colors.HexColor(S.PHOTO_FRAME))
+            c.setLineWidth(1.1)
+            c.roundRect(px, py, photo_w, photo_h, 14, fill=0, stroke=1)
+
+        # ── 4. Имя участника (крупно, при необходимости — в две строки) ──
         name = str(participant["name"])
-        if len(name) > 24:
-            c.setFont("Arial-Bold", 11)
-        c.drawCentredString(x + bw / 2, y + bh - 2.1 * cm, name)
+        name_pt = 16
+        two_lines = False
+        if len(name) > 22:
+            name_pt = 13
+        if len(name) > 42:
+            name_pt = 11
+            two_lines = True
+        c.setFillColor(colors.HexColor(S.TEXT_MAIN))
+        c.setFont("Arial-Bold", name_pt)
+        if two_lines:
+            half = len(name) // 2
+            split = name.rfind(" ", 0, half)
+            if split <= 0:
+                split = name.find(" ", half)
+            if split > 0:
+                c.drawCentredString(x + bw / 2, y + 5.65 * cm, name[:split].strip())
+                c.drawCentredString(x + bw / 2, y + 4.95 * cm, name[split:].strip())
+            else:
+                c.drawCentredString(x + bw / 2, y + 4.95 * cm, name)
+        else:
+            c.drawCentredString(x + bw / 2, y + 5.35 * cm, name)
 
-        # Клуб
-        c.setFillColor(colors.HexColor("#555555"))
-        c.setFont("Arial", 8)
-        club = str(participant["club"]) if participant["club"] else "—"
-        c.drawCentredString(x + bw / 2, y + bh - 2.7 * cm, f"Клуб: {club}")
+        # ── 5. Клуб (скрывается полностью, если клуба нет) ──
+        club = next((p["club"] for p in person if p["club"]), "")
+        if club:
+            c.setFillColor(colors.HexColor(S.TEXT_DIM))
+            c.setFont("Arial", 9)
+            c.drawCentredString(x + bw / 2, y + 4.6 * cm, f"Клуб: {club}")
 
-        # Категория и вес
-        cat_name = categories_map.get(participant["category_id"], "—")
-        weight = participant["weight"] if participant["weight"] else "—"
-        hand = participant["hand"] if participant["hand"] else "Обе"
-        info_line = f"{cat_name}  |  {weight} кг  |  {hand}"
-        c.setFont("Arial", 7)
-        c.setFillColor(colors.HexColor("#336699"))
-        c.drawCentredString(x + bw / 2, y + bh - 3.2 * cm, info_line)
+        # ── 6. Таблица категорий Left/Right ──
+        cat_hands = OrderedDict()
+        for p in person:
+            cid = p["category_id"]
+            cat_hands.setdefault(cid, []).append(str(p["hand"] or ""))
+        rows = []
+        for cid, hands in cat_hands.items():
+            label = BadgeGenerator._category_label(categories_map.get(cid, ""), person[0]["age_category"])
+            hs = set(hands)
+            left = bool(hs & {"Обе", "Левая", "Both", "Left"})
+            right = bool(hs & {"Обе", "Правая", "Both", "Right"})
+            rows.append((label, left, right))
+        BadgeGenerator._draw_category_table(c, x, y, rows)
 
-        # Штрихкод
+        # ── 7. Нижняя плашка со штрихкодом ──
+        fb_bottom = y + 0.55 * cm
+        fb_top = y + 2.5 * cm
+        c.setFillColor(colors.HexColor(S.FOOTER_BG))
+        c.roundRect(x + 0.45 * cm, fb_bottom, bw - 0.9 * cm, fb_top - fb_bottom, 8, fill=1, stroke=0)
+        c.setStrokeColor(colors.HexColor(S.FOOTER_BORDER))
+        c.setLineWidth(0.8)
+        c.roundRect(x + 0.45 * cm, fb_bottom, bw - 0.9 * cm, fb_top - fb_bottom, 8, fill=0, stroke=1)
+
         barcode_value = get_barcode_value(participant["id"])
-        barcode = Code128(barcode_value, barHeight=1.0 * cm, barWidth=1.1)
+        barcode = Code128(barcode_value, barHeight=1.0 * cm, barWidth=1.15)
         barcode_width = barcode.width
         bx = x + (bw - barcode_width) / 2
-        by = y + 0.6 * cm
+        by = y + 1.15 * cm
+        # Code128 рисует штрихи текущим fill-цветом — явно ставим чёрный,
+        # иначе на светлой плашке штрихи сливаются с фоном.
+        c.setFillColor(colors.black)
         barcode.drawOn(c, bx, by)
 
-        # Значение штрихкода текстом
-        c.setFillColor(colors.HexColor("#333333"))
-        c.setFont("Arial", 7)
-        c.drawCentredString(x + bw / 2, y + 0.2 * cm, barcode_value)
+        # Плашка-подложка под ID-номером участника
+        c.setFillColor(colors.white)
+        txt_w = pdfmetrics.stringWidth(barcode_value, "Arial-Bold", 8)
+        pill_w = txt_w + 0.8 * cm
+        pill_h = 0.5 * cm
+        pill_x = x + (bw - pill_w) / 2
+        pill_y = y + 0.6 * cm
+        c.roundRect(pill_x, pill_y, pill_w, pill_h, 9, fill=1, stroke=0)
+        c.setStrokeColor(colors.HexColor(S.FOOTER_BORDER))
+        c.setLineWidth(0.6)
+        c.roundRect(pill_x, pill_y, pill_w, pill_h, 9, fill=0, stroke=1)
+        c.setFillColor(colors.HexColor("#222222"))
+        c.setFont("Arial-Bold", 8)
+        c.drawCentredString(x + bw / 2, y + 0.8 * cm, barcode_value)
 
-        # Линия-разделитель (для вырезания)
+        # ── 8. Пунктирные линии для вырезания ──
         c.setStrokeColor(colors.HexColor("#cccccc"))
         c.setLineWidth(0.3)
         c.setDash(3, 3)
@@ -6190,6 +6486,11 @@ class ClubsWindow(ctk.CTkToplevel):
                 if a["club_id"] == club_id:
                     continue
                 label = f"{a['last_name']} {a['first_name']}"
+                try:
+                    age = datetime.now().year - extract_birth_year(a["birth_date"])
+                    label += f"  ·  {age} лет"
+                except Exception:
+                    pass
                 if a["club"]:
                     label += f"  ·  {a['club']}"
 
@@ -6626,10 +6927,10 @@ class App(ctk.CTk):
             return
 
         try:
-            BadgeGenerator.generate(filepath, tournament, participants, categories_map)
+            count = BadgeGenerator.generate(filepath, tournament, participants, categories_map)
             messagebox.showinfo(
                 "Готово",
-                f"Бейджики сохранены ({len(participants)} шт.):\n{filepath}\n\n"
+                f"Бейджики сохранены ({count} шт.):\n{filepath}\n\n"
                 f"Формат штрихкода: {BARCODE_PREFIX}XXXX\n"
                 f"Используйте USB-сканер для считывания."
             )
@@ -6909,7 +7210,7 @@ class App(ctk.CTk):
         def choose_athlete():
             picker = tk.Toplevel(dlg)
             picker.title("Выбрать спортсмена")
-            picker.geometry("420x480")
+            picker.geometry("470x580")
             picker.transient(dlg)
             picker.grab_set()
 
@@ -6940,8 +7241,25 @@ class App(ctk.CTk):
                         update_categories(a)
                         validate_form()
                         picker.destroy()
+                    # Дата рождения — чтобы различать однофамильцев
+                    # (5 Петров / 2 Даулета): ДД.ММ.ГГГГ и пол.
+                    bd = (a["birth_date"] or "").strip()
+                    bd_txt = ""
+                    if bd:
+                        for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
+                            try:
+                                bd_txt = datetime.strptime(bd[:10], fmt).strftime("%d.%m.%Y")
+                                break
+                            except ValueError:
+                                continue
+                        if not bd_txt:
+                            bd_txt = bd
+                    gender_txt = "м" if a["gender"] == "M" else ("ж" if a["gender"] == "F" else "")
+                    sub = f" · {bd_txt}" if bd_txt else ""
+                    if gender_txt:
+                        sub += f" · {gender_txt}"
                     ctk.CTkButton(results_frame,
-                                text=f"{a['first_name']} {a['last_name']} ({a['club'] or '—'})",
+                                text=f"{a['first_name']} {a['last_name']} ({a['club'] or '—'}){sub}",
                                 anchor="w", fg_color="#1a1f28", hover_color="#2a2f38",
                                 command=pick).pack(fill="x", padx=5, pady=3)
 

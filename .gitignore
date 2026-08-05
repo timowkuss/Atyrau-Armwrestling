@@ -19,6 +19,7 @@ dist/
 
 # Database
 *.db
+*.db.bak
 *.sqlite
 
 sync_config.json

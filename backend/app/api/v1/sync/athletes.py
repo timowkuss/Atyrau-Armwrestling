@@ -18,6 +18,7 @@ from app.schemas.sync import (
     AthleteSyncCreate,
     AthleteSyncUpdate,
 )
+from app.api.v1.sync._common import normalize_full_name
 from app.services.club_rating import apply_athlete_removed, mark_joined
 from app.services.cloudinary_photos import delete_cloudinary_photo
 from datetime import date, datetime, timezone
@@ -85,20 +86,23 @@ def _find_existing_athlete(db: Session, full_name: str, birth_date: date | None)
     улететь на сервер второй раз под новым id. Здесь — вторая линия
     защиты уже на центральной базе.
 
-    Сопоставляем по ФИО (без учёта регистра) + дате рождения — этого
-    достаточно, чтобы не путать полных тёзок, и в то же время не
-    сработает ложно на "Иванов Иван" без даты рождения. Если дата
-    рождения не пришла — не пытаемся сопоставлять по одному имени,
-    слишком велик риск склеить разных людей."""
+    Сопоставляем по нормализованному ФИО (без учёта регистра и порядка
+    слов) + дате рождения — этого достаточно, чтобы не путать полных
+    тёзок, и в то же время не сработает ложно на "Иванов Иван" без даты
+    рождения. Если дата рождения не пришла — не пытаемся сопоставлять по
+    одному имени, слишком велик риск склеить разных людей."""
     if not birth_date:
         return None
-    name = full_name.strip()
-    if not name:
+    key = normalize_full_name(full_name)
+    if not key:
         return None
-    return (
-        db.query(Athlete)
-        .filter(Athlete.full_name.ilike(name), Athlete.birth_date == birth_date)
-        .first()
+    return next(
+        (
+            a
+            for a in db.query(Athlete).filter(Athlete.birth_date == birth_date).all()
+            if normalize_full_name(a.full_name) == key
+        ),
+        None,
     )
 
 

@@ -340,8 +340,14 @@ class PullSyncHiddenTest(unittest.TestCase):
         self.mgr = PullSyncManager(
             api_client=self.api, state=self.state, db_path=self.tmp.tournament_path)
         self.conn = self.db.conn
+        # add_coach/add_athlete в этих тестах — это SYNCED-обёртки: без
+        # заглушки они дёрнули бы настоящий sync_manager (прод API + настоящий
+        # sync_state.db) и загрязнили бы прод-очередь 401-ретраями. Отрезаем.
+        self._orig_sync_manager = app.sync_manager
+        app.sync_manager = None
 
     def tearDown(self):
+        app.sync_manager = self._orig_sync_manager
         self.state.close()
         self.conn.close()
         self.tmp.cleanup()

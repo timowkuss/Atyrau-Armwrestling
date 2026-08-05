@@ -16,6 +16,7 @@ from app.schemas.sync import (
     CoachSyncCreate,
     CoachSyncUpdate,
 )
+from app.api.v1.sync._common import normalize_full_name
 from app.services.cloudinary_photos import delete_cloudinary_photo
 
 router = APIRouter(prefix="/coaches", tags=["sync:coaches"])
@@ -72,10 +73,22 @@ def _parse_birth_date(value: str | None) -> date | None:
 def _find_existing_coach(db: Session, full_name: str) -> Coach | None:
     """Серверная защита от дублей — см. аналогичную функцию в
     sync/athletes.py. У тренера нет даты рождения для уточнения, поэтому
-    сопоставляем строго по полному ФИО (без учёта регистра): реже
-    встречаются полные тёзки среди тренеров, чем ложные пропуски дублей
-    при десктоп-офлайн-очереди/повторной синхронизации без id_map."""
-    return db.query(Coach).filter(Coach.full_name.ilike(full_name.strip())).first()
+    сопоставляем строго по полному ФИО: реже встречаются полные тёзки среди
+    тренеров, чем ложные пропуски дублей при десктоп-офлайн-очереди/повторной
+    синхронизации без id_map. ФИО нормализуем (регистр + порядок слов), чтобы
+    «Иванов Иван» и «Иван Иванов» считались одним тренером — раньше они
+    уезжали на сервер второй раз под новым id."""
+    key = normalize_full_name(full_name)
+    if not key:
+        return None
+    return next(
+        (
+            c
+            for c in db.query(Coach).all()
+            if normalize_full_name(c.full_name) == key
+        ),
+        None,
+    )
 
 
 @router.get("/changes", response_model=CoachChangesOut)

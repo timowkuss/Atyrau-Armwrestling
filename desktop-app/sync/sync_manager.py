@@ -281,7 +281,11 @@ class SyncManager:
                 iin=iin or None,
                 phone=phone or None,
             )
-            self.state.map_set("athlete", aid, remote["id"])
+            if not self.state.map_set("athlete", aid, remote["id"]):
+                print(f"[sync] WARNING athlete {aid} ({first_name} {last_name}) "
+                      f"NOT bound to remote {remote['id']}: that remote already "
+                      "belongs to another local card — looks like a duplicate "
+                      "athlete in the registry")
             return remote["id"]
 
         return self._try("create_athlete", payload, go)
@@ -341,7 +345,10 @@ class SyncManager:
                 qualification=qualification or None, city_name=city or None,
                 phone=phone or None,
             )
-            self.state.map_set("coach", cid, remote["id"])
+            if not self.state.map_set("coach", cid, remote["id"]):
+                print(f"[sync] WARNING coach {cid} ({full_name}) NOT bound to "
+                      f"remote {remote['id']}: that remote already belongs to "
+                      "another local card — looks like a duplicate")
             return remote["id"]
 
         return self._try("create_coach", payload, go)
@@ -404,7 +411,10 @@ class SyncManager:
                 founded_date=founded_date, logo_path=logo_path or None,
                 phone=phone or None,
             )
-            self.state.map_set("club", cid, remote["id"])
+            if not self.state.map_set("club", cid, remote["id"]):
+                print(f"[sync] WARNING club {cid} ({name}) NOT bound to remote "
+                      f"{remote['id']}: that remote already belongs to another "
+                      "local card — looks like a duplicate")
             return remote["id"]
 
         return self._try("create_club", payload, go)

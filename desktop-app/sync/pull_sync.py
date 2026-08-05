@@ -83,6 +83,14 @@ def _to_desktop_date(value: str | None) -> str:
         return "01.01.1970"
 
 
+def _normalize_name_key(name: str | None) -> str:
+    """Канонический ключ ФИО/названия для сравнения: регистр вниз +
+    слова по алфавиту. Зеркально бэкенду (sync/_common.py:normalize_full_name),
+    чтобы «Пётр Петров» и «Петров Пётр» на десктопе тоже считались одной
+    карточкой — иначе pull с сайта плодил бы локальные дубли."""
+    return " ".join(sorted((name or "").strip().lower().split()))
+
+
 def _split_full_name(full_name: str) -> tuple[str, str]:
     """Обратная операция к f"{first_name} {last_name}" (см.
     sync_manager.on_athlete_created). Если имя без пробела — всё целиком
@@ -242,13 +250,18 @@ class PullSyncManager:
                                     founded_year, logo_path, phone, remote_id=remote_id)
 
         # Клуб мог уже существовать локально под этим же именем (создан в
-        # десктопе и ещё не успел уйти на сервер) — сопоставляем по имени,
-        # чтобы не наплодить дублей.
-        row = conn.execute(
-            "SELECT id FROM clubs WHERE name = ? COLLATE NOCASE", (name,)
-        ).fetchone()
-        if row is not None:
-            return self._apply_club(conn, row[0], name, city, address,
+        # десктопе и ещё не успел уйти на сервер) — сопоставляем по имени
+        # (с нормализацией порядка слов, зеркально бэкенду), чтобы не
+        # наплодить дублей.
+        key = _normalize_name_key(name)
+        local_id = None
+        if key:
+            for r in conn.execute("SELECT id, name FROM clubs").fetchall():
+                if _normalize_name_key(r["name"]) == key:
+                    local_id = r["id"]
+                    break
+        if local_id is not None:
+            return self._apply_club(conn, local_id, name, city, address,
                                     founded_year, logo_path, phone, remote_id=remote_id)
 
         cur = conn.execute(
@@ -375,12 +388,19 @@ class PullSyncManager:
         # Тренер мог уже существовать локально под этим же именем (создан
         # в десктопе и ещё не успел уйти на сервер, либо был создан здесь
         # же через athlete.coach_name раньше, чем добрался до него этот
-        # опрос) — сопоставляем по имени, чтобы не наплодить дублей.
-        row = conn.execute(
-            "SELECT id FROM coaches WHERE full_name = ? COLLATE NOCASE", (full_name,)
-        ).fetchone()
-        if row is not None:
-            local_id = row[0]
+        # опрос) — сопоставляем по имени (с нормализацией порядка слов,
+        # зеркально бэкенду), чтобы не наплодить дублей.
+        key = _normalize_name_key(full_name)
+        local_id = None
+        if key:
+            row = conn.execute(
+                "SELECT id, full_name FROM coaches"
+            ).fetchall()
+            for r in row:
+                if _normalize_name_key(r["full_name"]) == key:
+                    local_id = r["id"]
+                    break
+        if local_id is not None:
             conn.execute(
                 "UPDATE coaches SET full_name=?, club=?, photo_path=?, bio=?, "
                 "first_name=?, last_name=?, birth_date=?, iin=?, qualification=?, city=?, "
@@ -452,11 +472,11 @@ class PullSyncManager:
         name = (coach_name or "").strip()
         if not name:
             return None
-        row = conn.execute(
-            "SELECT id FROM coaches WHERE full_name = ? COLLATE NOCASE", (name,)
-        ).fetchone()
-        if row is not None:
-            return row[0]
+        key = _normalize_name_key(name)
+        if key:
+            for r in conn.execute("SELECT id, full_name FROM coaches").fetchall():
+                if _normalize_name_key(r["full_name"]) == key:
+                    return r["id"]
         cur = conn.execute("INSERT INTO coaches (full_name) VALUES (?)", (name,))
         return cur.lastrowid
 

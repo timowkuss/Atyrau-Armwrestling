@@ -35,7 +35,9 @@ class SyncState:
             str(db_path or config.SYNC_STATE_DB_PATH), check_same_thread=False
         )
         self.conn.row_factory = sqlite3.Row
-        self._lock = threading.Lock()
+        # RLock, а не Lock: _check_id_map_integrity вызывается из _create_tables,
+        # который уже держит этот же мьютекс — вложенный захват обязан сработать.
+        self._lock = threading.RLock()
         self._create_tables()
 
     def _create_tables(self):
@@ -91,8 +93,37 @@ class SyncState:
                     ddl = "REAL" if col == "weight_tolerance" else "TEXT"
                     self.conn.execute(f"ALTER TABLE competition_source ADD COLUMN {col} {ddl}")
             self.conn.commit()
+            self._check_id_map_integrity()
 
     # ── карта id ──────────────────────────────────────────────
+    # Сущности, для которых привязка local -> remote строго один-к-одному.
+    # (athlete_of_participant — наоборот, многие-к-одному: один спортсмен
+    # может участвовать в нескольких турнирах, поэтому его тут НЕТ.)
+    _ONE_TO_ONE = ("athlete", "coach", "club", "competition", "category", "participant", "match")
+
+    def _check_id_map_integrity(self):
+        """Находит привязки многие-к-одному (несколько локальных карточек
+        указывают на один remote) для сущностей, где должно быть 1:1. Раньше
+        такое молча накапливалось и ломало обратную синхронизацию: remote
+        сопоставлялся с первой локальной карточкой, а остальные не получали
+        обновлений (пример — три локальных спортсмена, «смотревшие» на одну
+        скрытую на сайте карточку). Запускается при старте, только логирует."""
+        with self._lock:
+            rows = self.conn.execute(
+                f"""
+                SELECT entity_type, remote_id, COUNT(*) AS c
+                FROM id_map
+                WHERE entity_type IN ({",".join("?" * len(self._ONE_TO_ONE))})
+                GROUP BY entity_type, remote_id
+                HAVING COUNT(*) > 1
+                """,
+                self._ONE_TO_ONE,
+            ).fetchall()
+        for r in rows:
+            print(f"[sync] WARNING id_map: {r['entity_type']} remote={r['remote_id']} "
+                  f"bound to {r['c']} local rows — many-to-one; "
+                  "this breaks reverse sync")
+
     def map_get(self, entity_type: str, local_id: int) -> int | None:
         with self._lock:
             row = self.conn.execute(
@@ -113,13 +144,34 @@ class SyncState:
             ).fetchone()
             return row["local_id"] if row else None
 
-    def map_set(self, entity_type: str, local_id: int, remote_id: int) -> None:
+    def map_set(self, entity_type: str, local_id: int, remote_id: int) -> bool:
+        """Записывает привязку local -> remote; True если записана.
+
+        Для сущностей с жёстким 1:1 (спортсмен/тренер/клуб/турнир/категория/
+        участник/матч) отказывается создавать многие-к-одному: если remote_id
+        уже привязан к ДРУГОЙ локальной карточке, это сигнал о повреждении
+        карты (несколько локальных карточек на одного центрального). Раньше
+        такой маппинг молча записывался (INSERT OR REPLACE по primary key
+        (entity_type, local_id) никак не мешал дублировать remote_id) и ломал
+        обратную синхронизацию. Теперь: печатаем предупреждение и НЕ пишем.
+        """
         with self._lock:
+            if entity_type in self._ONE_TO_ONE:
+                other = self.conn.execute(
+                    "SELECT local_id FROM id_map WHERE entity_type=? AND remote_id=? AND local_id<>?",
+                    (entity_type, remote_id, local_id),
+                ).fetchone()
+                if other is not None:
+                    print(f"[sync] WARNING map_set {entity_type}: remote {remote_id} already bound to "
+                          f"local {other['local_id']}, not binding to {local_id} "
+                          "(guard against many-to-one)")
+                    return False
             self.conn.execute(
                 "INSERT OR REPLACE INTO id_map (entity_type, local_id, remote_id) VALUES (?,?,?)",
                 (entity_type, local_id, remote_id),
             )
             self.conn.commit()
+            return True
 
     def map_delete(self, entity_type: str, local_id: int) -> None:
         """Удаляет связку из id_map (например, если матч был удалён на сервере)."""
