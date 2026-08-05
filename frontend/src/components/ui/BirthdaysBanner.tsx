@@ -59,8 +59,8 @@ export function BirthdaysBanner() {
   ].filter((g) => g.items.length > 0)
 
   return (
-    <section className="relative mx-auto max-w-6xl px-5 pt-5 sm:pt-7" aria-label="Дни рождения">
-      <div className="relative overflow-hidden rounded-2xl border border-steel-dim/20 bg-ink/40 px-4 py-4 backdrop-blur-xl sm:px-6 sm:py-5">
+    <section className="relative z-10 mx-auto max-w-6xl px-5 pt-5 sm:pt-7" aria-label="Дни рождения">
+      <div className="relative overflow-hidden rounded-2xl border border-steel-dim/15 bg-ink/25 px-4 py-4 backdrop-blur-xl sm:px-6 sm:py-5">
         {/* Мягкие внутренние свечения — латунь и каспийская вода */}
         <div
           aria-hidden="true"

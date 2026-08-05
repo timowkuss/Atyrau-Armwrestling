@@ -15,13 +15,12 @@ export function Home() {
 
   return (
     <div>
-      {/* Уведомления — под шапкой, над hero */}
-      <BirthdaysBanner />
-
       {/* Hero — тезис: сила хвата спортсмена читается так же однозначно,
           как давление на манометре буровой. */}
       <section className="hero-scene overflow-hidden border-b border-steel-dim/30">
-        <div className="relative z-10 mx-auto grid max-w-6xl gap-10 px-5 pb-16 pt-10 sm:pb-24 sm:pt-14 lg:grid-cols-[1.3fr_1fr] lg:items-center">
+        {/* Уведомления — на градиентном фоне hero */}
+        <BirthdaysBanner />
+        <div className="relative z-10 mx-auto grid max-w-6xl gap-10 px-5 pb-16 pt-8 sm:pb-24 sm:pt-12 lg:grid-cols-[1.3fr_1fr] lg:items-center">
           <div>
             <p className="text-eyebrow text-rust">Соревнования | Статистика | новости</p>
             <h1 className="mt-4 font-display text-4xl font-extrabold leading-[1.05] text-bone sm:text-5xl">
