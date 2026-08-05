@@ -1,4 +1,5 @@
 import type {
+  AthleteBirthdayItem,
   AthleteCompetitionHistoryItem,
   AthleteDetail,
   AthleteListItem,
@@ -76,6 +77,7 @@ export const api = {
   athletes: {
     list: (params?: AthleteListParams) => request<Page<AthleteListItem>>('/public/athletes', params),
     get: (id: number) => request<AthleteDetail>(`/public/athletes/${id}`),
+    birthdays: () => request<AthleteBirthdayItem[]>('/public/athletes/birthdays'),
     history: (id: number) => request<AthleteCompetitionHistoryItem[]>(`/public/athletes/${id}/history`),
     matches: (id: number) => request<AthleteMatchHistoryItem[]>(`/public/athletes/${id}/matches`),
   },

@@ -27,6 +27,19 @@ export interface AthleteListItem {
   elo_combined: number
 }
 
+/** Именинник для блока «Дни рождения» на главной (GET /public/athletes/birthdays). */
+export interface AthleteBirthdayItem {
+  id: number
+  full_name: string
+  photo_path: string | null
+  gender: Gender | null
+  birth_date: string
+  /** 0 — день рождения сегодня, 1 — завтра. */
+  day_offset: number
+  /** Возраст, который спортсмену исполняется в этот день. */
+  turns_age: number
+}
+
 export interface AthleteStatistics {
   total_competitions: number
   total_wins: number

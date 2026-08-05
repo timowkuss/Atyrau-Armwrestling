@@ -4,6 +4,7 @@ import { useCompetitions } from '@/features/competitions/useCompetitions'
 import { useAthletes } from '@/features/athletes/useAthletes'
 import { CompetitionCard } from '@/components/ui/CompetitionCard'
 import { AthleteCard } from '@/components/ui/AthleteCard'
+import { BirthdaysBanner } from '@/components/ui/BirthdaysBanner'
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/States'
 
 const ArmTable3D = lazy(() => import('@/components/model/ArmTable3D').then((m) => ({ default: m.ArmTable3D })))
@@ -72,6 +73,8 @@ export function Home() {
           </div>
         </div>
       </section>
+
+      <BirthdaysBanner />
 
       {/* Ближайшие/последние турниры */}
       <section className="mx-auto max-w-6xl px-5 py-14">

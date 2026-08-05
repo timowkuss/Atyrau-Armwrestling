@@ -23,6 +23,22 @@ class AthleteAdminListOut(AthleteListOut):
     phone: str | None = None
 
 
+class AthleteBirthdayOut(BaseModel):
+    """Именинник для блока «Дни рождения» на главной странице.
+
+    day_offset: 0 — день рождения сегодня, 1 — завтра.
+    turns_age: возраст, который спортсмену исполняется в этот день.
+    """
+
+    id: int
+    full_name: str
+    photo_path: str | None
+    gender: str | None
+    birth_date: date
+    day_offset: int
+    turns_age: int
+
+
 class AthleteStatisticsOut(BaseModel):
     total_competitions: int
     total_wins: int

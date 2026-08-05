@@ -18,6 +18,16 @@ export function useAthlete(id: number) {
   })
 }
 
+export function useAthleteBirthdays() {
+  return useQuery({
+    queryKey: ['athletes', 'birthdays'],
+    queryFn: () => api.athletes.birthdays(),
+    // Именинники обновляются не чаще раза в день — долгий staleTime
+    // спасает главную от лишних запросов при переключении вкладок.
+    staleTime: 1000 * 60 * 60 * 6,
+  })
+}
+
 export function useAthleteHistory(id: number) {
   return useQuery({
     queryKey: ['athlete', id, 'history'],

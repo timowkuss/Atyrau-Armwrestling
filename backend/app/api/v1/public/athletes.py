@@ -1,5 +1,7 @@
+from datetime import date, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, or_
+from sqlalchemy import and_, extract, func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models.athletes import Athlete
@@ -13,6 +15,7 @@ from app.db.models.results import Result
 from app.db.models.statistics import AthleteStatistic
 from app.db.session import get_db
 from app.schemas.athletes import (
+    AthleteBirthdayOut,
     AthleteCompetitionHistoryItem,
     AthleteDetailOut,
     AthleteListOut,
@@ -106,6 +109,60 @@ def list_athletes(
         for athlete, club_name, coach_name, city_name, elo_combined in rows
     ]
     return Page(items=items, total=total, page=page, page_size=page_size)
+
+
+@router.get("/birthdays", response_model=list[AthleteBirthdayOut])
+def upcoming_birthdays(db: Session = Depends(get_db)):
+    """Именинники на сегодня и завтра для блока на главной странице.
+
+    day_offset: 0 — день рождения сегодня, 1 — завтра. Выборка идёт по
+    месяцу и дню рождения (год не важен), поэтому 29 февраля в невисокосный
+    год не находится ни одним из смещений (в такой день праздника нет).
+    """
+    today = date.today()
+    tomorrow = today + timedelta(days=1)
+
+    conditions = []
+    for target, offset in ((today, 0), (tomorrow, 1)):
+        conditions.append(
+            and_(
+                extract("month", Athlete.birth_date) == target.month,
+                extract("day", Athlete.birth_date) == target.day,
+            )
+        )
+
+    rows = (
+        db.query(Athlete)
+        .filter(
+            Athlete.is_hidden.is_(False),
+            Athlete.birth_date.isnot(None),
+            or_(*conditions),
+        )
+        .order_by(Athlete.full_name)
+        .all()
+    )
+
+    offset_by_key = {
+        (target.month, target.day): offset for target, offset in ((today, 0), (tomorrow, 1))
+    }
+
+    items = []
+    for athlete in rows:
+        b = athlete.birth_date
+        offset = offset_by_key[(b.month, b.day)]
+        target_year = today.year if offset == 0 else tomorrow.year
+        items.append(
+            AthleteBirthdayOut(
+                id=athlete.id,
+                full_name=athlete.full_name,
+                photo_path=athlete.photo_path,
+                gender=athlete.gender,
+                birth_date=b,
+                day_offset=offset,
+                turns_age=max(0, target_year - b.year),
+            )
+        )
+    return items
 
 
 @router.get("/{athlete_id}", response_model=AthleteDetailOut)
