@@ -1469,10 +1469,10 @@ class BadgeGenerator:
     BADGE_H = 8.75 * cm
     COLS = 2
     ROWS = 3
-    MARGIN_LEFT = 1.2 * cm
-    MARGIN_TOP = 1.2 * cm
-    GAP_X = 0.4 * cm
-    GAP_Y = 0.5 * cm
+    MARGIN_LEFT = 1.3 * cm
+    MARGIN_TOP = 1.5 * cm
+    GAP_X = 0.2 * cm
+    GAP_Y = 0.2 * cm
 
     # Логотип города Атырау — всегда на бейджике (копия лежит рядом со скриптом)
     LOGO_PATH = str(Path(__file__).resolve().parent / "assets" / "logo-atyrau-city.png")
@@ -1699,7 +1699,7 @@ class BadgeGenerator:
         c.roundRect(x, y, bw, bh, 10, fill=1, stroke=1)
 
         # ── 2. Шапка турнира + логотип города ──
-        header_h = 1.5 * cm
+        header_h = 1.6 * cm
         c.setFillColor(colors.HexColor(S.HEADER_COLOR))
         c.roundRect(x, y + bh - header_h, bw, header_h, 10, fill=1, stroke=0)
         # Закрываем нижние скругления шапки
@@ -1711,9 +1711,9 @@ class BadgeGenerator:
         logo_drawn = False
         if os.path.exists(S.LOGO_PATH):
             try:
-                logo_w = 1.05 * cm
-                logo_h = 1.05 * cm
-                c.drawImage(S.LOGO_PATH, x + 0.3 * cm, y + bh - 0.32 * cm - logo_h,
+                logo_w = 1.1 * cm
+                logo_h = 1.1 * cm
+                c.drawImage(S.LOGO_PATH, x + 0.3 * cm, y + bh - 0.3 * cm - logo_h,
                             logo_w, logo_h, mask="auto")
                 logo_drawn = True
             except Exception as e:
@@ -1723,20 +1723,20 @@ class BadgeGenerator:
         t_name = str(tournament["name"])[:44] if tournament else "Турнир"
         name_cx = x + bw / 2 + (0.3 * cm if logo_drawn else 0)
         c.setFillColor(colors.white)
-        c.setFont("Arial-Bold", 8.5)
+        c.setFont("Arial-Bold", 10)
         if len(t_name) > 40:
-            c.setFont("Arial-Bold", 7.5)
-        c.drawCentredString(name_cx, y + bh - 1.02 * cm, t_name)
+            c.setFont("Arial-Bold", 8.5)
+        c.drawCentredString(name_cx, y + bh - 1.05 * cm, t_name)
 
         t_date = str(tournament["date"]) if tournament else ""
         if t_date:
-            c.setFont("Arial", 6.5)
+            c.setFont("Arial", 8)
             c.setFillColor(colors.HexColor("#b7c2c7"))
-            c.drawCentredString(name_cx, y + bh - 1.36 * cm, t_date)
+            c.drawCentredString(name_cx, y + bh - 1.42 * cm, t_date)
 
         # ── 3. Зона имени (на всю ширину, под шапкой) ──
         name = str(participant["name"])
-        body_top = y + bh - 2.85 * cm          # верх зоны фото/таблицы
+        body_top = y + bh - 3.25 * cm          # верх зоны фото/таблицы
         name_pt = 13
         two_lines = False
         if len(name) > 28:
@@ -1752,19 +1752,19 @@ class BadgeGenerator:
             if split <= 0:
                 split = name.find(" ", half)
             if split > 0:
-                c.drawCentredString(x + bw / 2, y + bh - 1.70 * cm, name[:split].strip())
-                c.drawCentredString(x + bw / 2, y + bh - 2.35 * cm, name[split:].strip())
+                c.drawCentredString(x + bw / 2, y + bh - 2.05 * cm, name[:split].strip())
+                c.drawCentredString(x + bw / 2, y + bh - 2.70 * cm, name[split:].strip())
             else:
-                c.drawCentredString(x + bw / 2, y + bh - 2.00 * cm, name)
+                c.drawCentredString(x + bw / 2, y + bh - 2.30 * cm, name)
         else:
-            c.drawCentredString(x + bw / 2, y + bh - 1.95 * cm, name)
+            c.drawCentredString(x + bw / 2, y + bh - 2.30 * cm, name)
 
         # Клуб (скрывается полностью, если клуба нет)
         club = next((p["club"] for p in person if p["club"]), "")
         if club:
             c.setFillColor(colors.HexColor(S.TEXT_DIM))
             c.setFont("Arial", 8)
-            c.drawCentredString(x + bw / 2, y + bh - 2.58 * cm, f"Клуб: {club}")
+            c.drawCentredString(x + bw / 2, y + bh - 3.05 * cm, f"Клуб: {club}")
 
         # ── 4. Фото спортсмена (слева) ──
         fb_top = y + 2.3 * cm                   # верх нижней плашки
@@ -1796,7 +1796,7 @@ class BadgeGenerator:
             c.setFillColor(colors.HexColor(S.PLACEHOLDER_BG))
             c.roundRect(px, py, photo_w, photo_h, 12, fill=1, stroke=0)
             cx, cy = px + photo_w / 2, py + photo_h / 2
-            dia = 2.7 * cm
+            dia = 2.4 * cm
             c.setFillColor(colors.white)
             c.setStrokeColor(colors.HexColor("#c9d1d8"))
             c.setLineWidth(1.2)
@@ -1862,10 +1862,10 @@ class BadgeGenerator:
         c.setStrokeColor(colors.HexColor("#cccccc"))
         c.setLineWidth(0.3)
         c.setDash(3, 3)
-        c.line(x - 0.2 * cm, y, x + bw + 0.2 * cm, y)
-        c.line(x - 0.2 * cm, y + bh, x + bw + 0.2 * cm, y + bh)
-        c.line(x, y - 0.2 * cm, x, y + bh + 0.2 * cm)
-        c.line(x + bw, y - 0.2 * cm, x + bw, y + bh + 0.2 * cm)
+        c.line(x - 0.1 * cm, y, x + bw + 0.1 * cm, y)
+        c.line(x - 0.1 * cm, y + bh, x + bw + 0.1 * cm, y + bh)
+        c.line(x, y - 0.1 * cm, x, y + bh + 0.1 * cm)
+        c.line(x + bw, y - 0.1 * cm, x + bw, y + bh + 0.1 * cm)
         c.setDash()
 
 
