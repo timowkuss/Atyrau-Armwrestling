@@ -147,17 +147,20 @@ def option_menu(parent, **kw):
     return OptionMenu(parent, **kw)
 
 
-class _DropdownToplevel(ctk.CTkToplevel):
-    """Выпадающий список в отдельном окне поверх родителя.
+class _DropdownFrame(ctk.CTkFrame):
+    """Выпадающий список, живущий ВНУТРИ того же окна, что и OptionMenu.
 
-    CustomTkinter 6.0.0 рисует dropdown через нативный tkinter.Menu,
-    который на Windows рендерится системой и игнорирует кастомные цвета,
-    поэтому список «сливался» с фоном. Здесь список рисуется сам, поэтому
-    цвета и подсветка выбранного пункта контролируются полностью."""
+    Раньше использовался отдельный CTkToplevel, для которого приходилось
+    перехватывать grab_set модального диалога и вешать глобальный bind_all
+    («чтобы клики доходили»). На Windows это ломало повторное открытие и
+    могло подвесить всё окно. Здесь список — обычный дочерний виджет:
+    grab диалога сам пропускает клики в дочерние виджеты, а закрытие по
+    клику мимо ловится bind'ом на верхнем окне. Никаких grab-трюков."""
 
-    def __init__(self, master, values, command, fg_color, hover_color,
+    def __init__(self, parent, values, command, fg_color, hover_color,
                  text_color, font):
-        super().__init__(master, fg_color=fg_color)
+        super().__init__(parent, fg_color=fg_color, corner_radius=8,
+                         border_width=1, border_color="#3d444d")
         self._fg_color = fg_color
         self._hover_color = hover_color
         self._text_color = text_color
@@ -167,18 +170,10 @@ class _DropdownToplevel(ctk.CTkToplevel):
         self._current = None
         self._buttons = []
 
-        self.withdraw()
-        self.overrideredirect(True)
-        self.attributes("-topmost", True)
-        self.bind("<Escape>", lambda e: self.close())
-        self._global_bind = None
-
-        self._frame = ctk.CTkFrame(self, fg_color=fg_color, corner_radius=8,
-                                   border_width=1, border_color="#3d444d")
-        self._frame.pack(fill="both", expand=True)
-        self._prev_grab = None
+        self._bind_id = None
         self._bind_pending = None
         self._rebuild()
+        self.place_forget()
 
     def _rebuild(self):
         for b in self._buttons:
@@ -187,7 +182,7 @@ class _DropdownToplevel(ctk.CTkToplevel):
         for value in self._values:
             selected = (value == self._current)
             btn = ctk.CTkButton(
-                self._frame,
+                self,
                 text=("✓ " if selected else "  ") + value,
                 fg_color="transparent",
                 hover_color=self._hover_color,
@@ -200,7 +195,7 @@ class _DropdownToplevel(ctk.CTkToplevel):
             btn.pack(fill="x", padx=4, pady=2)
             self._buttons.append(btn)
 
-    def open(self, x, y, current=None, values=None):
+    def open(self, x_root, y_root, current=None, values=None):
         if values is not None:
             self._values = list(values)
         self._current = current
@@ -208,107 +203,66 @@ class _DropdownToplevel(ctk.CTkToplevel):
         self.update_idletasks()
         width = max((b.winfo_reqwidth() for b in self._buttons), default=140) + 12
         height = len(self._buttons) * 36 + 8
-        self.geometry(f"{width}x{height}+{int(x)}+{int(y)}")
-        self.deiconify()
-        self.lift()
-        self.focus_force()
-        # Если диалог модальный (grab_set), перехватываем grab на время показа
-        # списка, иначе события мыши до него не доходят и список не открывается.
-        self._grab_for_menu()
-        # bind_all регистрируем через after(): клик, который ОТКРЫЛ список,
-        # должен пройти мимо обработчика, иначе он сразу же закроет dropdown.
-        if self._global_bind is None and self._bind_pending is None:
-            self._bind_pending = self.after(10, self._bind_global_click)
+        self.configure(width=width, height=height)
+        self.update_idletasks()
+        toplevel = self.winfo_toplevel()
+        # пересчитываем экранные координаты в координаты верхнего окна
+        x = x_root - toplevel.winfo_rootx()
+        y = y_root - toplevel.winfo_rooty()
+        # если снизу не влезает — показываем список выше виджета
+        avail_h = toplevel.winfo_height()
+        if y + height > avail_h and y - height > 0:
+            y -= height + 8
+        self.place(x=int(x), y=int(y))
+        self.tkraise()
+        # закрытие по клику мимо ловим bind'ом на верхнем окне; привязку
+        # регистрируем через after(), чтобы клик, который ОТКРЫЛ список,
+        # не закрыл его тут же.
+        if self._bind_id is None and self._bind_pending is None:
+            self._bind_pending = self.after(10, self._bind_outside_click)
 
-    def _bind_global_click(self):
+    def _bind_outside_click(self):
         self._bind_pending = None
         try:
-            if not self.winfo_exists():
-                return
+            toplevel = self.winfo_toplevel()
+            self._bind_id = toplevel.bind("<Button-1>", self._on_outside_click,
+                                          add="+")
         except Exception:
-            return
-        self._global_bind = self.bind_all("<Button-1>", self._on_global_click, add="+")
+            self._bind_id = None
 
-    def _grab_for_menu(self):
+    def _on_outside_click(self, event):
         try:
-            current = self.master.grab_current()
-        except Exception:
-            current = None
-        self._prev_grab = current
-        if current is not None:
-            try:
-                self.grab_set()
-            except Exception:
-                self._prev_grab = None
-
-    def _restore_grab(self):
-        prev, self._prev_grab = self._prev_grab, None
-        if prev is not None:
-            try:
-                if prev.winfo_exists():
-                    prev.grab_set()
-                return
-            except Exception:
-                pass
-        try:
-            self.grab_release()
-        except Exception:
-            pass
-
-    def close(self):
-        try:
-            if self._bind_pending is not None:
-                try:
-                    self.after_cancel(self._bind_pending)
-                except Exception:
-                    pass
-                self._bind_pending = None
-            if not self.winfo_exists():
-                self._global_bind = None
-                return
-            if self._global_bind is not None:
-                try:
-                    self._root()._unbind(("bind", "all", "<Button-1>"),
-                                         self._global_bind)
-                except Exception:
-                    pass
-                self._global_bind = None
-            self._restore_grab()
-            self.withdraw()
-        except Exception:
-            self._global_bind = None
-            self._bind_pending = None
-            try:
-                self._restore_grab()
-                self.withdraw()
-            except Exception:
-                pass
-
-    def _on_global_click(self, event):
-        try:
-            widget = event.widget
-            if widget is None:
-                return
-            # клик внутри нашего списка — не закрываем
-            wpath = str(widget)
-            topath = str(self)
-            if wpath.startswith(topath):
-                return
-            if not self.winfo_exists():
-                self._global_bind = None
+            wpath = str(event.widget)
+            if wpath.startswith(str(self)):
                 return
             self.close()
         except Exception:
+            self.close()
+
+    def close(self):
+        if self._bind_pending is not None:
             try:
-                if self.winfo_exists():
-                    self.close()
-                else:
-                    self._global_bind = None
+                self.after_cancel(self._bind_pending)
             except Exception:
-                self._global_bind = None
+                pass
+            self._bind_pending = None
+        if self._bind_id is not None:
+            try:
+                toplevel = self.winfo_toplevel()
+                toplevel.unbind("<Button-1>", self._bind_id)
+            except Exception:
+                pass
+            self._bind_id = None
+        try:
+            self.place_forget()
+        except Exception:
+            pass
 
     def is_open(self):
-        return bool(self.winfo_viewable())
+        try:
+            return bool(self.winfo_viewable())
+        except Exception:
+            return False
 
     def _select(self, value):
         self.close()
@@ -318,8 +272,8 @@ class _DropdownToplevel(ctk.CTkToplevel):
 
 class OptionMenu(ctk.CTkOptionMenu):
     """CTkOptionMenu, чей выпадающий список рисуется сам (см.
-    _DropdownToplevel), а не нативным tk.Menu. Toplevel создаётся лениво —
-    только при первом открытии, чтобы не мешать главному окну."""
+    _DropdownFrame) как дочерний виджет окна, а не нативным tk.Menu.
+    Список создаётся лениво — только при первом открытии."""
 
     def __init__(self, master, **kw):
         self._dd_fg = kw.get("dropdown_fg_color") or DROPDOWN_BG
@@ -348,8 +302,8 @@ class OptionMenu(ctk.CTkOptionMenu):
 
 
 class _LazyDropdown:
-    """Заглушка, имитирующая API нативного DropdownMenu; настоящий
-    Toplevel создаёт только при первом открытии."""
+    """Заглушка, имитирующая API нативного DropdownMenu; настоящий список
+    создаётся только при первом открытии и затем переиспользуется."""
 
     def __init__(self, om, callback, fg, hover, text, font):
         self._om = om
@@ -361,19 +315,19 @@ class _LazyDropdown:
         self._menu = None
 
     def open(self, x, y):
-        # Окно переиспользуем: на Windows создание нового CTkToplevel на
-        # каждый клик занимает ~100-300 мс, а повторное открытие — почти
-        # мгновенно. Значения обновляем каждый раз (меняются через configure).
-        if self._menu is None:
+        # Список переиспользуем: создание новых окон на каждый клик тормозило.
+        # Значения обновляем каждый раз (меняются через configure).
+        if self._menu is not None:
             try:
                 if not self._menu.winfo_exists():
                     self._menu = None
             except Exception:
                 self._menu = None
         if self._menu is None:
-            self._menu = _DropdownToplevel(self._om, self._om._values,
-                                           self._callback, self._fg,
-                                           self._hover, self._text, self._font)
+            parent = self._om.winfo_toplevel()
+            self._menu = _DropdownFrame(parent, self._om._values,
+                                        self._callback, self._fg,
+                                        self._hover, self._text, self._font)
         self._menu.open(x, y, current=self._om.get(), values=self._om._values)
 
     def close(self):
@@ -388,6 +342,8 @@ class _LazyDropdown:
             return False
 
     def configure(self, **kw):
+        if "values" in kw:
+            kw.pop("values")
         if "fg_color" in kw:
             self._fg = kw.pop("fg_color")
         if "hover_color" in kw:
