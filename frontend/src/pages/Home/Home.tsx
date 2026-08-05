@@ -76,8 +76,31 @@ export function Home() {
 
       <BirthdaysBanner />
 
-      {/* Ближайшие/последние турниры */}
+      {/* Тизер спортсменов */}
       <section className="mx-auto max-w-6xl px-5 py-14">
+        <div className="flex items-end justify-between">
+          <h2 className="font-display text-2xl text-bone">Спортсмены</h2>
+          <Link to="/athletes" className="text-sm font-medium text-brass hover:text-brass-dim">
+            вся база →
+          </Link>
+        </div>
+        <div className="rivet-line my-5" />
+
+        {athletes.isLoading && <LoadingState label="Загрузка спортсменов" />}
+        {athletes.isError && (
+          <ErrorState message={(athletes.error as Error).message} onRetry={() => athletes.refetch()} />
+        )}
+        {athletes.data && athletes.data.items.length > 0 && (
+          <div className="grid gap-5 sm:grid-cols-2 2xl:grid-cols-3">
+            {athletes.data.items.map((a) => (
+              <AthleteCard key={a.id} athlete={a} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Ближайшие/последние турниры */}
+      <section className="mx-auto max-w-6xl px-5 pb-16">
         <div className="flex items-end justify-between">
           <h2 className="font-display text-2xl text-bone">Турниры</h2>
           <Link to="/competitions" className="text-sm font-medium text-brass hover:text-brass-dim">
@@ -97,29 +120,6 @@ export function Home() {
           <div className="grid gap-5 sm:grid-cols-2 2xl:grid-cols-3">
             {competitions.data.items.map((c) => (
               <CompetitionCard key={c.id} competition={c} />
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Тизер спортсменов */}
-      <section className="mx-auto max-w-6xl px-5 pb-16">
-        <div className="flex items-end justify-between">
-          <h2 className="font-display text-2xl text-bone">Спортсмены</h2>
-          <Link to="/athletes" className="text-sm font-medium text-brass hover:text-brass-dim">
-            вся база →
-          </Link>
-        </div>
-        <div className="rivet-line my-5" />
-
-        {athletes.isLoading && <LoadingState label="Загрузка спортсменов" />}
-        {athletes.isError && (
-          <ErrorState message={(athletes.error as Error).message} onRetry={() => athletes.refetch()} />
-        )}
-        {athletes.data && athletes.data.items.length > 0 && (
-          <div className="grid gap-5 sm:grid-cols-2 2xl:grid-cols-3">
-            {athletes.data.items.map((a) => (
-              <AthleteCard key={a.id} athlete={a} />
             ))}
           </div>
         )}
