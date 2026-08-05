@@ -6,7 +6,7 @@ import { yearsWord } from '@/lib/age'
 
 const DAY_LABELS = ['Сегодня', 'Завтра'] as const
 
-function BirthdayRow({ athlete }: { athlete: AthleteBirthdayItem }) {
+function BirthdayChip({ athlete }: { athlete: AthleteBirthdayItem }) {
   const initials = athlete.full_name
     .split(' ')
     .map((p) => p[0])
@@ -15,12 +15,12 @@ function BirthdayRow({ athlete }: { athlete: AthleteBirthdayItem }) {
   return (
     <Link
       to={`/athletes/${athlete.id}`}
-      className="group flex items-center gap-3 rounded-xl border border-steel-dim/15 bg-ink-soft/70 p-3 transition-all duration-300 hover:-translate-y-0.5 hover:border-brass/30 hover:shadow-[0_8px_28px_-10px_rgba(201,162,39,0.15)]"
+      className="group flex items-center gap-2.5 rounded-full border border-steel-dim/15 bg-ink-soft/70 py-1.5 pl-1.5 pr-4 transition-all duration-300 hover:-translate-y-0.5 hover:border-brass/30 hover:bg-ink-soft hover:shadow-[0_10px_30px_-12px_rgba(201,162,39,0.35)]"
     >
-      <div className="relative flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-steel-dim/20 bg-ink font-display text-sm text-steel">
+      <span className="relative flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-steel-dim/25 bg-ink font-display text-[0.65rem] font-semibold text-steel">
         {athlete.photo_path ? (
           <img
-            src={cloudinaryThumb(athlete.photo_path, 48) ?? athlete.photo_path}
+            src={cloudinaryThumb(athlete.photo_path, 40) ?? athlete.photo_path}
             alt=""
             className="h-full w-full object-cover"
             loading="lazy"
@@ -28,21 +28,21 @@ function BirthdayRow({ athlete }: { athlete: AthleteBirthdayItem }) {
         ) : (
           initials
         )}
-      </div>
-      <div className="min-w-0">
-        <p className="truncate font-display text-base font-semibold text-bone transition-colors group-hover:text-brass">
+      </span>
+      <span className="flex flex-col leading-none">
+        <span className="max-w-[9rem] truncate font-display text-sm font-semibold text-bone transition-colors group-hover:text-brass">
           {athlete.full_name}
-        </p>
-        <p className="font-mono text-sm text-steel-dim">
+        </span>
+        <span className="mt-1 font-mono text-[0.7rem] text-steel-dim">
           {athlete.turns_age} {yearsWord(athlete.turns_age)}
-        </p>
-      </div>
+        </span>
+      </span>
     </Link>
   )
 }
 
-/** Блок «Дни рождения» — именинники на сегодня и завтра. Скрывается целиком,
- * если в базе ни у кого нет дня рождения в ближайшие два дня. */
+/** Уведомление о днях рождения — прозрачная «стеклянная» лента под шапкой.
+ * Скрывается целиком, если в базе ни у кого нет дня рождения в ближайшие два дня. */
 export function BirthdaysBanner() {
   const { data, isLoading, isError } = useAthleteBirthdays()
 
@@ -53,51 +53,63 @@ export function BirthdaysBanner() {
 
   if (today.length === 0 && tomorrow.length === 0) return null
 
-  return (
-    <section className="mx-auto max-w-6xl px-5 pt-14">
-      <div className="plate overflow-hidden rounded-[var(--radius-rivet)] p-6 sm:p-7">
-        <div className="flex items-center gap-3">
-          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-brass/25 bg-brass/10">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-              <rect x="1.5" y="4" width="15" height="12.5" rx="2" stroke="var(--color-brass)" strokeWidth="1.3" />
-              <path d="M1.5 8h15" stroke="var(--color-brass)" strokeWidth="1.3" />
-              <path d="M9 4V1.5" stroke="var(--color-brass)" strokeWidth="1.3" />
-              <path d="M5.5 4V1.5M12.5 4V1.5" stroke="var(--color-brass)" strokeWidth="1.3" />
-              <circle cx="5" cy="10.5" r="0.8" fill="var(--color-brass)" />
-              <circle cx="9" cy="10.5" r="0.8" fill="var(--color-brass)" />
-              <circle cx="13" cy="10.5" r="0.8" fill="var(--color-brass)" />
-              <circle cx="5" cy="14" r="0.8" fill="var(--color-brass)" />
-              <circle cx="9" cy="14" r="0.8" fill="var(--color-brass)" />
-              <circle cx="13" cy="14" r="0.8" fill="var(--color-brass)" />
-            </svg>
-          </span>
-          <div>
-            <p className="text-eyebrow text-rust">Уведомления</p>
-            <h2 className="font-display text-2xl text-bone">Дни рождения</h2>
-          </div>
-        </div>
+  const groups = [
+    { label: DAY_LABELS[0], items: today },
+    { label: DAY_LABELS[1], items: tomorrow },
+  ].filter((g) => g.items.length > 0)
 
-        <div className="mt-5 grid gap-5 sm:grid-cols-2">
-          {today.length > 0 && (
+  return (
+    <section className="relative mx-auto max-w-6xl px-5 pt-5 sm:pt-7" aria-label="Дни рождения">
+      <div className="relative overflow-hidden rounded-2xl border border-steel-dim/20 bg-ink/40 px-4 py-4 backdrop-blur-xl sm:px-6 sm:py-5">
+        {/* Мягкие внутренние свечения — латунь и каспийская вода */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -left-24 -top-28 h-60 w-60 rounded-full bg-brass/10 blur-3xl"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -bottom-28 -right-20 h-60 w-60 rounded-full bg-petrol-2/20 blur-3xl"
+        />
+        {/* Тонкая верхняя «засветка» стекла */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-bone/25 to-transparent"
+        />
+
+        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:gap-7">
+          <div className="flex items-center gap-3.5">
+            <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-brass/25 bg-brass/10 shadow-[0_0_24px_-6px_rgba(201,162,39,0.5)]">
+              <svg width="19" height="19" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                <rect x="1.5" y="4" width="15" height="12.5" rx="2" stroke="var(--color-brass)" strokeWidth="1.3" />
+                <path d="M1.5 8h15" stroke="var(--color-brass)" strokeWidth="1.3" />
+                <path d="M9 4V1.5" stroke="var(--color-brass)" strokeWidth="1.3" />
+                <path d="M5.5 4V1.5M12.5 4V1.5" stroke="var(--color-brass)" strokeWidth="1.3" />
+                <circle cx="5" cy="10.5" r="0.8" fill="var(--color-brass)" />
+                <circle cx="9" cy="10.5" r="0.8" fill="var(--color-brass)" />
+                <circle cx="13" cy="10.5" r="0.8" fill="var(--color-brass)" />
+                <circle cx="5" cy="14" r="0.8" fill="var(--color-brass)" />
+                <circle cx="9" cy="14" r="0.8" fill="var(--color-brass)" />
+                <circle cx="13" cy="14" r="0.8" fill="var(--color-brass)" />
+              </svg>
+            </span>
             <div>
-              <p className="text-eyebrow mb-3 text-steel">{DAY_LABELS[0]}</p>
-              <div className="space-y-2.5">
-                {today.map((a) => (
-                  <BirthdayRow key={a.id} athlete={a} />
+              <p className="text-eyebrow text-rust">Уведомления</p>
+              <h2 className="font-display text-lg font-semibold leading-tight text-bone">Дни рождения</h2>
+            </div>
+          </div>
+
+          <div aria-hidden="true" className="hidden h-10 w-px shrink-0 bg-steel-dim/25 lg:block" />
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+            {groups.map((group) => (
+              <div key={group.label} className="flex flex-wrap items-center gap-2.5">
+                <span className="text-eyebrow text-steel-dim">{group.label}</span>
+                {group.items.map((a) => (
+                  <BirthdayChip key={a.id} athlete={a} />
                 ))}
               </div>
-            </div>
-          )}
-          {tomorrow.length > 0 && (
-            <div>
-              <p className="text-eyebrow mb-3 text-steel">{DAY_LABELS[1]}</p>
-              <div className="space-y-2.5">
-                {tomorrow.map((a) => (
-                  <BirthdayRow key={a.id} athlete={a} />
-                ))}
-              </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
       </div>
     </section>
