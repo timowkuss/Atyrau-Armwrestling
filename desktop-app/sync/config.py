@@ -12,7 +12,7 @@ _defaults = {
     "API_BASE_URL": "http://localhost:8000/api/v1/sync",
     "DESKTOP_SYNC_TOKEN": "change-me-desktop-sync-token",
     "SYNC_ENABLED": True,
-    "REQUEST_TIMEOUT_SECONDS": 5,
+    "REQUEST_TIMEOUT_SECONDS": 10,
 }
 
 

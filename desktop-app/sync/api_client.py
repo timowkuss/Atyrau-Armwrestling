@@ -1,10 +1,24 @@
 """Тонкий клиент к /api/v1/sync/*. Каждый метод — один HTTP-запрос,
 исключения (нет сети, таймаут, 5xx) пробрасываются наверх — вызывающий
-код (sync_manager) решает, класть ли операцию в офлайн-очередь."""
+код (sync_manager) решает, класть ли операцию в офлайн-очередь.
+
+Устойчивость к сбоям DNS/сети: GET-запросы (чтение изменений с сервера)
+ретраятся с бэкоффом — кратковременный сбой резолва имени (как у
+up.railway.app) поглощается ретраями, а не валит цикл поллера.
+POST/PATCH/DELETE ретраями НЕ покрываются: повтор неидемпотентного
+запроса мог бы создать дубль записи — их судьбой по-прежнему занимается
+офлайн-очередь sync_manager."""
+
+import time
 
 import requests
 
 from . import config
+
+# Сбои соединения/DNS — до 3 повторов с бэкоффом 1/2/4 сек (~7 сек). За
+# это время типичный «провал» DNS Railway успевает пройти сам.
+_CONNECT_RETRIES = 3
+_CONNECT_BACKOFF = 1.0
 
 # Сентинел для PATCH-полей: отличает "поле не передано, не трогать"
 # от "поле явно передано как null" (например, снять table_number,
@@ -31,20 +45,26 @@ class SyncApiClient:
 
     def _request(self, method: str, path: str, json_body: dict | None = None, params=None):
         url = f"{self.base_url}{path}"
-        try:
-            resp = requests.request(
-                method, url, json=json_body, params=params,
-                headers=self._headers(), timeout=self.timeout,
-            )
-        except requests.RequestException as e:
-            raise ApiClientError(f"Сеть недоступна ({url}): {e}") from e
+        attempts = _CONNECT_RETRIES + 1 if method == "GET" else 1
+        for attempt in range(attempts):
+            try:
+                resp = requests.request(
+                    method, url, json=json_body, params=params,
+                    headers=self._headers(), timeout=self.timeout,
+                )
+            except requests.RequestException as e:
+                if attempt < attempts - 1:
+                    time.sleep(_CONNECT_BACKOFF * (2 ** attempt))
+                    continue
+                raise ApiClientError(f"Сеть недоступна ({url}): {e}") from e
 
-        if resp.status_code >= 400:
-            raise ApiClientError(
-                f"{method} {path} -> {resp.status_code}: {resp.text}",
-                status_code=resp.status_code,
-            )
-        return resp.json() if resp.content else {}
+            if resp.status_code >= 400:
+                raise ApiClientError(
+                    f"{method} {path} -> {resp.status_code}: {resp.text}",
+                    status_code=resp.status_code,
+                )
+            return resp.json() if resp.content else {}
+        raise ApiClientError(f"Сеть недоступна ({url})")
 
     # ── спортсмены ────────────────────────────────────────────
     # ── обратная синхронизация: что поменялось в админке сайта ─
