@@ -201,16 +201,20 @@ class _DropdownFrame(ctk.CTkFrame):
         self._current = current
         self._rebuild()
         self.update_idletasks()
+        # winfo_* возвращают физические пиксели, а place()/configure()
+        # внутри CTk умножают значения на widget scaling — делим обратно,
+        # иначе при DPI-масштабировании список уезжает вниз-вправо.
+        scaling = self._apply_widget_scaling(1.0) or 1.0
         width = max((b.winfo_reqwidth() for b in self._buttons), default=140) + 12
         height = len(self._buttons) * 36 + 8
-        self.configure(width=width, height=height)
+        self.configure(width=int(width / scaling), height=int(height / scaling))
         self.update_idletasks()
         toplevel = self.winfo_toplevel()
         # пересчитываем экранные координаты в координаты верхнего окна
-        x = x_root - toplevel.winfo_rootx()
-        y = y_root - toplevel.winfo_rooty()
+        x = (x_root - toplevel.winfo_rootx()) / scaling
+        y = (y_root - toplevel.winfo_rooty()) / scaling
         # если снизу не влезает — показываем список выше виджета
-        avail_h = toplevel.winfo_height()
+        avail_h = toplevel.winfo_height() / scaling
         if y + height > avail_h and y - height > 0:
             y -= height + 8
         self.place(x=int(x), y=int(y))

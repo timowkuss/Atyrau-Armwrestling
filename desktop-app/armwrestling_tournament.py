@@ -6609,7 +6609,6 @@ class App(ctk.CTk):
 
         dlg = tk.Toplevel(self)
         dlg.title("Редактировать участника" if edit_id else "Добавить участника")
-        dlg.geometry("1000x1000")
         dlg.configure(bg=PANEL)
 
         dlg.transient (self)          # привязать к главному окну
@@ -6639,7 +6638,7 @@ class App(ctk.CTk):
             return var
 
         form = ctk.CTkFrame(dlg, fg_color="transparent")
-        form.pack(fill="both", expand=True, padx=10, pady=10)
+        form.pack(fill="x", padx=10, pady=10)
 
         # ── row 0: выбор спортсмена (вместо старого текстового поля "Имя") ──
         ctk.CTkLabel(form, text="Спортсмен*:", anchor="e", width=110).grid(
