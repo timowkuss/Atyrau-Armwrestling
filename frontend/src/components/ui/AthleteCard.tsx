@@ -59,12 +59,27 @@ export function AthleteCard({ athlete }: { athlete: AthleteListItem }) {
           </span>
         )}
       </div>
-      {(athlete.club_name || athlete.coach_name) && (
-        <div className="mt-4 border-t border-steel-dim/15 pt-3 text-sm text-steel-dim">
-          {athlete.club_name && <div className="flex items-center gap-1.5 truncate"><svg width="11" height="11" viewBox="0 0 10 10" fill="none"><path d="M1 8V4l4-2.5L9 4v4z" stroke="currentColor" strokeWidth="1.2"/></svg>{athlete.club_name}</div>}
-          {athlete.coach_name && <div className="mt-1 flex items-center gap-1.5 truncate"><svg width="11" height="11" viewBox="0 0 10 10" fill="none"><circle cx="5" cy="3.5" r="2" stroke="currentColor" strokeWidth="1.2"/><path d="M1.5 9c0-2.2 1.8-4 3.5-4s3.5 1.8 3.5 4" stroke="currentColor" strokeWidth="1.2"/></svg>{athlete.coach_name}</div>}
+      <div className="mt-4 border-t border-steel-dim/15 pt-3 text-sm text-steel-dim">
+        <div className="flex items-center gap-1.5 truncate">
+          <svg width="11" height="11" viewBox="0 0 10 10" fill="none">
+            <path d="M1 8V4l4-2.5L9 4v4z" stroke="currentColor" strokeWidth="1.2" />
+          </svg>
+          {athlete.club_name ? (
+            athlete.club_name
+          ) : (
+            <span className="italic text-steel-dim/70">не состоит</span>
+          )}
         </div>
-      )}
+        {athlete.coach_name && (
+          <div className="mt-1 flex items-center gap-1.5 truncate">
+            <svg width="11" height="11" viewBox="0 0 10 10" fill="none">
+              <circle cx="5" cy="3.5" r="2" stroke="currentColor" strokeWidth="1.2" />
+              <path d="M1.5 9c0-2.2 1.8-4 3.5-4s3.5 1.8 3.5 4" stroke="currentColor" strokeWidth="1.2" />
+            </svg>
+            {athlete.coach_name}
+          </div>
+        )}
+      </div>
     </Link>
   )
 }
