@@ -954,6 +954,59 @@ iin TEXT,                        -- ИИН, 12 цифр
         return self.conn.execute(
             "SELECT id, full_name FROM coaches WHERE iin=?", (iin,)).fetchone()
 
+    # ── возможные дубли по ФИО + дате рождения (только предупреждение) ──
+    def _norm_date(self, s):
+        # в локальной БД дата в ДД.ММ.ГГГГ, с сервера может прийти ГГГГ-ММ-ДД —
+        # приводим к одному виду перед сравнением
+        s = (s or "").strip()
+        if not s:
+            return None
+        for fmt in ("%d.%m.%Y", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(s[:10], fmt).strftime("%d.%m.%Y")
+            except ValueError:
+                continue
+        return s
+
+    def find_duplicate_athlete(self, first_name, last_name, birth_date, exclude_id=None):
+        """Ищет спортсмена с такими же ФИО (без учёта регистра) и датой
+        рождения. Нужно только для предупреждения — сохранение не блокирует."""
+        fn = first_name.strip().lower()
+        ln = last_name.strip().lower()
+        if not fn or not ln or not birth_date:
+            return None
+        bd = self._norm_date(birth_date)
+        if bd is None:
+            return None
+        rows = self.conn.execute(
+            "SELECT id, first_name, last_name, birth_date FROM athletes "
+            "WHERE COALESCE(is_hidden,0)=0 AND lower(first_name)=? AND lower(last_name)=?",
+            (fn, ln)).fetchall()
+        for r in rows:
+            if exclude_id is not None and r["id"] == exclude_id:
+                continue
+            if self._norm_date(r["birth_date"]) == bd:
+                return r
+        return None
+
+    def find_duplicate_coach(self, full_name, birth_date, exclude_id=None):
+        fn = full_name.strip().lower()
+        if not fn or not birth_date:
+            return None
+        bd = self._norm_date(birth_date)
+        if bd is None:
+            return None
+        rows = self.conn.execute(
+            "SELECT id, full_name, birth_date FROM coaches "
+            "WHERE COALESCE(is_hidden,0)=0 AND lower(full_name)=?",
+            (fn,)).fetchall()
+        for r in rows:
+            if exclude_id is not None and r["id"] == exclude_id:
+                continue
+            if self._norm_date(r["birth_date"]) == bd:
+                return r
+        return None
+
     # ── клубы ──────────────────────────────────────────────────
     def get_clubs(self, query=""):
         if query:
@@ -4793,6 +4846,14 @@ class AthletesWindow(ctk.CTkToplevel):
             except ValueError:
                 messagebox.showwarning("Ошибка", "Дата рождения в формате дд.мм.гггг (например, 25062002).")
                 return
+            dup = self.db.find_duplicate_athlete(first_name, last_name,
+                                                 birth_date, exclude_id=edit_id)
+            if dup:
+                messagebox.showwarning(
+                    "Возможный дубль",
+                    f"Спортсмен с таким же именем и датой рождения уже существует:\n\n"
+                    f"    {dup['last_name']} {dup['first_name']} ({dup['birth_date']})\n\n"
+                    "Это только предупреждение — запись всё равно будет сохранена.")
             gender = gender_reverse[gender_var.get()]
             club_var_value = club_var.get()
             club_id = club_display_to_id.get(club_var_value)
@@ -5549,13 +5610,21 @@ class CoachesWindow(ctk.CTkToplevel):
             if self.db.find_coach_by_iin(iin, exclude_id=edit_id):
                 messagebox.showwarning("Ошибка", "Тренер с таким ИИН уже существует.")
                 return
+            full_name = f"{last_name} {first_name}".strip()
+            dup = self.db.find_duplicate_coach(full_name, birth_date,
+                                               exclude_id=edit_id)
+            if dup:
+                messagebox.showwarning(
+                    "Возможный дубль",
+                    f"Тренер с таким же именем и датой рождения уже существует:\n\n"
+                    f"    {dup['full_name']} ({dup['birth_date']})\n\n"
+                    "Это только предупреждение — запись всё равно будет сохранена.")
             qualification = qualification_var.get()
             club_var_value = club_var.get()
             club_id = club_display_to_id.get(club_var_value)
             club = club_var_value if club_var_value != _NO_CLUB else ""
             city = fields["city"].get().strip()
             phone = phone_var.get().strip()
-            full_name = f"{last_name} {first_name}".strip()
             photo_path = photo_path_var.get()
             if edit_id:
                 self.db.update_coach(edit_id, full_name, club, photo_path, "",
