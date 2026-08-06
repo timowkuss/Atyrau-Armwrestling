@@ -7947,7 +7947,7 @@ class App(ctk.CTk):
         # Фото скачиваем в фоне (не в UI-потоке) и перерисовываем список,
         # когда они появятся в кэше. Если скачивать нечего — колбэк не
         # вызывается и повторной перерисовки не будет.
-        urls = [p["photo_path"] for p in participants if p.get("photo_path")]
+        urls = [p["photo_path"] for p in participants if "photo_path" in p.keys() and p["photo_path"]]
         def _photo_warm_done():
             try:
                 if self.winfo_exists():
