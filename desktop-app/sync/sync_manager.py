@@ -233,9 +233,9 @@ class SyncManager:
         return True
 
     def _record_blocked(self, row):
-        """Помечает delete-операцию, упёршуюся в потолок повторов, как
-        «заблокированную» для показа пользователю. Из очереди её НЕ
-        выбрасываем — она продолжит пытаться при каждом flush."""
+        """Помечает операцию (delete/update/create), упёршуюся в потолок
+        повторов, как «заблокированную» для показа пользователю. Из очереди
+        её НЕ выбрасываем — она продолжит пытаться при каждом flush."""
         key = (row["operation"], row["payload"])
         with self._blocked_lock:
             for b in self.blocked_ops:
@@ -958,17 +958,15 @@ class SyncManager:
                         continue
                     op = row["operation"]
                     is_delete = op.startswith("delete_")
-                    if not is_delete and row["attempts"] >= MAX_RETRY_ATTEMPTS:
-                        print(f"[sync] PURGE {op} id={row['id']}: {row['attempts']} попыток — чистим")
-                        self.state.mark_done(row["id"])
-                        continue
-                    if is_delete and row["attempts"] >= MAX_RETRY_ATTEMPTS:
-                        # Удаление НИКОГДА не выбрасываем молча: 50 неудач
-                        # подряд — это реальная проблема (неверный токен,
-                        # нет роута на сервере, постоянные сбои сети), а не
-                        # «битая» операция. Предупреждаем пользователя один
-                        # раз и продолжаем пытаться при каждом flush — как
-                        # только проблема исчезнет, операция доедет.
+                    if row["attempts"] >= MAX_RETRY_ATTEMPTS:
+                        # НИКОГДА не выбрасываем операцию из очереди, даже
+                        # create/update: 50 неудач подряд — это реальная
+                        # проблема (неверный токен, нет роута, постоянные
+                        # сбои сети), а не «битая» операция. Предупреждаем
+                        # пользователя один раз и продолжаем пытаться при
+                        # каждом flush — как только проблема исчезнет,
+                        # операция доедет (иначе добавленные офлайн
+                        # спортсмены/тренеры навсегда не попадут на сайт).
                         self._record_blocked(row)
                     payload = __import__("json").loads(row["payload"])
                     print(f"[sync] TRY: {op} payload={payload}")
