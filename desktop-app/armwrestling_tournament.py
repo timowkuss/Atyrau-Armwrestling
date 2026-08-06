@@ -7954,11 +7954,11 @@ class App(ctk.CTk):
                     font=ctk.CTkFont(size=12, weight="bold"),
                     text_color=stat_color)
             cat_lbl.pack(side="left", padx=(0, 14))
-            ctk.CTkLabel(stats, text=f"👥 {part_count.get(tid, 0)} уч.",
+            ctk.CTkLabel(stats, text=f"Участников: {part_count.get(tid, 0)}",
                     font=ctk.CTkFont(size=12), text_color=stat_color).pack(side="left", padx=(0, 14))
-            ctk.CTkLabel(stats, text=fmt_format,
+            ctk.CTkLabel(stats, text=f"Вид: {fmt_format}",
                     font=ctk.CTkFont(size=12), text_color=stat_color).pack(side="left", padx=(0, 14))
-            ctk.CTkLabel(stats, text=fmt_bracket,
+            ctk.CTkLabel(stats, text=f"Система: {fmt_bracket}",
                     font=ctk.CTkFont(size=12), text_color=stat_color).pack(side="left")
 
             # Вся строка кликабельна — выбирает турнир.
