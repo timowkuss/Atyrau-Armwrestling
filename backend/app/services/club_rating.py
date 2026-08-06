@@ -194,9 +194,9 @@ def _hand_standings(db: Session, competition_id: int, category_id: int, hand: st
     get_standings из десктопа:
     - single elimination (до одного поражения): чемпион — победитель
       последнего сыгранного матча (в сетке SE нет bracket == "final",
-      финальный матч тоже winners). Место выбывшего определяется раундом
-      выбывания, а не числом сыгранных матчей: выбывшие в одном раунде
-      делят одно место (1/4 финала -> 5, полуфинал -> 3, финал -> 2).
+      финальный матч тоже winners). Уникальные места по порядку выбывания:
+      первый выбывший в своём раунде занимает нижнее место диапазона
+      (для 8 участников: 1/4 -> 5,6,7,8; полуфинал -> 3,4; финал -> 2).
     - double elimination: победитель финала — чемпион, далее сортировка
       по глубине выбывания (elim_round_score) и числу побед.
     """
@@ -217,7 +217,8 @@ def _hand_standings(db: Session, competition_id: int, category_id: int, hand: st
     def ensure(pid: int | None) -> None:
         if pid is None or pid in stats:
             return
-        stats[pid] = {"pid": pid, "wins": 0, "losses": 0, "eliminated": False, "elim_round_score": -1}
+        stats[pid] = {"pid": pid, "wins": 0, "losses": 0, "eliminated": False,
+                      "elim_round_score": -1, "elim_order": 0}
 
     def round_score(match: Match) -> int:
         bracket_weight = {"winners": 0, "losers": 100, "final": 200}
@@ -244,6 +245,7 @@ def _hand_standings(db: Session, competition_id: int, category_id: int, hand: st
                         # В SE раунд = stage (0 = первый раунд, 1 = полуфинал, ...)
                         if m.stage > stats[loser]["elim_round_score"]:
                             stats[loser]["elim_round_score"] = m.stage
+                            stats[loser]["elim_order"] = m.match_order
                             stats[loser]["eliminated"] = True
                     else:
                         rs = round_score(m)
@@ -277,22 +279,43 @@ def _hand_standings(db: Session, competition_id: int, category_id: int, hand: st
                 stats[runner_up]["eliminated"] = True
                 stats[runner_up]["elim_round_score"] = 99998
 
+    if is_single:
+        # Уникальные места по порядку выбывания: первый выбывший в своём
+        # раунде занимает нижнее место диапазона (для 8 участников:
+        # 1/4 -> 5,6,7,8; полуфинал -> 3,4; финал -> 2; чемпион -> 1).
+        rounds = max((m.stage for m in matches), default=0) + 1
+        by_round: dict[int, list] = {}
+        for s in stats.values():
+            if s["eliminated"]:
+                by_round.setdefault(s["elim_round_score"], []).append(s)
+        occupied: set[int] = set()
+        placed: dict[int, int] = {}
+        if champion is not None:
+            placed[champion] = 1
+            occupied.add(1)
+        for st, lst in by_round.items():
+            lst.sort(key=lambda s: (s["elim_order"], s["pid"]))
+            max_place = 2 ** (rounds - st)
+            for i, s in enumerate(lst):
+                placed[s["pid"]] = max_place - i
+                occupied.add(max_place - i)
+        not_out = [s for s in stats.values()
+                   if not s["eliminated"] and s["pid"] != champion]
+        not_out.sort(key=lambda s: (-s["wins"], s["pid"]))
+        free_place = 1
+        for s in not_out:
+            while free_place in occupied:
+                free_place += 1
+            placed[s["pid"]] = free_place
+            occupied.add(free_place)
+        ordered = sorted(stats.values(), key=lambda s: placed[s["pid"]])
+        return [{"participant_id": s["pid"], "place": placed[s["pid"]]} for s in ordered]
+
     ordered = sorted(
         stats.values(),
         key=lambda s: (0 if s["pid"] == champion else 1, -s["elim_round_score"], -s["wins"]),
     )
-
-    rounds = max((m.stage for m in matches), default=0) + 1
-    result = []
-    for i, s in enumerate(ordered):
-        if s["pid"] == champion:
-            place = 1
-        elif is_single and s["eliminated"] and rounds:
-            place = (2 ** (rounds - 1 - s["elim_round_score"])) + 1
-        else:
-            place = i + 1
-        result.append({"participant_id": s["pid"], "place": place})
-    return result
+    return [{"participant_id": s["pid"], "place": i + 1} for i, s in enumerate(ordered)]
 
 
 def _category_standings(db: Session, competition: Competition, category: Category) -> list[dict]:

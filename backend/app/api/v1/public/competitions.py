@@ -349,75 +349,107 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
     # Выбывшие по ключу (category_id, hand)
     eliminated_by_key: dict[tuple[int, str], list[EliminatedOut]] = {}
 
-    for (cat_id, hand), cat_matches in cat_hand_done.items():
-        stats: dict[int, dict] = {}
+        for (cat_id, hand), cat_matches in cat_hand_done.items():
+            stats: dict[int, dict] = {}
 
-        def _ensure(pid):
-            if pid is not None and pid not in stats:
-                stats[pid] = {"pid": pid, "wins": 0, "losses": 0, "last_loss_stage": -1}
+            def _ensure(pid):
+                if pid is not None and pid not in stats:
+                    stats[pid] = {"pid": pid, "wins": 0, "losses": 0,
+                                  "last_loss_stage": -1, "last_loss_order": 0}
 
-        for m in cat_matches:
-            _ensure(m.p1_id)
-            _ensure(m.p2_id)
-            if m.winner_id:
-                winner = m.winner_id
-                loser = m.p2_id if winner == m.p1_id else m.p1_id
-                _ensure(winner)
-                stats[winner]["wins"] += 1
-                if loser:
-                    _ensure(loser)
-                    stats[loser]["losses"] += 1
-                    if m.stage > stats[loser]["last_loss_stage"]:
-                        stats[loser]["last_loss_stage"] = m.stage
+            for m in cat_matches:
+                _ensure(m.p1_id)
+                _ensure(m.p2_id)
+                if m.winner_id:
+                    winner = m.winner_id
+                    loser = m.p2_id if winner == m.p1_id else m.p1_id
+                    _ensure(winner)
+                    stats[winner]["wins"] += 1
+                    if loser:
+                        _ensure(loser)
+                        stats[loser]["losses"] += 1
+                        if m.stage > stats[loser]["last_loss_stage"]:
+                            stats[loser]["last_loss_stage"] = m.stage
+                            stats[loser]["last_loss_order"] = m.match_order
 
-        if not stats:
-            continue
+            if not stats:
+                continue
 
-        # Завершён ли ГФ
-        gf_done = any(m.bracket == "final" and m.status == "done" for m in cat_matches)
-        champion = None
-        if gf_done:
-            gf_matches = [m for m in cat_matches if m.bracket == "final"]
-            last_gf = max(gf_matches, key=lambda m: m.id)
-            champion = last_gf.winner_id
+            # Завершён ли ГФ
+            gf_done = any(m.bracket == "final" and m.status == "done" for m in cat_matches)
+            champion = None
+            if gf_done:
+                gf_matches = [m for m in cat_matches if m.bracket == "final"]
+                last_gf = max(gf_matches, key=lambda m: m.id)
+                champion = last_gf.winner_id
 
-        # Сортируем: чемпион первым, потом по числу поражений, затем по победам
-        ordered = sorted(
-            stats.values(),
-            key=lambda s: (
-                0 if s["pid"] == champion else 1,
-                s["losses"],
-                -s["wins"],
-            )
-        )
+            eliminated = []
+            if max_losses == 1:
+                # Single elimination: УНИКАЛЬНЫЕ места по порядку выбывания.
+                # Первый выбывший в своём раунде занимает нижнее место диапазона.
+                # Для 8 участников (3 раунда): 1/4 -> 5,6,7,8; полуфинал -> 3,4;
+                # финал -> 2; чемпион -> 1. Кто раньше проиграл в раунде
+                # (по порядку матча) — тот ниже.
+                all_ms = cat_hand_all.get((cat_id, hand), [])
+                se_rounds = (max(m.stage for m in all_ms) + 1) if all_ms else 0
+                by_round: dict[int, list] = {}
+                for s in stats.values():
+                    if s["losses"] >= 1:
+                        by_round.setdefault(s["last_loss_stage"], []).append(s)
+                occupied: set[int] = set()
+                if champion is not None:
+                    occupied.add(1)
+                placed: dict[int, int] = {}
+                for st, lst in by_round.items():
+                    lst.sort(key=lambda s: (s["last_loss_order"], s["pid"]))
+                    max_place = 2 ** (se_rounds - st) if se_rounds else 0
+                    for i, s in enumerate(lst):
+                        place = max_place - i
+                        placed[s["pid"]] = place
+                        occupied.add(place)
+                # Ещё не выбывшие — свободные места сверху (по победам)
+                not_out = [s for s in stats.values()
+                           if s["losses"] < 1 and s["pid"] != champion]
+                not_out.sort(key=lambda s: (-s["wins"], s["pid"]))
+                free_place = 1
+                for s in not_out:
+                    while free_place in occupied:
+                        free_place += 1
+                    placed[s["pid"]] = free_place
+                    occupied.add(free_place)
+                ordered = sorted(stats.values(), key=lambda s: placed[s["pid"]])
+                for s in ordered:
+                    p = all_participants_by_id.get(s["pid"])
+                    name = p.athlete.full_name if p else UNKNOWN
+                    eliminated.append(EliminatedOut(
+                        athlete_name=name,
+                        place=placed[s["pid"]],
+                        wins=s["wins"],
+                        losses=s["losses"],
+                    ))
+            else:
+                # Сортируем: чемпион первым, потом по числу поражений, затем по победам
+                ordered = sorted(
+                    stats.values(),
+                    key=lambda s: (
+                        0 if s["pid"] == champion else 1,
+                        s["losses"],
+                        -s["wins"],
+                    )
+                )
+                for i, s in enumerate(ordered):
+                    is_eliminated = gf_done or s["losses"] >= max_losses
+                    if is_eliminated:
+                        p = all_participants_by_id.get(s["pid"])
+                        name = p.athlete.full_name if p else UNKNOWN
+                        eliminated.append(EliminatedOut(
+                            athlete_name=name,
+                            place=i + 1,
+                            wins=s["wins"],
+                            losses=s["losses"],
+                        ))
 
-        eliminated = []
-        # Single elimination: число раундов сетки (1/4, полуфинал, финал).
-        # Выбывший в раунде с номером stage получает место
-        # 2^(rounds - stage - 1) + 1 (для 8 участников: 1/4 -> 5, полуфинал -> 3,
-        # финал -> 2). Иначе места просто нумеруются по порядку выбывания.
-        se_rounds = 0
-        if max_losses == 1:
-            all_ms = cat_hand_all.get((cat_id, hand), [])
-            if all_ms:
-                se_rounds = max(m.stage for m in all_ms) + 1
-        for i, s in enumerate(ordered):
-            is_eliminated = gf_done or s["losses"] >= max_losses
-            if is_eliminated:
-                p = all_participants_by_id.get(s["pid"])
-                name = p.athlete.full_name if p else UNKNOWN
-                if se_rounds:
-                    place = (2 ** (se_rounds - 1 - s["last_loss_stage"])) + 1
-                else:
-                    place = i + 1
-                eliminated.append(EliminatedOut(
-                    athlete_name=name,
-                    place=place,
-                    wins=s["wins"],
-                    losses=s["losses"],
-                ))
-
-        eliminated_by_key[(cat_id, hand)] = eliminated
+            eliminated_by_key[(cat_id, hand)] = eliminated
 
     # ---- 6. Собираем ответ по всем столам ----
     response: list[TableQueueOut] = []

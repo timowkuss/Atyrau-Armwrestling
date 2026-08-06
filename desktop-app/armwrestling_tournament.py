@@ -3179,7 +3179,7 @@ class SingleEliminationEngine:
                 return
             if pid not in stats:
                 stats[pid] = {"pid": pid, "wins": 0, "losses": 0,
-                    "eliminated": False, "elim_round_score": -1}
+                    "eliminated": False, "elim_round_score": -1, "elim_order": 0}
 
         for m in matches:
             ensure(m["p1_id"])
@@ -3195,6 +3195,7 @@ class SingleEliminationEngine:
                         stats[loser]["losses"] += 1
                         if m["stage"] > stats[loser]["elim_round_score"]:
                             stats[loser]["elim_round_score"] = m["stage"]
+                            stats[loser]["elim_order"] = m["match_order"]
                             stats[loser]["eliminated"] = True
 
         if not stats:
@@ -3209,30 +3210,45 @@ class SingleEliminationEngine:
                 stats[champion]["eliminated"] = False
                 stats[champion]["elim_round_score"] = 9999
 
-        # Место выбывшего в single elimination зависит от раунда, в котором
-        # он проиграл, а не от числа уже сыгранных матчей. Выбывший в раунде
-        # stage при R раундах занимает место 2^(R-stage-1)+1:
-        # 8 участников -> 1/4 финала (stage 0) = 5-8 место, полуфинал = 3-4,
-        # финал = 2. Пока сетка не доиграна, выбывшие в одном раунде делят
-        # одно место (например все четвертьфиналисты получают 5).
+        # Места в single elimination: выбывшие получают УНИКАЛЬНЫЕ места по
+        # порядку выбывания — первый выбывший в своём раунде занимает нижнее
+        # место диапазона. Для 8 участников (3 раунда):
+        #   1/4 финала (stage 0) -> места 5,6,7,8
+        #   полуфинал (stage 1)  -> места 3,4
+        #   финал (stage 2)      -> место 2
+        #   чемпион              -> место 1
+        # Кто раньше проиграл в раунде (по порядку матча) — тот ниже.
         rounds = max((m["stage"] for m in matches), default=0) + 1 if matches else 0
-        result = []
-        for i, s in enumerate(sorted(
-                stats.values(),
-                key=lambda s: (
-                    0 if s["pid"] == champion else 1,
-                    -s["elim_round_score"],
-                    s["losses"],
-                ))):
-            row = dict(s)
-            if row["pid"] == champion:
-                row["place"] = 1
-            elif row["eliminated"] and rounds:
-                row["place"] = (2 ** (rounds - 1 - row["elim_round_score"])) + 1
-            else:
-                row["place"] = i + 1
-            result.append(row)
-        return result
+        by_round: dict[int, list] = {}
+        for s in stats.values():
+            if s["eliminated"]:
+                by_round.setdefault(s["elim_round_score"], []).append(s)
+        occupied = set()
+        for st, lst in by_round.items():
+            lst.sort(key=lambda s: (s["elim_order"], s["pid"]))
+            max_place = 2 ** (rounds - st)
+            for i, s in enumerate(lst):
+                s["place"] = max_place - i
+                occupied.add(s["place"])
+
+        for s in stats.values():
+            if s["pid"] == champion:
+                s["place"] = 1
+                occupied.add(1)
+
+        # Ещё не выбывшие (сетка не доиграна) — занимают оставшиеся свободные
+        # места сверху вниз (по победам), не пересекаясь с выбывшими.
+        not_out = [s for s in stats.values()
+                   if not s["eliminated"] and s["pid"] != champion]
+        not_out.sort(key=lambda s: (-s["wins"], s["pid"]))
+        free_place = 1
+        for s in not_out:
+            while free_place in occupied:
+                free_place += 1
+            s["place"] = free_place
+            occupied.add(free_place)
+
+        return sorted(stats.values(), key=lambda s: s["place"])
 
 
 def _standings_with_place(engine, category_id, hand):
