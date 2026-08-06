@@ -7917,40 +7917,78 @@ class App(ctk.CTk):
                     border_color=ACCENT if active else CARD_BORDER)
             row.pack(fill="x", padx=12, pady=4)
 
+            # Заголовок: номер + название (место в скобках) + статус
             head = ctk.CTkFrame(row, fg_color="transparent")
-            head.pack(fill="x", padx=12, pady=(8, 0))
-            ctk.CTkLabel(head, text=f"{idx}.", width=32, anchor="w",
-                    font=ctk.CTkFont(size=13, weight="bold"),
-                    text_color=ACCENT if not active else "#ffffff").pack(side="left")
-            ctk.CTkLabel(head, text=f"🏅  {t['name']}", anchor="w",
-                    font=ctk.CTkFont(size=13, weight="bold"),
-                    text_color="#ffffff" if active else TEXT).pack(
-                    side="left", fill="x", expand=True)
+            head.pack(fill="x", padx=12, pady=(10, 0))
+            num_lbl = ctk.CTkLabel(head, text=f"{idx}.", width=34, anchor="w",
+                    font=ctk.CTkFont(size=14, weight="bold"),
+                    text_color=ACCENT if not active else "#ffffff")
+            num_lbl.pack(side="left")
+            loc = f" ({t['location']})" if t.get("location") else ""
+            name_lbl = ctk.CTkLabel(head, text=f"🏅  {t['name']}{loc}", anchor="w",
+                    font=ctk.CTkFont(size=14, weight="bold"),
+                    text_color="#ffffff" if active else TEXT)
+            name_lbl.pack(side="left", fill="x", expand=True)
             badge_color = "#ff6666" if finished else "#4dff88"
             ctk.CTkLabel(head, text="ОКОНЧЕН" if finished else "ИДЁТ",
                     fg_color=badge_color, text_color="#0d1117", corner_radius=5,
                     font=ctk.CTkFont(size=10, weight="bold"),
                     ).pack(side="right", ipadx=6, ipady=2)
 
+            # Дата — крупно
+            date_lbl = ctk.CTkLabel(row, text=f"📅  {t['date']}", anchor="w",
+                    font=ctk.CTkFont(size=17, weight="bold"),
+                    text_color="#ffffff" if active else TEXT)
+            date_lbl.pack(fill="x", padx=14, pady=(5, 0))
+
+            # Статистика: категории, участники, формат, система
             bracket = t["bracket_system"] if "bracket_system" in t.keys() else "double"
             ftype = t["format_type"] if "format_type" in t.keys() else "separate"
             fmt_bracket = "До 1 поражения" if bracket == "single" else "До 2 поражений"
             fmt_format = "Двоеборье" if ftype == "combined" else "На отдельных руках"
-            info = (f"📅 {t['date']}    👥 {part_count.get(tid, 0)} уч.    "
-                    f"⚖️ {cat_count.get(tid, 0)} кат.    {fmt_format}    {fmt_bracket}")
-            ctk.CTkLabel(row, text=info, anchor="w",
-                    font=ctk.CTkFont(size=11),
-                    text_color="#dfe8f3" if active else TEXT_DIM).pack(
-                    fill="x", padx=12, pady=(2, 8))
+
+            stats = ctk.CTkFrame(row, fg_color="transparent")
+            stats.pack(fill="x", padx=14, pady=(3, 10))
+            stat_color = "#dfe8f3" if active else TEXT_DIM
+            cat_lbl = ctk.CTkLabel(stats, text=f"Категорий: {cat_count.get(tid, 0)}",
+                    font=ctk.CTkFont(size=12, weight="bold"),
+                    text_color=stat_color)
+            cat_lbl.pack(side="left", padx=(0, 14))
+            ctk.CTkLabel(stats, text=f"👥 {part_count.get(tid, 0)} уч.",
+                    font=ctk.CTkFont(size=12), text_color=stat_color).pack(side="left", padx=(0, 14))
+            ctk.CTkLabel(stats, text=fmt_format,
+                    font=ctk.CTkFont(size=12), text_color=stat_color).pack(side="left", padx=(0, 14))
+            ctk.CTkLabel(stats, text=fmt_bracket,
+                    font=ctk.CTkFont(size=12), text_color=stat_color).pack(side="left")
 
             # Вся строка кликабельна — выбирает турнир.
             def select(tid=tid):
                 self._select_tournament(tid)
-            clickables = [row, head]
+            clickables = [row, head, stats]
             clickables += list(head.winfo_children()) + list(row.winfo_children())
+            clickables += list(stats.winfo_children())
+            hover_labels = [num_lbl, name_lbl, date_lbl, cat_lbl]
+
+            def set_hover(on, active=active, row=row, hover_labels=hover_labels):
+                if active:
+                    return
+                if on:
+                    row.configure(fg_color=ACCENT_DIM, border_color=ACCENT)
+                    for w in hover_labels:
+                        w.configure(text_color="#ffffff")
+                else:
+                    row.configure(fg_color=PANEL_LIGHT, border_color=CARD_BORDER)
+                    for w in hover_labels:
+                        w.configure(text_color=w._orig_color)
+            # Храним исходный цвет для восстановления при уходе мыши.
+            for w in hover_labels:
+                w._orig_color = w.cget("text_color")
+
             for w in clickables:
                 try:
                     w.bind("<Button-1>", lambda e, s=select: s(), add="+")
+                    w.bind("<Enter>", lambda e, s=set_hover: s(True), add="+")
+                    w.bind("<Leave>", lambda e, s=set_hover: s(False), add="+")
                 except Exception:
                     pass
 
