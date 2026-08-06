@@ -54,11 +54,15 @@ export function buildQuery(params: object | undefined): string {
 
 async function request<T>(path: string, params?: object): Promise<T> {
   const url = `${API_BASE_URL}${path}${buildQuery(params)}`
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 10000)
   let res: Response
   try {
-    res = await fetch(url, { headers: { Accept: 'application/json' } })
+    res = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal })
   } catch {
     throw new ApiError(0, 'Не удалось связаться с сервером. Проверьте подключение.')
+  } finally {
+    clearTimeout(timer)
   }
   if (!res.ok) {
     let detail = `Ошибка запроса (${res.status})`

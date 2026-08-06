@@ -14,6 +14,7 @@ photo_path в БД теперь бывает двух видов:
 перерисовку списка (кэш на диске по хэшу URL)."""
 
 import hashlib
+import threading
 from pathlib import Path
 
 import requests
@@ -22,6 +23,8 @@ CACHE_DIR = Path("photo_cache")
 CACHE_DIR.mkdir(exist_ok=True)
 
 _TIMEOUT_SECONDS = 15
+
+_download_lock = threading.Lock()
 
 
 def resolve_local_photo_path(photo_path, only_cached=False):
@@ -49,10 +52,51 @@ def _get_cached(url: str, only_cached=False):
     if only_cached:
         return None
     try:
-        resp = requests.get(url, timeout=_TIMEOUT_SECONDS)
-        resp.raise_for_status()
+        with _download_lock:
+            if local_path.exists():
+                return local_path
+            resp = requests.get(url, timeout=_TIMEOUT_SECONDS)
+            resp.raise_for_status()
+            local_path.write_bytes(resp.content)
     except requests.RequestException as e:
         print(f"[photo_cache] не удалось скачать {url}: {e}")
         return None
-    local_path.write_bytes(resp.content)
     return local_path
+
+
+def precache_photos(photo_paths, on_done=None):
+    """Фоново скачивает облачные фото в локальный кэш.
+
+    Все вызовы сюда должны быть НЕ-блокирующими: функция возвращается
+    сразу, а скачивание идёт в daemon-потоке. on_done (если задан)
+    вызывается в этом рабочем потоке ПОСЛЕ завершения скачивания —
+    зовущий обычно делает self.after(0, ...) чтобы вернуться в UI-поток.
+
+    Если скачивать нечего (все фото уже в кэше или пустой список),
+    поток не создаётся и on_done не вызывается — это позволяет
+    безопасно переиспользовать один и тот же колбэк на каждый рендер
+    без бесконечного цикла перерисовок.
+    """
+    urls = [str(p) for p in (photo_paths or [])
+            if p and str(p).startswith("http")]
+    if not urls:
+        return
+    to_download = []
+    for u in urls:
+        suffix = Path(u.split("?")[0]).suffix or ".jpg"
+        cache_key = hashlib.sha1(u.encode("utf-8")).hexdigest()
+        if not (CACHE_DIR / f"{cache_key}{suffix}").exists():
+            to_download.append(u)
+    if not to_download:
+        return
+
+    def work():
+        for u in to_download:
+            try:
+                resolve_local_photo_path(u)
+            except Exception:
+                pass
+        if on_done:
+            on_done()
+
+    threading.Thread(target=work, daemon=True, name="photo-precache").start()

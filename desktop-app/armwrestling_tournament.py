@@ -1221,7 +1221,7 @@ iin TEXT,                        -- ИИН, 12 цифр
 # ════════════════════════════════════════════════════════════════
 from sync.sync_manager import sync_manager  # noqa: E402
 from sync.cloudinary_client import upload_photo, CloudinaryUploadError, is_configured  # noqa: E402
-from sync.photo_cache import resolve_local_photo_path  # noqa: E402
+from sync.photo_cache import precache_photos, resolve_local_photo_path  # noqa: E402
 
 _original_create_tournament = Database.create_tournament
 _original_add_category = Database.add_category
@@ -2749,7 +2749,9 @@ class DisplayServer:
             if not pp:
                 return "", 404
             try:
-                local = resolve_local_photo_path(pp)
+                # Только локальный кэш: табло обновляется каждые 2с, и
+                # скачивание Cloudinary тут (до 15с) завесило бы страницу.
+                local = resolve_local_photo_path(pp, only_cached=True)
             except Exception:
                 local = None
             if not local:
@@ -2981,7 +2983,9 @@ class ParticipantGroupCard(ctk.CTkFrame):
 
         photo_label = ctk.CTkLabel(photo_holder, text="👤",
                     font=("Arial", 30), text_color="#556677")
-        local_photo = resolve_local_photo_path(first["photo_path"]) if PIL_AVAILABLE and first["photo_path"] else None
+        # only_cached=True: карточки строятся на UI-потоке, скачивание
+        # Cloudinary (до 15с на фото) зависало бы на весь список.
+        local_photo = resolve_local_photo_path(first["photo_path"], only_cached=True) if PIL_AVAILABLE and first["photo_path"] else None
         if local_photo:
             try:
                 img = Image.open(local_photo)
@@ -3763,6 +3767,16 @@ class BracketWindow(ctk.CTkToplevel):
                 current_data,
                 next_data,
             )
+            # Табло берёт фото только из кэша (страница рефрешится каждые 2с).
+            # Прогреваем Cloudinary-фото текущих/следующих бойцов в фоне,
+            # чтобы они появились без зависания страницы.
+            warm = []
+            for d in (current_data, next_data):
+                if isinstance(d, dict):
+                    for f in (d.get("p1"), d.get("p2")):
+                        if f and f.get("photo"):
+                            warm.append(f["photo"])
+            precache_photos(warm)
 
     def _ensure_cache(self):
         if not self._cache_dirty and self._match_cache is not None:
@@ -5817,7 +5831,17 @@ class CoachesWindow(ctk.CTkFrame):
                 photo_thumb_lbl.configure(image=None, text="👤", font=("Arial", 24))
 
         if photo_path_var.get():
-            render_thumb(resolve_local_photo_path(photo_path_var.get()))
+            # Сначала показываем только кэшированное фото (не блокируя UI
+            # скачиванием), затем прогреваем Cloudinary в фоне и обновляем.
+            render_thumb(resolve_local_photo_path(photo_path_var.get(), only_cached=True))
+            def _thumb_warm_done():
+                try:
+                    if dlg.winfo_exists():
+                        dlg.after(100, lambda: render_thumb(
+                            resolve_local_photo_path(photo_path_var.get(), only_cached=True)))
+                except Exception:
+                    pass
+            precache_photos([photo_path_var.get()], on_done=_thumb_warm_done)
         else:
             photo_thumb_lbl.configure(text="👤", font=("Arial", 24))
 
@@ -7919,6 +7943,18 @@ class App(ctk.CTk):
                     on_edit=self._add_participant_dialog,
                     on_delete=self._delete_participant)
             card.pack(fill="x", padx=5, pady=4)
+
+        # Фото скачиваем в фоне (не в UI-потоке) и перерисовываем список,
+        # когда они появятся в кэше. Если скачивать нечего — колбэк не
+        # вызывается и повторной перерисовки не будет.
+        urls = [p["photo_path"] for p in participants if p.get("photo_path")]
+        def _photo_warm_done():
+            try:
+                if self.winfo_exists():
+                    self.after(150, self._refresh_participants)
+            except Exception:
+                pass
+        precache_photos(urls, on_done=_photo_warm_done)
     def _delete_participant(self, pid):
         if self._tournament_locked():
             return
