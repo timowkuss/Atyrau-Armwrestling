@@ -1243,8 +1243,10 @@ def _synced_create_tournament(self, name, date, location="", weight_tolerance=0,
     tid = _original_create_tournament(self, name, date, location, weight_tolerance,
                                       bracket_system, format_type)
     try:
-        sync_manager.on_tournament_created(tid, name, date, location,
-                                           weight_tolerance, bracket_system, format_type)
+        # Сетевой вызов (HTTP с таймаутом до 10с на попытку) уходит в фоновый
+        # FIFO-воркер — создание турнира не замораживает диалог на офлайне.
+        sync_manager.dispatch_async(lambda: sync_manager.on_tournament_created(
+            tid, name, date, location, weight_tolerance, bracket_system, format_type))
     except Exception as e:  # синк не должен ронять программу организатора
         print(f"[sync] create_tournament: {e}")
     return tid
@@ -1260,7 +1262,8 @@ def _synced_add_category(self, tid, name, max_weight, hand="Обе", age_categor
             sync_max_weight = None
         else:
             sync_max_weight = float(str(max_weight).rstrip("+"))
-        sync_manager.on_category_created(tid, cid, name, sync_max_weight, hand, age_category)
+        sync_manager.dispatch_async(lambda: sync_manager.on_category_created(
+            tid, cid, name, sync_max_weight, hand, age_category))
     except Exception as e:
         print(f"[sync] add_category: {e}")
     return cid
@@ -1271,9 +1274,9 @@ def _synced_add_participant(self, tid, name, weight, club, category_id, hand="О
     pid = _original_add_participant(self, tid, name, weight, club, category_id,
                                      hand, photo_path, age_category, athlete_id)
     try:
-        sync_manager.on_participant_added(tid, pid, name, weight, club,
-                                           category_id, hand, age_category,
-                                           athlete_id=athlete_id)
+        sync_manager.dispatch_async(lambda: sync_manager.on_participant_added(
+            tid, pid, name, weight, club, category_id, hand, age_category,
+            athlete_id=athlete_id))
     except Exception as e:
         print(f"[sync] add_participant: {e}")
     return pid
@@ -1284,8 +1287,8 @@ def _synced_update_participant(self, pid, name, weight, club, category_id, hand,
     _original_update_participant(self, pid, name, weight, club, category_id,
                                   hand, photo_path, age_category, athlete_id)
     try:
-        sync_manager.on_participant_updated(pid, name, weight, club,
-                                             category_id, hand, age_category)
+        sync_manager.dispatch_async(lambda: sync_manager.on_participant_updated(
+            pid, name, weight, club, category_id, hand, age_category))
     except Exception as e:
         print(f"[sync] update_participant: {e}")
 
@@ -6995,7 +6998,7 @@ class App(ctk.CTk):
                     text_color=TEXT_DIM, font=ctk.CTkFont(size=11),
                     anchor="w").pack(fill="x", padx=20, pady=(0, 4))
         self.tournament_scroll = ctk.CTkScrollableFrame(
-            page, fg_color=BG, orientation="horizontal", height=96)
+            page, fg_color=BG, orientation="vertical", height=232)
         self.tournament_scroll.pack(fill="x", padx=12, pady=(0, 10))
 
         # ─── Рабочая область выбранного турнира ───
@@ -7876,29 +7879,62 @@ class App(ctk.CTk):
                     font=ctk.CTkFont(size=12),
                     justify="center").pack(padx=30, pady=18)
             return
-        for t in tournaments:
+
+        # Счётчики участников и категорий по всем турнирам одним запросом.
+        p_rows = self.db.conn.execute(
+            "SELECT tournament_id, COUNT(*) AS n FROM participants GROUP BY tournament_id").fetchall()
+        c_rows = self.db.conn.execute(
+            "SELECT tournament_id, COUNT(*) AS n FROM weight_categories GROUP BY tournament_id").fetchall()
+        part_count = {r["tournament_id"]: r["n"] for r in p_rows}
+        cat_count = {r["tournament_id"]: r["n"] for r in c_rows}
+
+        for idx, t in enumerate(tournaments, 1):
             finished = bool("status" in t.keys() and t["status"] == "finished")
             active = t["id"] == self.current_tournament_id
-            card = ctk.CTkFrame(self.tournament_scroll, corner_radius=10,
+            tid = t["id"]
+
+            row = ctk.CTkFrame(self.tournament_scroll, corner_radius=10,
                     fg_color=ACCENT_DIM if active else PANEL_LIGHT,
                     border_width=1,
                     border_color=ACCENT if active else CARD_BORDER)
-            card.pack(side="left", padx=5, pady=4)
-            label_text = f"🏅 {t['name']}"
-            ctk.CTkButton(card,
-                    text=label_text,
-                    fg_color="transparent", hover_color=ACCENT_DIM,
-                    font=ctk.CTkFont(size=12, weight="bold"), anchor="w",
-                    text_color="#ffffff" if active else TEXT,
-                    command=lambda tid=t["id"]: self._select_tournament(tid)
-                    ).pack(padx=10, pady=(6, 0))
-            meta = t['date']
-            if finished:
-                meta += "  ·  ✅"
-            ctk.CTkLabel(card, text=meta,
-                    font=ctk.CTkFont(size=10),
-                    text_color="#dfe8f3" if active else TEXT_FAINT,
-                    anchor="w").pack(padx=10, pady=(0, 6))
+            row.pack(fill="x", padx=12, pady=4)
+
+            head = ctk.CTkFrame(row, fg_color="transparent")
+            head.pack(fill="x", padx=12, pady=(8, 0))
+            ctk.CTkLabel(head, text=f"{idx}.", width=32, anchor="w",
+                    font=ctk.CTkFont(size=13, weight="bold"),
+                    text_color=ACCENT if not active else "#ffffff").pack(side="left")
+            ctk.CTkLabel(head, text=f"🏅  {t['name']}", anchor="w",
+                    font=ctk.CTkFont(size=13, weight="bold"),
+                    text_color="#ffffff" if active else TEXT).pack(
+                    side="left", fill="x", expand=True)
+            badge_color = "#ff6666" if finished else "#4dff88"
+            ctk.CTkLabel(head, text="ОКОНЧЕН" if finished else "ИДЁТ",
+                    fg_color=badge_color, text_color="#0d1117", corner_radius=5,
+                    font=ctk.CTkFont(size=10, weight="bold"),
+                    ).pack(side="right", ipadx=6, ipady=2)
+
+            bracket = t["bracket_system"] if "bracket_system" in t.keys() else "double"
+            ftype = t["format_type"] if "format_type" in t.keys() else "separate"
+            fmt_bracket = "До 1 поражения" if bracket == "single" else "До 2 поражений"
+            fmt_format = "Двоеборье" if ftype == "combined" else "На отдельных руках"
+            info = (f"📅 {t['date']}    👥 {part_count.get(tid, 0)} уч.    "
+                    f"⚖️ {cat_count.get(tid, 0)} кат.    {fmt_format}    {fmt_bracket}")
+            ctk.CTkLabel(row, text=info, anchor="w",
+                    font=ctk.CTkFont(size=11),
+                    text_color="#dfe8f3" if active else TEXT_DIM).pack(
+                    fill="x", padx=12, pady=(2, 8))
+
+            # Вся строка кликабельна — выбирает турнир.
+            def select(tid=tid):
+                self._select_tournament(tid)
+            clickables = [row, head]
+            clickables += list(head.winfo_children()) + list(row.winfo_children())
+            for w in clickables:
+                try:
+                    w.bind("<Button-1>", lambda e, s=select: s(), add="+")
+                except Exception:
+                    pass
 
     def _select_tournament(self, tid):
         self.current_tournament_id = tid
