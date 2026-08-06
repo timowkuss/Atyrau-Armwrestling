@@ -1,4 +1,4 @@
-﻿"""
+"""
 ╔════╗
 ║        АРМРЕСТЛИНГ — МЕНЕДЖЕР СОРЕВНОВАНИЙ               ║
 ║        Формат: до 2 поражений (Double Elimination)       ║
@@ -4782,29 +4782,12 @@ class AthleteCard(ctk.CTkFrame):
     # ════
     #  ОКНО «СПОРТСМЕНЫ» — общий реестр, не привязан к турниру
     # ════
-class AthletesWindow(ctk.CTkToplevel):
+class AthletesWindow(ctk.CTkFrame):
     def __init__(self, master, db):
-        super().__init__(master)
-        self.withdraw()
+        super().__init__(master, fg_color=BG, corner_radius=0)
         self.db = db
-        self.title("👤 Спортсмены — общий реестр")
-        self.geometry("820x640")
-        center_toplevel(self, 820, 640)
-        self.minsize(600, 400)
-        self.configure(fg_color=BG)
-        self.after(50, self.safe_init)
-
-    def safe_init(self):
-        try:
-            self._build_ui()
-            self._refresh_list()
-        finally:
-            # Показываем окно в любом случае, даже если что-то выше упало —
-            # иначе окно навсегда останется в withdraw() (невидимым), а
-            # winfo_exists() всё равно будет True, и повторные клики по
-            # кнопке "Спортсмены" будут просто фокусировать невидимое окно,
-            # выглядя так, будто бы кнопка не реагирует.
-            self.deiconify()
+        self._build_ui()
+        self._refresh_list()
 
     def _build_ui(self):
         ctrl = ctk.CTkFrame(self, fg_color="transparent")
@@ -5382,24 +5365,12 @@ class CoachCard(ctk.CTkFrame):
         self.columnconfigure(col + 1, weight=1)
 
 
-class CoachesWindow(ctk.CTkToplevel):
+class CoachesWindow(ctk.CTkFrame):
     def __init__(self, master, db):
-        super().__init__(master)
-        self.withdraw()
+        super().__init__(master, fg_color=BG, corner_radius=0)
         self.db = db
-        self.title("🧑‍🏫 Тренеры — общий реестр")
-        self.geometry("820x640")
-        center_toplevel(self, 820, 640)
-        self.minsize(600, 400)
-        self.configure(fg_color=BG)
-        self.after(50, self.safe_init)
-
-    def safe_init(self):
-        try:
-            self._build_ui()
-            self._refresh_list()
-        finally:
-            self.deiconify()
+        self._build_ui()
+        self._refresh_list()
 
     def _build_ui(self):
         ctrl = ctk.CTkFrame(self, fg_color="transparent")
@@ -5542,7 +5513,7 @@ class CoachesWindow(ctk.CTkToplevel):
             dlg.minsize(680, 790)
             dlg.resizable(False, False)
         dlg.configure(bg=BG)
-        dlg.transient(self)
+        dlg.transient(self.winfo_toplevel())
         dlg.grab_set()
         dlg.focus_force()
 
@@ -6123,24 +6094,12 @@ class ClubCard(ctk.CTkFrame):
         self.columnconfigure(col + 1, weight=1)
 
 
-class ClubsWindow(ctk.CTkToplevel):
+class ClubsWindow(ctk.CTkFrame):
     def __init__(self, master, db):
-        super().__init__(master)
-        self.withdraw()
+        super().__init__(master, fg_color=BG, corner_radius=0)
         self.db = db
-        self.title("🏛 Клубы — реестр")
-        self.geometry("860x640")
-        center_toplevel(self, 860, 640)
-        self.minsize(600, 400)
-        self.configure(fg_color=BG)
-        self.after(50, self.safe_init)
-
-    def safe_init(self):
-        try:
-            self._build_ui()
-            self._refresh_list()
-        finally:
-            self.deiconify()
+        self._build_ui()
+        self._refresh_list()
 
     def _build_ui(self):
         ctrl = ctk.CTkFrame(self, fg_color="transparent")
@@ -6244,7 +6203,7 @@ class ClubsWindow(ctk.CTkToplevel):
             dlg.minsize(700, 560)
             dlg.resizable(False, False)
         dlg.configure(bg=BG)
-        dlg.transient(self)
+        dlg.transient(self.winfo_toplevel())
         dlg.grab_set()
         dlg.focus_force()
 
@@ -6582,7 +6541,7 @@ class ClubsWindow(ctk.CTkToplevel):
         sw, sh = picker.winfo_screenwidth(), picker.winfo_screenheight()
         picker.geometry(f"480x540+{(sw-480)//2}+{(sh-540)//2}")
         picker.configure(bg=BG)
-        picker.transient(self)
+        picker.transient(self.winfo_toplevel())
         picker.grab_set()
 
         search_var = ctk.StringVar()
@@ -6651,7 +6610,7 @@ class ClubsWindow(ctk.CTkToplevel):
         sw, sh = picker.winfo_screenwidth(), picker.winfo_screenheight()
         picker.geometry(f"480x540+{(sw-480)//2}+{(sh-540)//2}")
         picker.configure(bg=BG)
-        picker.transient(self)
+        picker.transient(self.winfo_toplevel())
         picker.grab_set()
 
         search_var = ctk.StringVar()
@@ -6784,43 +6743,94 @@ class App(ctk.CTk):
         ctk.CTkLabel(self.sidebar,
                     text="🦾 ArmWrestling\nTournament",
                     font=ctk.CTkFont(size=16, weight="bold"),
-                    text_color="#4a9eff").pack(pady=(20, 5), padx=15)
+                    text_color=ACCENT).pack(pady=(22, 4), padx=15)
         ctk.CTkLabel(self.sidebar, text="Manager + Scanner",
                     font=ctk.CTkFont(size=11),
-                    text_color="#445566").pack(pady=(0, 20))
+                    text_color=TEXT_FAINT).pack(pady=(0, 26))
 
-        ctk.CTkButton(self.sidebar, text="➕ Новый турнир",
-                    height=38, fg_color="#1a4a2a", hover_color="#2a6a3a",
-                    command=self._new_tournament).pack(padx=15, pady=6, fill="x")
-        
-        ctk.CTkButton(self.sidebar, text="👤 Спортсмены", height=38,
-                    fg_color="#1a2535", hover_color="#253545",
-                    command=self._open_athletes_window).pack(padx=15, pady=(0, 6), fill="x")
-
-        ctk.CTkButton(self.sidebar, text="🧑‍🏫 Тренеры", height=38,
-                    fg_color="#1a2535", hover_color="#253545",
-                    command=self._open_coaches_window).pack(padx=15, pady=(0, 6), fill="x")
-
-        ctk.CTkButton(self.sidebar, text="🏛 Клубы", height=38,
-                    fg_color="#1a2535", hover_color="#253545",
-                    command=self._open_clubs_window).pack(padx=15, pady=(0, 6), fill="x")
-
-        ctk.CTkLabel(self.sidebar, text="ТУРНИРЫ",
-                    font=ctk.CTkFont(size=10, weight="bold"),
-                    text_color="#445566").pack(padx=15, pady=(15, 5), anchor="w")
-
-        self.tournament_scroll = ScrollableFrame(self.sidebar, fg_color=PANEL, height=400)
-        self.tournament_scroll.pack(fill="x", padx=10, pady=5)
-
-        ctk.CTkButton(self.sidebar, text="🗑 Удалить турнир",
-                    height=34, fg_color="#3a1010", hover_color="#5a2020",
-                    command=self._delete_tournament).pack(padx=15, pady=6, fill="x",
-                    side="bottom")
+        self.nav_buttons = {}
+        nav_items = [
+            ("tournaments", "🏆  Турниры"),
+            ("athletes", "👤  Спортсмены"),
+            ("coaches", "🧑‍🏫  Тренеры"),
+            ("clubs", "🏛  Клубы"),
+        ]
+        for key, text in nav_items:
+            btn = ctk.CTkButton(self.sidebar, text=text, height=42,
+                        corner_radius=8, anchor="w",
+                        fg_color="transparent", hover_color=PANEL_LIGHT,
+                        text_color=TEXT_DIM, font=ctk.CTkFont(size=13),
+                        command=lambda k=key: self._show_page(k))
+            btn.pack(fill="x", padx=12, pady=4)
+            self.nav_buttons[key] = btn
 
         self.main = ctk.CTkFrame(self, fg_color=BG, corner_radius=0)
         self.main.pack(side="right", fill="both", expand=True)
 
-        self.header = ctk.CTkFrame(self.main, height=60, fg_color=PANEL, corner_radius=0)
+        self.pages = {}
+        self._build_tournaments_page()
+        self._build_athletes_page()
+        self._build_coaches_page()
+        self._build_clubs_page()
+        self._show_page("tournaments")
+
+    def _show_page(self, name):
+        """Переключает страницы в главной области: прячет остальные и
+        показывает выбранную, подсвечивая активную кнопку сайдбара."""
+        self.current_page = name
+        for key, page in self.pages.items():
+            if key == name:
+                page.pack(fill="both", expand=True)
+            else:
+                page.pack_forget()
+        for key, btn in self.nav_buttons.items():
+            active = (key == name)
+            btn.configure(
+                fg_color=ACCENT_DIM if active else "transparent",
+                hover_color=ACCENT_HOVER if active else PANEL_LIGHT,
+                text_color="#ffffff" if active else TEXT_DIM,
+            )
+        # При каждом открытии страницы — свежие данные из БД.
+        if name == "tournaments":
+            self._refresh_tournament_list()
+        elif name == "athletes" and hasattr(self, "_athletes_page"):
+            self._athletes_page._refresh_list()
+        elif name == "coaches" and hasattr(self, "_coaches_page"):
+            self._coaches_page._refresh_list()
+        elif name == "clubs" and hasattr(self, "_clubs_page"):
+            self._clubs_page._refresh_list()
+
+    def _build_tournaments_page(self):
+        page = ctk.CTkFrame(self.main, fg_color=BG, corner_radius=0)
+        self.pages["tournaments"] = page
+
+        # ─── Верхняя панель: заголовок + создание/удаление турнира ───
+        top = ctk.CTkFrame(page, fg_color="transparent")
+        top.pack(fill="x", padx=20, pady=(16, 8))
+        ctk.CTkLabel(top, text="Турниры",
+                    font=ctk.CTkFont(size=20, weight="bold")).pack(side="left")
+        self.new_tournament_btn = ctk.CTkButton(
+            top, text="➕  Создать турнир", height=38, width=170,
+            fg_color=SUCCESS, hover_color=SUCCESS_HOVER,
+            font=ctk.CTkFont(size=13, weight="bold"),
+            command=self._new_tournament)
+        self.new_tournament_btn.pack(side="right")
+        self.delete_tournament_btn = ctk.CTkButton(
+            top, text="🗑  Удалить", height=38, width=110,
+            fg_color=DANGER, hover_color=DANGER_HOVER,
+            command=self._delete_tournament)
+        self.delete_tournament_btn.pack(side="right", padx=(0, 10))
+
+        # ─── Лента турниров (выбор активного) ───
+        ctk.CTkLabel(page, text="Выберите турнир:",
+                    text_color=TEXT_DIM, font=ctk.CTkFont(size=11),
+                    anchor="w").pack(fill="x", padx=20, pady=(0, 4))
+        self.tournament_scroll = ctk.CTkScrollableFrame(
+            page, fg_color=BG, orientation="horizontal", height=96)
+        self.tournament_scroll.pack(fill="x", padx=12, pady=(0, 10))
+
+        # ─── Рабочая область выбранного турнира ───
+        self.header = ctk.CTkFrame(page, height=60, fg_color=PANEL, corner_radius=0)
         self.header.pack(fill="x")
         self.header.pack_propagate(False)
         self.title_label = ctk.CTkLabel(self.header,
@@ -6834,18 +6844,18 @@ class App(ctk.CTk):
 
         self.finish_btn = ctk.CTkButton(self.header, text="🏁 Завершить турнир",
                     width=170, height=34,
-                    fg_color="#4a3a1a", hover_color="#6a5a2a",
+                    fg_color=WARNING, hover_color=WARNING_HOVER,
                     command=self._toggle_finish_tournament)
         self.finish_btn.pack(side="right", padx=20, pady=13)
 
         self.display_btn = ctk.CTkButton(self.header, text="📺 Табло",
                     width=110, height=34,
-                    fg_color="#1a2535", hover_color="#253545",
+                    fg_color=ACCENT_DIM, hover_color=ACCENT_HOVER,
                     command=self._open_display_board)
         self.display_btn.pack(side="right", padx=(0, 8), pady=13)
 
-        self.notebook = ctk.CTkTabview(self.main, fg_color=BG)
-        self.notebook.pack(fill="both", expand=True, padx=8, pady=8)
+        self.notebook = ctk.CTkTabview(page, fg_color=BG)
+        self.notebook.pack(fill="both", expand=True, padx=8, pady=(0, 8))
         self.notebook.add("⚖️ Категории")
         self.notebook.add("👥 Участники")
         self.notebook.add("🏆 Сетки")
@@ -6853,6 +6863,24 @@ class App(ctk.CTk):
         self._build_categories_tab()
         self._build_participants_tab()
         self._build_brackets_tab()
+
+    def _build_athletes_page(self):
+        page = ctk.CTkFrame(self.main, fg_color=BG, corner_radius=0)
+        self.pages["athletes"] = page
+        self._athletes_page = AthletesWindow(page, self.db)
+        self._athletes_page.pack(fill="both", expand=True)
+
+    def _build_coaches_page(self):
+        page = ctk.CTkFrame(self.main, fg_color=BG, corner_radius=0)
+        self.pages["coaches"] = page
+        self._coaches_page = CoachesWindow(page, self.db)
+        self._coaches_page.pack(fill="both", expand=True)
+
+    def _build_clubs_page(self):
+        page = ctk.CTkFrame(self.main, fg_color=BG, corner_radius=0)
+        self.pages["clubs"] = page
+        self._clubs_page = ClubsWindow(page, self.db)
+        self._clubs_page.pack(fill="both", expand=True)
 
     def _build_categories_tab(self):
         tab = self.notebook.tab("⚖️ Категории")
@@ -7675,26 +7703,33 @@ class App(ctk.CTk):
         if not tournaments:
             ctk.CTkLabel(self.tournament_scroll,
                     text="Нет турниров.\nСоздайте первый!",
-                    text_color="#445566",
-                    font=ctk.CTkFont(size=11),
-                    justify="center").pack(pady=20, padx=10)
+                    text_color=TEXT_FAINT,
+                    font=ctk.CTkFont(size=12),
+                    justify="center").pack(padx=30, pady=18)
             return
         for t in tournaments:
             finished = bool("status" in t.keys() and t["status"] == "finished")
-            fr = ctk.CTkFrame(self.tournament_scroll, corner_radius=8,
-                    fg_color="#1a2535" if t["id"] != self.current_tournament_id else "#1a3a5a")
-            fr.pack(fill="x", padx=5, pady=3)
-            label_text = f"🏅 {t['name']}\n{t['date']}"
-            if finished:
-                label_text += "   ✅ ЗАВЕРШЁН"
-            ctk.CTkButton(fr,
+            active = t["id"] == self.current_tournament_id
+            card = ctk.CTkFrame(self.tournament_scroll, corner_radius=10,
+                    fg_color=ACCENT_DIM if active else PANEL_LIGHT,
+                    border_width=1,
+                    border_color=ACCENT if active else CARD_BORDER)
+            card.pack(side="left", padx=5, pady=4)
+            label_text = f"🏅 {t['name']}"
+            ctk.CTkButton(card,
                     text=label_text,
-                    fg_color="transparent", hover_color="#253545",
-                    font=ctk.CTkFont(size=11), anchor="w",
-                    text_color=("#8bc98b" if finished else "#dce6f0"),
-                    height=48,
+                    fg_color="transparent", hover_color=ACCENT_DIM,
+                    font=ctk.CTkFont(size=12, weight="bold"), anchor="w",
+                    text_color="#ffffff" if active else TEXT,
                     command=lambda tid=t["id"]: self._select_tournament(tid)
-                    ).pack(fill="x", padx=2, pady=2)
+                    ).pack(padx=10, pady=(6, 0))
+            meta = t['date']
+            if finished:
+                meta += "  ·  ✅"
+            ctk.CTkLabel(card, text=meta,
+                    font=ctk.CTkFont(size=10),
+                    text_color="#dfe8f3" if active else TEXT_FAINT,
+                    anchor="w").pack(padx=10, pady=(0, 6))
 
     def _select_tournament(self, tid):
         self.current_tournament_id = tid
@@ -7765,30 +7800,6 @@ class App(ctk.CTk):
                     "Чтобы снова редактировать, нажмите «Возобновить турнир».")
         return locked
     
-    def _open_athletes_window(self):
-        if hasattr(self, "_athletes_window") and self._athletes_window.winfo_exists():
-            self._athletes_window.deiconify()
-            self._athletes_window.lift()
-            self._athletes_window.focus()
-            return
-        self._athletes_window = AthletesWindow(self, self.db)
-
-    def _open_coaches_window(self):
-        if hasattr(self, "_coaches_window") and self._coaches_window.winfo_exists():
-            self._coaches_window.deiconify()
-            self._coaches_window.lift()
-            self._coaches_window.focus()
-            return
-        self._coaches_window = CoachesWindow(self, self.db)
-
-    def _open_clubs_window(self):
-        if hasattr(self, "_clubs_window") and self._clubs_window.winfo_exists():
-            self._clubs_window.deiconify()
-            self._clubs_window.lift()
-            self._clubs_window.focus()
-            return
-        self._clubs_window = ClubsWindow(self, self.db)
-
     def _open_bracket_window(self, category, hand):
         """Не даёт открыть сетку одной и той же категории/руки дважды —
         два окна над одними и теми же матчами расходятся по данным
