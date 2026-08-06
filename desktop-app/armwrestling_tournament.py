@@ -7924,7 +7924,7 @@ class App(ctk.CTk):
                     font=ctk.CTkFont(size=14, weight="bold"),
                     text_color=ACCENT if not active else "#ffffff")
             num_lbl.pack(side="left")
-            loc = f" ({t['location']})" if t.get("location") else ""
+            loc = f" ({t['location']})" if ("location" in t.keys() and t["location"]) else ""
             name_lbl = ctk.CTkLabel(head, text=f"🏅  {t['name']}{loc}", anchor="w",
                     font=ctk.CTkFont(size=14, weight="bold"),
                     text_color="#ffffff" if active else TEXT)
