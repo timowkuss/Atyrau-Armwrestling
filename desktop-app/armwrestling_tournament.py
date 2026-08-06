@@ -5741,17 +5741,7 @@ class CoachesWindow(ctk.CTkToplevel):
 
             def worker():
                 try:
-                    tournament = (self.db.get_tournament(self.current_tournament_id)
-                                  if self.current_tournament_id else None)
-                    folder = "athletes"
-                    if tournament:
-                        # Если у турнира папки нет (создан до этой функции или
-                        # ещё не бэкфиллен) — вычисляем её из названия на лету,
-                        # чтобы фото не падало в общую "athletes".
-                        folder = (tournament["photo_folder"]
-                                  or tournament_photo_folder(tournament["name"])
-                                  or "athletes")
-                    url = upload_photo(p, folder=folder)
+                    url = upload_photo(p, folder="coaches")
                 except CloudinaryUploadError as e:
                     def on_error():
                         photo_status_lbl.configure(text=f"Ошибка: {e}", text_color=ERR)
@@ -7236,7 +7226,18 @@ class App(ctk.CTk):
 
             def worker():
                 try:
-                    url = upload_photo(p, folder="athletes")
+                    tournament = (self.db.get_tournament(self.current_tournament_id)
+                                  if self.current_tournament_id else None)
+                    folder = "athletes"
+                    if tournament:
+                        # Фото участника лежит в папке СВОЕГО турнира, а не в
+                        # общей "athletes" — так фото одного турнира не
+                        # смешиваются с фото другого, и при удалении участника
+                        # по папке понятно, что файл принадлежит турниру.
+                        folder = (tournament["photo_folder"]
+                                  or tournament_photo_folder(tournament["name"])
+                                  or "athletes")
+                    url = upload_photo(p, folder=folder)
                 except CloudinaryUploadError as e:
                     def on_error():
                         photo_status_lbl.configure(text=f"Ошибка: {e}", text_color=ERR)
