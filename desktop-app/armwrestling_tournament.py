@@ -2686,6 +2686,7 @@ class DisplayServer:
                   f"this.src='/photo/{tnum}-{slot}';}}"
                   f"else{{this.style.display='none';}}")
             photo = (f'<img class="fighter-photo" src="{src}" '
+                     f'referrerpolicy="no-referrer" '
                      f'style="width:{photo_size}px;height:{photo_size}px" '
                      f'onerror="{fb}">')
             return (f'<div class="fighter">{photo}'
@@ -2800,6 +2801,7 @@ class DisplayServer:
 <meta charset="utf-8">
 <meta http-equiv="refresh" content="2">
 <title>Турнир</title>
+<!-- board v3: direct cloudinary photos -->
 <style>
 * {{ box-sizing: border-box; margin: 0; padding: 0; }}
 body {{
@@ -2895,9 +2897,33 @@ body {{
 <div class="grid">
 {blocks}
 </div>
-<div class="footer">Турнирная система: Double Elimination (до 2 поражений)</div>
+<div class="footer">Турнирная система: Double Elimination (до 2 поражений) · build {DisplayServer._build_tag()}</div>
 </body>
 </html>"""
+
+        @self.app.route("/diag")
+        def diag():
+            """Диагностика: какой код обслуживает табло и какие фото переданы."""
+            out = {"build": DisplayServer._build_tag(), "tables": {}}
+            for tnum, d in self.tables.items():
+                def row(holder):
+                    if not isinstance(holder, dict):
+                        return None
+                    if holder.get("message"):
+                        return {"message": holder["message"]}
+                    r = {}
+                    for k in ("p1", "p2"):
+                        f = holder.get(k) or {}
+                        r[k] = {"name": f.get("name"), "photo": f.get("photo")}
+                    return r
+                out["tables"][tnum] = {
+                    "category": d.get("category"),
+                    "hand": d.get("hand"),
+                    "current": row(d.get("current_match")),
+                    "next": row(d.get("next_match")),
+                }
+            from flask import jsonify
+            return jsonify(out)
 
     def update_table(self, table_num, category, hand, current_match, next_match):
         self.tables[str(table_num)] = {
@@ -2911,15 +2937,20 @@ body {{
         self.tables.pop(str(table_num), None)
 
     def start(self):
-        Thread(
-            target=lambda: self.app.run(
-                host="0.0.0.0",
-                port=5000,
-                debug=False,
-                use_reloader=False
-            ),
-            daemon=True
-        ).start()
+        def run():
+            try:
+                self.app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
+            except OSError as e:
+                if "address already in use" in str(e).lower() or "winerror 10048" in str(e).lower():
+                    print("[display] ⚠ ПОРТ 5000 занят другой копией приложения — "
+                          "табло отдаёт СТАРЫЙ процесс! Закройте все копии и запустите заново.")
+                else:
+                    print(f"[display] ошибка запуска табло: {e}")
+        Thread(target=run, daemon=True).start()
+
+    @staticmethod
+    def _build_tag():
+        return "v3-cdn"
 
 
 # ════
