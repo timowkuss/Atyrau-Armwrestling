@@ -6964,6 +6964,11 @@ class App(ctk.CTk):
             )
         # При каждом открытии страницы — свежие данные из БД.
         if name == "tournaments":
+            # Всегда показываем список, даже если до этого была открыта
+            # рабочая область какого-то турнира.
+            if hasattr(self, "tournament_detail_view"):
+                self.tournament_detail_view.pack_forget()
+                self.tournament_list_view.pack(fill="both", expand=True)
             self._refresh_tournament_list()
         elif name == "athletes" and hasattr(self, "_athletes_page"):
             self._athletes_page._refresh_list()
@@ -6976,8 +6981,11 @@ class App(ctk.CTk):
         page = ctk.CTkFrame(self.main, fg_color=BG, corner_radius=0)
         self.pages["tournaments"] = page
 
-        # ─── Верхняя панель: заголовок + создание/удаление турнира ───
-        top = ctk.CTkFrame(page, fg_color="transparent")
+        # ─── Вид 1: список турниров — занимает весь экран ───
+        self.tournament_list_view = ctk.CTkFrame(page, fg_color=BG, corner_radius=0)
+        self.tournament_list_view.pack(fill="both", expand=True)
+
+        top = ctk.CTkFrame(self.tournament_list_view, fg_color="transparent")
         top.pack(fill="x", padx=20, pady=(16, 8))
         ctk.CTkLabel(top, text="Турниры",
                     font=ctk.CTkFont(size=20, weight="bold")).pack(side="left")
@@ -6993,22 +7001,32 @@ class App(ctk.CTk):
             command=self._delete_tournament)
         self.delete_tournament_btn.pack(side="right", padx=(0, 10))
 
-        # ─── Лента турниров (выбор активного) ───
-        ctk.CTkLabel(page, text="Выберите турнир:",
+        ctk.CTkLabel(self.tournament_list_view, text="Выберите турнир:",
                     text_color=TEXT_DIM, font=ctk.CTkFont(size=11),
                     anchor="w").pack(fill="x", padx=20, pady=(0, 4))
         self.tournament_scroll = ctk.CTkScrollableFrame(
-            page, fg_color=BG, orientation="vertical", height=232)
-        self.tournament_scroll.pack(fill="x", padx=12, pady=(0, 10))
+            self.tournament_list_view, fg_color=BG, orientation="vertical")
+        self.tournament_scroll.pack(fill="both", expand=True, padx=12, pady=(0, 10))
 
-        # ─── Рабочая область выбранного турнира ───
-        self.header = ctk.CTkFrame(page, height=60, fg_color=PANEL, corner_radius=0)
+        # ─── Вид 2: рабочая область выбранного турнира ───
+        self.tournament_detail_view = ctk.CTkFrame(page, fg_color=BG, corner_radius=0)
+
+        self.header = ctk.CTkFrame(self.tournament_detail_view, height=60,
+                                   fg_color=PANEL, corner_radius=0)
         self.header.pack(fill="x")
         self.header.pack_propagate(False)
+
+        self.back_btn = ctk.CTkButton(self.header, text="←  Назад",
+                    width=96, height=34,
+                    fg_color=PANEL_LIGHT, hover_color=ACCENT_DIM,
+                    font=ctk.CTkFont(size=12, weight="bold"),
+                    command=self._back_to_tournaments)
+        self.back_btn.pack(side="left", padx=(14, 4), pady=13)
+
         self.title_label = ctk.CTkLabel(self.header,
                     text="Выберите или создайте турнир",
                     font=ctk.CTkFont(size=18, weight="bold"))
-        self.title_label.pack(side="left", padx=25, pady=15)
+        self.title_label.pack(side="left", padx=(8, 0), pady=15)
 
         self.status_badge = ctk.CTkLabel(self.header, text="", text_color="#0d1117",
                     corner_radius=6, font=ctk.CTkFont(size=11, weight="bold"))
@@ -7026,7 +7044,7 @@ class App(ctk.CTk):
                     command=self._open_display_board)
         self.display_btn.pack(side="right", padx=(0, 8), pady=13)
 
-        self.notebook = ctk.CTkTabview(page, fg_color=BG)
+        self.notebook = ctk.CTkTabview(self.tournament_detail_view, fg_color=BG)
         self.notebook.pack(fill="both", expand=True, padx=8, pady=(0, 8))
         self.notebook.add("⚖️ Категории")
         self.notebook.add("👥 Участники")
@@ -7946,6 +7964,19 @@ class App(ctk.CTk):
         self._refresh_categories()
         self._refresh_participants()
         self._refresh_brackets_tab()
+        self._show_tournament_detail()
+
+    def _show_tournament_detail(self):
+        """Скрывает список турниров и открывает рабочую область выбранного."""
+        self.tournament_list_view.pack_forget()
+        self.tournament_detail_view.pack(fill="both", expand=True)
+
+    def _back_to_tournaments(self):
+        """Возврат из рабочей области турнира к полному списку турниров."""
+        self.current_tournament_id = None
+        self.tournament_detail_view.pack_forget()
+        self.tournament_list_view.pack(fill="both", expand=True)
+        self._refresh_tournament_list()
 
     def _refresh_status_badge(self, tournament=None):
         """Обновляет бейджик статуса и текст кнопки завершения/возобновления."""
@@ -8174,12 +8205,7 @@ class App(ctk.CTk):
             return
 
         self.db.delete_tournament(self.current_tournament_id)
-        self.current_tournament_id = None
-        self.title_label.configure(text="Выберите или создайте турнир")
-        self._refresh_tournament_list()
-        self._refresh_categories()
-        self._refresh_participants()
-        self._refresh_brackets_tab()
+        self._back_to_tournaments()
 
     def on_close(self):
         if messagebox.askyesno("Выход", "Закрыть программу?"):
