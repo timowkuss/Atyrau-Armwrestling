@@ -2750,11 +2750,15 @@ class DisplayServer:
                 return "", 404
             try:
                 # Только локальный кэш: табло обновляется каждые 2с, и
-                # скачивание Cloudinary тут (до 15с) завесило бы страницу.
+                # синхронное скачивание Cloudinary (до 15с) завесило бы
+                # страницу. Если фото ещё не в кэше — запускаем фоновую
+                # загрузку и отдаём 404; следующая авто-перезагрузка
+                # (через 2с) уже отдаст скачанное фото.
                 local = resolve_local_photo_path(pp, only_cached=True)
             except Exception:
                 local = None
             if not local:
+                precache_photos([pp])
                 return "", 404
             from flask import send_file
             return send_file(str(local), max_age=300)

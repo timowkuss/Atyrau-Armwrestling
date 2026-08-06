@@ -25,6 +25,8 @@ CACHE_DIR.mkdir(exist_ok=True)
 _TIMEOUT_SECONDS = 15
 
 _download_lock = threading.Lock()
+_inflight: set[str] = set()
+_inflight_lock = threading.Lock()
 
 
 def resolve_local_photo_path(photo_path, only_cached=False):
@@ -89,14 +91,23 @@ def precache_photos(photo_paths, on_done=None):
             to_download.append(u)
     if not to_download:
         return
+    with _inflight_lock:
+        fresh = [u for u in to_download if u not in _inflight]
+        if not fresh:
+            return
+        _inflight.update(fresh)
 
     def work():
-        for u in to_download:
-            try:
-                resolve_local_photo_path(u)
-            except Exception:
-                pass
-        if on_done:
-            on_done()
+        try:
+            for u in fresh:
+                try:
+                    resolve_local_photo_path(u)
+                except Exception:
+                    pass
+            if on_done:
+                on_done()
+        finally:
+            with _inflight_lock:
+                _inflight.difference_update(fresh)
 
     threading.Thread(target=work, daemon=True, name="photo-precache").start()
