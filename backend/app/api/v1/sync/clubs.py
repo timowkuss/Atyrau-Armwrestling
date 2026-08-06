@@ -7,6 +7,7 @@ from app.db.models.clubs import Club, find_club_by_name
 from app.db.models.geo import City
 from app.db.session import get_db
 from app.schemas.sync import ClubSyncCreate, ClubSyncItem, ClubSyncUpdate
+from app.services.cloudinary_photos import delete_cloudinary_photo
 
 router = APIRouter(prefix="/clubs", tags=["sync:clubs"])
 
@@ -96,12 +97,21 @@ def update_club(
     if "founded_date" in data:
         data["founded_date"] = _parse_founded_date(data["founded_date"])
 
+    old_logo_path = club.logo_path
     for field, value in data.items():
         if not hasattr(club, field):
             continue
         setattr(club, field, value)
 
     db.commit()
+
+    # Старое лого удаляем только ПОСЛЕ успешного сохранения новой ссылки
+    # (зеркально admin/clubs.py и sync/athletes.py, coaches.py) — десктоп
+    # при замене лого пушит новый logo_path, старый Cloudinary-файл больше
+    # не нужен.
+    if old_logo_path and old_logo_path != club.logo_path:
+        delete_cloudinary_photo(old_logo_path)
+
     return {"status": "ok"}
 
 
@@ -115,6 +125,9 @@ def delete_club(
     if club is None:
         raise HTTPException(status_code=404, detail="Клуб не найден")
 
+    logo_path = club.logo_path
     db.delete(club)
     db.commit()
+    if logo_path:
+        delete_cloudinary_photo(logo_path)
     return {"status": "deleted"}
