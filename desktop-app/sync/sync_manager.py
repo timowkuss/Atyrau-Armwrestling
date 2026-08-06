@@ -128,6 +128,23 @@ class SyncManager:
         # этот вызов просто сразу вернёт None вместо дублирования отправки.
         return self.flush_pending()
 
+    def try_auto_flush_async(self) -> bool:
+        """Неблокирующая версия try_auto_flush для UI-тикера: та же
+        проверка очереди и rate-limit (не чаще раза в 5с), но сама сетевая
+        часть (HTTP с таймаутом до REQUEST_TIMEOUT_SECONDS на вызов) уходит
+        в отдельный фоновый поток через _trigger_immediate_flush, чтобы
+        тикер на UI-потоке не замирал на недоступном сервере. Возвращает
+        True, если отправка запланирована."""
+        import time as _time
+        now = _time.time()
+        if self.state.pending_count() == 0:
+            return False
+        if now - self._last_flush_attempt < 5:
+            return False
+        self._last_flush_attempt = now
+        self._trigger_immediate_flush()
+        return True
+
     # Короткие повторы прямо здесь (внутри фонового sync-воркера, поэтому
     # никогда не подвешивают UI) — гасят типичную для зала соревнований
     # ситуацию "вайфай моргнул на секунду". Без них один неудачный PATCH

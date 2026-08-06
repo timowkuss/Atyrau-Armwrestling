@@ -8003,14 +8003,11 @@ class App(ctk.CTk):
         try:
             from sync.sync_manager import sync_manager
             if sync_manager.state.pending_count() > 0:
-                result = sync_manager.try_auto_flush()
-                if result:
-                    succeeded, remaining = result
-                    if succeeded > 0:
-                        print(f"[auto-sync] отправлено {succeeded}, осталось {remaining}")
-                        self._refresh_status_badge()
-                        if remaining == 0:
-                            self._show_sync_toast("Все данные синхронизированы")
+                # Неблокирующий flush: сетевая часть (HTTP с таймаутом до 10с
+                # на вызов) крутится в фоновом потоке, тикер на UI-потоке
+                # мгновенно возвращается — интерфейс не замирает на
+                # недоступном сервере.
+                sync_manager.try_auto_flush_async()
             blocked = sync_manager.take_blocked_warning()
             if blocked:
                 ops = ", ".join(sorted({b["operation"] for b in blocked}))
