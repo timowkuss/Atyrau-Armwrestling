@@ -717,11 +717,18 @@ iin TEXT,                        -- ИИН, 12 цифр
                           bracket_system="double", format_type="separate"):
         cur = self.conn.execute(
             "INSERT INTO tournaments (name, date, location, weight_tolerance, "
-            "bracket_system, format_type, photo_folder) VALUES (?,?,?,?,?,?,?)",
+            "bracket_system, format_type, photo_folder, status) "
+            "VALUES (?,?,?,?,?,?,?,?)",
             (name, date, location, weight_tolerance, bracket_system,
-             format_type, tournament_photo_folder(name)))
+             format_type, tournament_photo_folder(name), "upcoming"))
         self.conn.commit()
         return cur.lastrowid
+
+    def start_tournament(self, tid):
+        """Переводит турнир из «скоро начнётся» в активное состояние (идёт)."""
+        self.conn.execute(
+            "UPDATE tournaments SET status='active' WHERE id=?", (tid,))
+        self.conn.commit()
 
     def get_tournaments(self):
         return self.conn.execute("SELECT * FROM tournaments ORDER BY date DESC").fetchall()
@@ -7032,17 +7039,31 @@ class App(ctk.CTk):
                     corner_radius=6, font=ctk.CTkFont(size=11, weight="bold"))
         self.status_badge.pack(side="left", padx=(0, 10), ipadx=8, ipady=3)
 
-        self.finish_btn = ctk.CTkButton(self.header, text="🏁 Завершить турнир",
+        # Кнопки статуса: «Начать соревнования» (скоро начнётся),
+        # «Завершить/Возобновить» (идёт/закончен) и «Табло» — в общем
+        # фрейме на grid, чтобы скрывать/показывать их без смены порядка.
+        self.header_actions = ctk.CTkFrame(self.header, fg_color="transparent")
+        self.header_actions.pack(side="right", padx=20, pady=13)
+
+        self.start_btn = ctk.CTkButton(self.header_actions, text="▶  Начать соревнования",
+                    width=190, height=34,
+                    fg_color=SUCCESS, hover_color=SUCCESS_HOVER,
+                    font=ctk.CTkFont(size=12, weight="bold"),
+                    command=self._start_tournament)
+        self.start_btn.grid(row=0, column=0, padx=(0, 8))
+
+        self.finish_btn = ctk.CTkButton(self.header_actions, text="🏁 Завершить турнир",
                     width=170, height=34,
                     fg_color=WARNING, hover_color=WARNING_HOVER,
+                    font=ctk.CTkFont(size=12, weight="bold"),
                     command=self._toggle_finish_tournament)
-        self.finish_btn.pack(side="right", padx=20, pady=13)
+        self.finish_btn.grid(row=0, column=1, padx=(0, 8))
 
-        self.display_btn = ctk.CTkButton(self.header, text="📺 Табло",
+        self.display_btn = ctk.CTkButton(self.header_actions, text="📺 Табло",
                     width=110, height=34,
                     fg_color=ACCENT_DIM, hover_color=ACCENT_HOVER,
                     command=self._open_display_board)
-        self.display_btn.pack(side="right", padx=(0, 8), pady=13)
+        self.display_btn.grid(row=0, column=2)
 
         self.notebook = ctk.CTkTabview(self.tournament_detail_view, fg_color=BG)
         self.notebook.pack(fill="both", expand=True, padx=8, pady=(0, 8))
@@ -7907,7 +7928,6 @@ class App(ctk.CTk):
         cat_count = {r["tournament_id"]: r["n"] for r in c_rows}
 
         for idx, t in enumerate(tournaments, 1):
-            finished = bool("status" in t.keys() and t["status"] == "finished")
             active = t["id"] == self.current_tournament_id
             tid = t["id"]
 
@@ -7929,8 +7949,14 @@ class App(ctk.CTk):
                     font=ctk.CTkFont(size=14, weight="bold"),
                     text_color="#ffffff" if active else TEXT)
             name_lbl.pack(side="left", fill="x", expand=True)
-            badge_color = "#ff6666" if finished else "#4dff88"
-            ctk.CTkLabel(head, text="ОКОНЧЕН" if finished else "ИДЁТ",
+            status = t["status"] if ("status" in t.keys() and t["status"]) else "active"
+            if status == "upcoming":
+                badge_text, badge_color = "СКОРО", "#ffcc00"
+            elif status == "finished":
+                badge_text, badge_color = "ОКОНЧЕН", "#ff6666"
+            else:
+                badge_text, badge_color = "ИДЁТ", "#4dff88"
+            ctk.CTkLabel(head, text=badge_text,
                     fg_color=badge_color, text_color="#0d1117", corner_radius=5,
                     font=ctk.CTkFont(size=10, weight="bold"),
                     ).pack(side="right", ipadx=6, ipady=2)
@@ -8017,22 +8043,42 @@ class App(ctk.CTk):
         self._refresh_tournament_list()
 
     def _refresh_status_badge(self, tournament=None):
-        """Обновляет бейджик статуса и текст кнопки завершения/возобновления."""
+        """Обновляет бейдж статуса и кнопки по трём состояниям турнира:
+        upcoming (скоро начнётся) — кнопка «Начать соревнования»;
+        active (идёт) — кнопка «Завершить»; finished (закончен) — та же
+        кнопка превращается в «Возобновить»."""
         if not self.current_tournament_id:
             self.status_badge.configure(text="")
-            self.finish_btn.configure(text="🏁 Завершить турнир",
-                    fg_color="#4a3a1a", hover_color="#6a5a2a", state="disabled")
+            self.start_btn.grid_remove()
+            self.finish_btn.grid_remove()
             return
         t = tournament or self.db.get_tournament(self.current_tournament_id)
-        finished = bool(t and "status" in t.keys() and t["status"] == "finished")
-        if finished:
+        status = t["status"] if (t and "status" in t.keys() and t["status"]) else "active"
+        if status == "upcoming":
+            self.status_badge.configure(text="СКОРО НАЧНЁТСЯ", fg_color="#ffcc00")
+            self.start_btn.grid()
+            self.finish_btn.grid_remove()
+        elif status == "finished":
             self.status_badge.configure(text="ЗАВЕРШЁН", fg_color="#ff6666")
+            self.start_btn.grid_remove()
+            self.finish_btn.grid()
             self.finish_btn.configure(text="↩️ Возобновить турнир",
-                    fg_color="#1a3a5a", hover_color="#2a5a7a", state="normal")
+                    fg_color="#1a3a5a", hover_color="#2a5a7a")
         else:
-            self.status_badge.configure(text="АКТИВЕН", fg_color="#4dff88")
+            self.status_badge.configure(text="ИДЁТ", fg_color="#4dff88")
+            self.start_btn.grid_remove()
+            self.finish_btn.grid()
             self.finish_btn.configure(text="🏁 Завершить турнир",
-                    fg_color="#4a3a1a", hover_color="#6a5a2a", state="normal")
+                    fg_color="#4a3a1a", hover_color="#6a5a2a")
+
+    def _start_tournament(self):
+        """Переводит турнир из «скоро начнётся» в статус «идёт»."""
+        if not self.current_tournament_id:
+            return
+        self.db.start_tournament(self.current_tournament_id)
+        from sync.sync_manager import sync_manager
+        sync_manager.update_tournament_status(self.current_tournament_id, "in_progress")
+        self._select_tournament(self.current_tournament_id)
 
     def _toggle_finish_tournament(self):
         if not self.current_tournament_id:
