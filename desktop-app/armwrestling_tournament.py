@@ -3209,14 +3209,30 @@ class SingleEliminationEngine:
                 stats[champion]["eliminated"] = False
                 stats[champion]["elim_round_score"] = 9999
 
-        return sorted(
-            stats.values(),
-            key=lambda s: (
-                0 if s["pid"] == champion else 1,
-                -s["elim_round_score"],
-                s["losses"],
-            )
-        )
+        # Место выбывшего в single elimination зависит от раунда, в котором
+        # он проиграл, а не от числа уже сыгранных матчей. Выбывший в раунде
+        # stage при R раундах занимает место 2^(R-stage-1)+1:
+        # 8 участников -> 1/4 финала (stage 0) = 5-8 место, полуфинал = 3-4,
+        # финал = 2. Пока сетка не доиграна, выбывшие в одном раунде делят
+        # одно место (например все четвертьфиналисты получают 5).
+        rounds = max((m["stage"] for m in matches), default=0) + 1 if matches else 0
+        result = []
+        for i, s in enumerate(sorted(
+                stats.values(),
+                key=lambda s: (
+                    0 if s["pid"] == champion else 1,
+                    -s["elim_round_score"],
+                    s["losses"],
+                ))):
+            row = dict(s)
+            if row["pid"] == champion:
+                row["place"] = 1
+            elif row["eliminated"] and rounds:
+                row["place"] = (2 ** (rounds - 1 - row["elim_round_score"])) + 1
+            else:
+                row["place"] = i + 1
+            result.append(row)
+        return result
 
 
 def _standings_with_place(engine, category_id, hand):

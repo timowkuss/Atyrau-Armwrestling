@@ -190,9 +190,15 @@ def _record_participation(
 def _hand_standings(db: Session, competition_id: int, category_id: int, hand: str) -> list[dict]:
     """Расстановка мест для одной руки категории по матчам сетки.
 
-    Логика повторяет DoubleEliminationEngine.get_standings из десктопа:
-    победитель финала — чемпион, далее сортировка по глубине выбывания
-    (elim_round_score) и числу побед.
+    Логика повторяет SingleEliminationEngine/DoubleEliminationEngine
+    get_standings из десктопа:
+    - single elimination (до одного поражения): чемпион — победитель
+      последнего сыгранного матча (в сетке SE нет bracket == "final",
+      финальный матч тоже winners). Место выбывшего определяется раундом
+      выбывания, а не числом сыгранных матчей: выбывшие в одном раунде
+      делят одно место (1/4 финала -> 5, полуфинал -> 3, финал -> 2).
+    - double elimination: победитель финала — чемпион, далее сортировка
+      по глубине выбывания (elim_round_score) и числу побед.
     """
     matches = (
         db.query(Match)
@@ -219,6 +225,9 @@ def _hand_standings(db: Session, competition_id: int, category_id: int, hand: st
         digits = "".join(ch for ch in (match.round_name or "") if ch.isdigit())
         return base + (int(digits) if digits else 0)
 
+    has_loser_bracket = any(m.bracket == "losers" for m in matches)
+    is_single = not has_loser_bracket
+
     for m in matches:
         ensure(m.p1_id)
         ensure(m.p2_id)
@@ -231,33 +240,59 @@ def _hand_standings(db: Session, competition_id: int, category_id: int, hand: st
                 if loser:
                     ensure(loser)
                     stats[loser]["losses"] += 1
-                    rs = round_score(m)
-                    if rs > stats[loser]["elim_round_score"]:
-                        stats[loser]["elim_round_score"] = rs
-                        stats[loser]["eliminated"] = True
+                    if is_single:
+                        # В SE раунд = stage (0 = первый раунд, 1 = полуфинал, ...)
+                        if m.stage > stats[loser]["elim_round_score"]:
+                            stats[loser]["elim_round_score"] = m.stage
+                            stats[loser]["eliminated"] = True
+                    else:
+                        rs = round_score(m)
+                        if rs > stats[loser]["elim_round_score"]:
+                            stats[loser]["elim_round_score"] = rs
+                            stats[loser]["eliminated"] = True
 
     if not stats:
         return []
 
-    gf_matches = [m for m in matches if m.bracket == "final" and m.status == "done"]
     champion = None
     runner_up = None
-    if gf_matches:
-        last_gf = gf_matches[-1]
-        champion = last_gf.winner_id
-        runner_up = last_gf.p2_id if champion == last_gf.p1_id else last_gf.p1_id
-        if champion in stats:
-            stats[champion]["eliminated"] = False
-            stats[champion]["elim_round_score"] = 9999
-        if runner_up in stats:
-            stats[runner_up]["eliminated"] = True
-            stats[runner_up]["elim_round_score"] = 99998
+    if is_single:
+        final_matches = [m for m in matches if m.win_next_id is None and m.status == "done"]
+        if final_matches:
+            last = max(final_matches, key=lambda m: m.stage)
+            champion = last.winner_id
+            if champion in stats:
+                stats[champion]["eliminated"] = False
+                stats[champion]["elim_round_score"] = 9999
+    else:
+        gf_matches = [m for m in matches if m.bracket == "final" and m.status == "done"]
+        if gf_matches:
+            last_gf = gf_matches[-1]
+            champion = last_gf.winner_id
+            runner_up = last_gf.p2_id if champion == last_gf.p1_id else last_gf.p1_id
+            if champion in stats:
+                stats[champion]["eliminated"] = False
+                stats[champion]["elim_round_score"] = 9999
+            if runner_up in stats:
+                stats[runner_up]["eliminated"] = True
+                stats[runner_up]["elim_round_score"] = 99998
 
     ordered = sorted(
         stats.values(),
         key=lambda s: (0 if s["pid"] == champion else 1, -s["elim_round_score"], -s["wins"]),
     )
-    return [{"participant_id": s["pid"], "place": i + 1} for i, s in enumerate(ordered)]
+
+    rounds = max((m.stage for m in matches), default=0) + 1
+    result = []
+    for i, s in enumerate(ordered):
+        if s["pid"] == champion:
+            place = 1
+        elif is_single and s["eliminated"] and rounds:
+            place = (2 ** (rounds - 1 - s["elim_round_score"])) + 1
+        else:
+            place = i + 1
+        result.append({"participant_id": s["pid"], "place": place})
+    return result
 
 
 def _category_standings(db: Session, competition: Competition, category: Category) -> list[dict]:

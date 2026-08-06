@@ -329,6 +329,14 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
     for m in done_matches:
         cat_hand_done.setdefault((m.category_id, m.hand), []).append(m)
 
+    # Все матчи по (категория, рука) — нужны для числа раундов сетки
+    # (место выбывшего в single elimination зависит от раунда, а не от
+    # того, сколько матчей уже сыграно).
+    all_matches = db.query(Match).filter(Match.competition_id == competition_id).all()
+    cat_hand_all: dict[tuple[int, str], list[Match]] = {}
+    for m in all_matches:
+        cat_hand_all.setdefault((m.category_id, m.hand), []).append(m)
+
     # Все участники для разрешения имён (один запрос)
     all_participants = (
         db.query(CompetitionParticipant)
@@ -384,14 +392,27 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
         )
 
         eliminated = []
+        # Single elimination: число раундов сетки (1/4, полуфинал, финал).
+        # Выбывший в раунде с номером stage получает место
+        # 2^(rounds - stage - 1) + 1 (для 8 участников: 1/4 -> 5, полуфинал -> 3,
+        # финал -> 2). Иначе места просто нумеруются по порядку выбывания.
+        se_rounds = 0
+        if max_losses == 1:
+            all_ms = cat_hand_all.get((cat_id, hand), [])
+            if all_ms:
+                se_rounds = max(m.stage for m in all_ms) + 1
         for i, s in enumerate(ordered):
             is_eliminated = gf_done or s["losses"] >= max_losses
             if is_eliminated:
                 p = all_participants_by_id.get(s["pid"])
                 name = p.athlete.full_name if p else UNKNOWN
+                if se_rounds:
+                    place = (2 ** (se_rounds - 1 - s["last_loss_stage"])) + 1
+                else:
+                    place = i + 1
                 eliminated.append(EliminatedOut(
                     athlete_name=name,
-                    place=i + 1,
+                    place=place,
                     wins=s["wins"],
                     losses=s["losses"],
                 ))
