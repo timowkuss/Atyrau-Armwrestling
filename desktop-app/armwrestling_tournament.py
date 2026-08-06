@@ -5129,6 +5129,14 @@ class AthletesWindow(ctk.CTkToplevel):
                         upload_btn.configure(state="normal")
                     dlg.after(0, on_error)
                     return
+                except Exception as e:
+                    # Неожиданная ошибка не должна застрелять диалог на
+                    # «Загружаем…» навсегда — показываем и возвращаем кнопку.
+                    def on_error(e=e):
+                        photo_status_lbl.configure(text=f"Ошибка: {e}", text_color=ERR)
+                        upload_btn.configure(state="normal")
+                    dlg.after(0, on_error)
+                    return
 
                 def on_success():
                     photo_path_var.set(url)
@@ -5748,6 +5756,14 @@ class CoachesWindow(ctk.CTkToplevel):
                         upload_btn.configure(state="normal")
                     dlg.after(0, on_error)
                     return
+                except Exception as e:
+                    # Неожиданная ошибка не должна застрелять диалог на
+                    # «Загружаем…» навсегда — показываем и возвращаем кнопку.
+                    def on_error(e=e):
+                        photo_status_lbl.configure(text=f"Ошибка: {e}", text_color=ERR)
+                        upload_btn.configure(state="normal")
+                    dlg.after(0, on_error)
+                    return
 
                 def on_success():
                     photo_path_var.set(url)
@@ -6303,7 +6319,13 @@ class ClubsWindow(ctk.CTkToplevel):
                 try:
                     url = upload_photo(p, folder="clubs")
                 except CloudinaryUploadError as e:
-                    dlg.after(0, lambda: logo_status_lbl.configure(
+                    dlg.after(0, lambda e=e: logo_status_lbl.configure(
+                        text=f"Ошибка: {e}", text_color=ERR))
+                    return
+                except Exception as e:
+                    # Неожиданная ошибка не должна застрелять диалог на
+                    # «Загружаем…» навсегда — показываем и возвращаем кнопку.
+                    dlg.after(0, lambda e=e: logo_status_lbl.configure(
                         text=f"Ошибка: {e}", text_color=ERR))
                     return
                 dlg.after(0, lambda: (logo_path_var.set(url),
@@ -7224,22 +7246,34 @@ class App(ctk.CTk):
             photo_status_lbl.configure(text="Загружаем…", text_color="#c9a227")
             upload_btn.configure(state="disabled")
 
+            # Папка турнира вычисляется в ГЛАВНОМ потоке — SQLite-соединение
+            # создано в нём и из фонового потока (worker ниже) его трогать
+            # нельзя (sqlite3.ProgrammingError: objects created in a thread...).
+            tournament = (self.db.get_tournament(self.current_tournament_id)
+                          if self.current_tournament_id else None)
+            folder = "athletes"
+            if tournament:
+                # Фото участника лежит в папке СВОЕГО турнира, а не в
+                # общей "athletes" — так фото одного турнира не
+                # смешиваются с фото другого, и при удалении участника
+                # по папке понятно, что файл принадлежит турниру.
+                folder = (tournament["photo_folder"]
+                          or tournament_photo_folder(tournament["name"])
+                          or "athletes")
+
             def worker():
                 try:
-                    tournament = (self.db.get_tournament(self.current_tournament_id)
-                                  if self.current_tournament_id else None)
-                    folder = "athletes"
-                    if tournament:
-                        # Фото участника лежит в папке СВОЕГО турнира, а не в
-                        # общей "athletes" — так фото одного турнира не
-                        # смешиваются с фото другого, и при удалении участника
-                        # по папке понятно, что файл принадлежит турниру.
-                        folder = (tournament["photo_folder"]
-                                  or tournament_photo_folder(tournament["name"])
-                                  or "athletes")
                     url = upload_photo(p, folder=folder)
                 except CloudinaryUploadError as e:
                     def on_error():
+                        photo_status_lbl.configure(text=f"Ошибка: {e}", text_color=ERR)
+                        upload_btn.configure(state="normal")
+                    dlg.after(0, on_error)
+                    return
+                except Exception as e:
+                    # Любая другая ошибка не должна застрелять диалог на
+                    # «Загружаем…» навсегда — показываем и возвращаем кнопку.
+                    def on_error(e=e):
                         photo_status_lbl.configure(text=f"Ошибка: {e}", text_color=ERR)
                         upload_btn.configure(state="normal")
                     dlg.after(0, on_error)
