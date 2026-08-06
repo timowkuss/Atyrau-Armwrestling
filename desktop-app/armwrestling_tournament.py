@@ -3347,9 +3347,13 @@ class BracketWindow(ctk.CTkToplevel):
         self._load_bracket_timer = None
 
         self.title(f"Сетка — {category['name']} — {hand}")
-        self.geometry("1200x800")
         self.configure(fg_color=BG)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        # Сетка всегда открывается на весь экран
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        self.geometry(f"{sw}x{sh}+0+0")
+        self.after(10, self._apply_fullscreen)
         self.after(50, self.safe_init)
 
     def _on_close(self):
@@ -3362,6 +3366,15 @@ class BracketWindow(ctk.CTkToplevel):
             except ValueError:
                 pass
         self.destroy()
+
+    def _apply_fullscreen(self):
+        try:
+            self.state("zoomed")
+        except Exception:
+            try:
+                self.attributes("-zoomed", True)
+            except Exception:
+                self.geometry(f"{self.winfo_screenwidth()}x{self.winfo_screenheight()}+0+0")
 
     def safe_init(self):
         try:
