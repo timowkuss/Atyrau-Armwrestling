@@ -2678,9 +2678,16 @@ class DisplayServer:
                 return (f'<div class="fighter">'
                         f'<div class="fighter-name" style="font-size:{name_size}px">?</div></div>')
             name = fighter.get("name") or "?"
-            photo = (f'<img class="fighter-photo" src="/photo/{tnum}-{slot}" '
+            pp = fighter.get("photo") or ""
+            # Cloudinary-URL грузим прямо с CDN (без скачивания на десктоп).
+            # Локальные пути (наследие) — через роут /photo (кэш).
+            src = pp if pp.startswith("http://") or pp.startswith("https://") else f"/photo/{tnum}-{slot}"
+            fb = (f"if(!this.dataset.fb){{this.dataset.fb='1';"
+                  f"this.src='/photo/{tnum}-{slot}';}}"
+                  f"else{{this.style.display='none';}}")
+            photo = (f'<img class="fighter-photo" src="{src}" '
                      f'style="width:{photo_size}px;height:{photo_size}px" '
-                     f'onerror="this.style.display=\'none\'">')
+                     f'onerror="{fb}">')
             return (f'<div class="fighter">{photo}'
                     f'<div class="fighter-name" style="font-size:{name_size}px">{name}</div></div>')
 
@@ -3771,16 +3778,6 @@ class BracketWindow(ctk.CTkToplevel):
                 current_data,
                 next_data,
             )
-            # Табло берёт фото только из кэша (страница рефрешится каждые 2с).
-            # Прогреваем Cloudinary-фото текущих/следующих бойцов в фоне,
-            # чтобы они появились без зависания страницы.
-            warm = []
-            for d in (current_data, next_data):
-                if isinstance(d, dict):
-                    for f in (d.get("p1"), d.get("p2")):
-                        if f and f.get("photo"):
-                            warm.append(f["photo"])
-            precache_photos(warm)
 
     def _ensure_cache(self):
         if not self._cache_dirty and self._match_cache is not None:
