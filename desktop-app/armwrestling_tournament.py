@@ -2672,19 +2672,90 @@ class DisplayServer:
         self.tables = {}
         self.app = Flask(__name__)
 
-        def _render_table_block(tnum, data):
+        def _fighter_html(tnum, slot, fighter, name_size, photo_size):
+            """Один боец: фото (круг) + имя. Слот — 'c1'/'c2'/'n1'/'n2'."""
+            if not fighter:
+                return (f'<div class="fighter">'
+                        f'<div class="fighter-name" style="font-size:{name_size}px">?</div></div>')
+            name = fighter.get("name") or "?"
+            photo = (f'<img class="fighter-photo" src="/photo/{tnum}-{slot}" '
+                     f'style="width:{photo_size}px;height:{photo_size}px" '
+                     f'onerror="this.style.display=\'none\'">')
+            return (f'<div class="fighter">{photo}'
+                    f'<div class="fighter-name" style="font-size:{name_size}px">{name}</div></div>')
+
+        def _match_html(tnum, prefix, match_data, sizes):
+            """Поединок: два бойца с 'VS' между ними."""
+            if not match_data:
+                return ""
+            p1 = _fighter_html(tnum, prefix + "1", match_data.get("p1"), sizes["name"], sizes["photo"])
+            p2 = _fighter_html(tnum, prefix + "2", match_data.get("p2"), sizes["name"], sizes["photo"])
+            return (f'<div class="match">{p1}'
+                    f'<div class="vs" style="font-size:{sizes["vs"]}px">VS</div>'
+                    f'{p2}</div>')
+
+        def _render_table_block(tnum, data, sizes):
             cat = data.get("category", "")
             hand = data.get("hand", "")
-            current = data.get("current_match", "Нет активного поединка")
-            nxt = data.get("next_match", "Нет следующего поединка")
+            current = data.get("current_match")
+            nxt = data.get("next_match")
+
+            if isinstance(current, dict) and current.get("p1"):
+                cur_html = _match_html(tnum, "c", current, sizes["cur"])
+            elif isinstance(current, dict) and current.get("message"):
+                cur_html = (f'<div class="current" '
+                            f'style="font-size:{sizes["cur"]["name"]}px">{current["message"]}</div>')
+            else:
+                cur_html = (f'<div class="current" '
+                            f'style="font-size:{sizes["cur"]["name"]}px">Нет активного поединка</div>')
+
+            if isinstance(nxt, dict) and nxt.get("p1"):
+                nxt_html = _match_html(tnum, "n", nxt, sizes["nxt"])
+            elif isinstance(nxt, dict) and nxt.get("message"):
+                nxt_html = (f'<div class="next" '
+                            f'style="font-size:{sizes["nxt"]["name"]}px">{nxt["message"]}</div>')
+            else:
+                nxt_html = '<div class="next">—</div>'
+
             return f"""
             <div class="table-block">
               <div class="table-title">СТОЛ {tnum}</div>
               <div class="category">Категория {cat}<br>{hand} рука</div>
-              <div class="current">{current}</div>
+              <div class="current-wrap">{cur_html}</div>
               <div class="next-title">Следующий бой</div>
-              <div class="next">{nxt}</div>
+              <div class="next-wrap">{nxt_html}</div>
             </div>"""
+
+        @self.app.route("/photo/<path:key>")
+        def photo(key):
+            """Отдаёт локальное фото бойца по ключу вида '<стол>-c1' / '<стол>-n2'.
+            Браузер кэширует ответ, поэтому при авто-обновлении страницы
+            каждые 2с фото не скачиваются заново."""
+            parts = key.split("-", 1)
+            if len(parts) != 2:
+                return "", 404
+            tnum, slot = parts
+            d = self.tables.get(tnum)
+            if not d:
+                return "", 404
+            if slot.startswith("c") and isinstance(d.get("current_match"), dict):
+                holder = d["current_match"]
+            elif slot.startswith("n") and isinstance(d.get("next_match"), dict):
+                holder = d["next_match"]
+            else:
+                return "", 404
+            fighter = holder.get("p1" if slot.endswith("1") else "p2") or {}
+            pp = fighter.get("photo")
+            if not pp:
+                return "", 404
+            try:
+                local = resolve_local_photo_path(pp)
+            except Exception:
+                local = None
+            if not local:
+                return "", 404
+            from flask import send_file
+            return send_file(str(local), max_age=300)
 
         @self.app.route("/")
         def home():
@@ -2693,8 +2764,14 @@ class DisplayServer:
             cols = min(n, 2) if n > 0 else 1
 
             blocks = ""
+            sizes = {
+                "cur": {"name": 40, "photo": 150, "vs": 40} if cols == 2
+                       else {"name": 56, "photo": 220, "vs": 56},
+                "nxt": {"name": 22, "photo": 80, "vs": 34} if cols == 2
+                       else {"name": 30, "photo": 110, "vs": 46},
+            }
             for tnum in sorted(active.keys()):
-                blocks += _render_table_block(tnum, active[tnum])
+                blocks += _render_table_block(tnum, active[tnum], sizes)
 
             if n == 0:
                 blocks = "<div class='table-block'><div class='table-title'>Нет активных столов</div></div>"
@@ -2702,9 +2779,7 @@ class DisplayServer:
 
             title_size = "36px" if cols == 2 else "50px"
             cat_size = "22px" if cols == 2 else "32px"
-            current_size = "58px" if cols == 2 else "80px"
             next_title_size = "24px" if cols == 2 else "36px"
-            next_size = "38px" if cols == 2 else "55px"
 
             return f"""<!DOCTYPE html>
 <html>
@@ -2750,11 +2825,10 @@ body {{
   color: #ccddee;
   line-height: 1.5;
 }}
+.current-wrap {{ width: 100%; }}
 .current {{
-  font-size: {current_size};
   font-weight: bold;
   color: white;
-  margin-top: 8px;
   line-height: 1.2;
 }}
 .next-title {{
@@ -2763,9 +2837,38 @@ body {{
   margin-top: 14px;
   font-weight: bold;
 }}
+.next-wrap {{ width: 100%; }}
 .next {{
-  font-size: {next_size};
-  color: #dddd;
+  font-size: 28px;
+  color: #dddddd;
+}}
+.match {{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  flex-wrap: wrap;
+  padding: 8px 0;
+}}
+.fighter {{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}}
+.fighter-photo {{
+  border-radius: 50%;
+  object-fit: cover;
+  border: 4px solid #00ff88;
+  background: #222;
+}}
+.fighter-name {{
+  font-weight: bold;
+  color: white;
+}}
+.vs {{
+  color: #ffaa00;
+  font-weight: bold;
 }}
 .footer {{
   text-align: center;
@@ -3597,44 +3700,59 @@ class BracketWindow(ctk.CTkToplevel):
 
     # ────
     def _refresh_match_info_bar(self):
-        def pname(pid):
+        def pdata(pid):
+            """Имя + фото участника для табло."""
             if not pid:
-                return "?"
+                return {"name": "?", "photo": ""}
             p = self._participant_cache.get(pid)
-            return p["name"] if p else "?"
+            if not p:
+                return {"name": "?", "photo": ""}
+            return {"name": p["name"], "photo": p["photo_path"] or ""}
 
         current, nxt = self.engine.get_current_and_next_match(
             self.category["id"], self.hand)
 
+        current_data = None
         if current:
-            txt = (f"⚔️  {pname(current['p1_id'])}  vs  {pname(current['p2_id'])}")
+            current_data = {
+                "p1": pdata(current["p1_id"]),
+                "p2": pdata(current["p2_id"]),
+            }
+            txt = (f"⚔️  {current_data['p1']['name']}  vs  {current_data['p2']['name']}")
             self.lbl_current.configure(text=txt, text_color="#4dccff")
         else:
             matches = self._match_cache
             if not matches:
-                self.lbl_current.configure(text="⚔️  Сетка не создана", text_color="#556677")
+                txt = "⚔️  Сетка не создана"
+                self.lbl_current.configure(text=txt, text_color="#556677")
             else:
                 pending_any = [m for m in matches if m["status"] == "pending"]
                 if pending_any:
-                    self.lbl_current.configure(
-                        text="⏳  Ожидание участников для следующего поединка...",
-                        text_color="#ffaa33")
+                    txt = "⏳  Ожидание участников для следующего поединка..."
+                    self.lbl_current.configure(text=txt, text_color="#ffaa33")
                 else:
                     finals = [m for m in matches if m["bracket"] == "final" and m["status"] == "done"]
                     if finals:
-                        winner = pname(finals[-1]["winner_id"])
-                        self.lbl_current.configure(
-                            text=f"🏆  Турнир завершён! Победитель: {winner}",
-                            text_color="#ffd700")
+                        winner = pdata(finals[-1]["winner_id"])["name"]
+                        txt = f"🏆  Турнир завершён! Победитель: {winner}"
+                        self.lbl_current.configure(text=txt, text_color="#ffd700")
                     else:
-                        self.lbl_current.configure(
-                            text="✅  Все поединки завершены", text_color="#4dff88")
+                        txt = "✅  Все поединки завершены"
+                        self.lbl_current.configure(text=txt, text_color="#4dff88")
+            current_data = {"message": txt}
 
+        next_data = None
         if nxt:
-            txt_n = (f"⏭  {pname(nxt['p1_id'])}  vs  {pname(nxt['p2_id'])}")
+            next_data = {
+                "p1": pdata(nxt["p1_id"]),
+                "p2": pdata(nxt["p2_id"]),
+            }
+            txt_n = (f"⏭  {next_data['p1']['name']}  vs  {next_data['p2']['name']}")
             self.lbl_next.configure(text=txt_n, text_color="#aabbcc")
         else:
-            self.lbl_next.configure(text="⏭  Следующий: —", text_color="#445566")
+            txt_n = "⏭  Следующий: —"
+            self.lbl_next.configure(text=txt_n, text_color="#445566")
+            next_data = {"message": txt_n}
 
         app = self.master
         if hasattr(app, "display_server") and self.table_number is not None:
@@ -3642,8 +3760,8 @@ class BracketWindow(ctk.CTkToplevel):
                 self.table_number,
                 self.category["name"],
                 self.hand,
-                self.lbl_current.cget("text"),
-                self.lbl_next.cget("text"),
+                current_data,
+                next_data,
             )
 
     def _ensure_cache(self):
