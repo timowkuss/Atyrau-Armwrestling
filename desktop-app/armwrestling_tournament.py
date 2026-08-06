@@ -1617,10 +1617,18 @@ class BadgeGenerator:
 
     @staticmethod
     def _category_label(cat_name, age_category):
-        """Метка категории вида 'J70', 'S75', 'S110+', 'A' (абсолютка)."""
-        age = BadgeGenerator._age_abbrev(age_category)
+        """Метка категории вида 'J70', 'S75', 'S110+', 'A' (абсолютка).
+
+        Возрастная группа определяется в первую очередь по НАЗВАНИЮ
+        категории ("Junior 50kg Обе" → J, "Senior 55kg Обе" → S): спортсмен
+        может участвовать в категориях разных возрастных групп (например
+        юниор 17 лет записан в Junior 50 и Senior 55), а age_category в его
+        карточке участника одна — по дате рождения. age_category участника
+        используется только как фолбэк для категорий без возрастного
+        префикса в названии."""
+        age = BadgeGenerator._age_abbrev(cat_name)
         if not age:
-            age = BadgeGenerator._age_abbrev(cat_name)
+            age = BadgeGenerator._age_abbrev(age_category)
         m = re.search(r"(\d+\+?)\s*kg\b", str(cat_name or ""))
         if m:
             return f"{age}{m.group(1)}"
@@ -1865,7 +1873,12 @@ class BadgeGenerator:
             cat_hands.setdefault(cid, []).append(str(p["hand"] or ""))
         rows = []
         for cid, hands in cat_hands.items():
-            label = BadgeGenerator._category_label(categories_map.get(cid, ""), person[0]["age_category"])
+            # Спортсмен может участвовать в категориях РАЗНЫХ возрастных групп
+            # (например Junior 50 и Senior 55) — метку каждой категории считаем
+            # по age_category ИМЕННО ЭТОГО участника, а не первого в группе
+            # (иначе обе строки получали бы группу первой категории: J50/J55).
+            p_in_cat = next((p for p in person if p["category_id"] == cid), person[0])
+            label = BadgeGenerator._category_label(categories_map.get(cid, ""), p_in_cat["age_category"])
             hs = set(hands)
             left = bool(hs & {"Обе", "Левая", "Both", "Left"})
             right = bool(hs & {"Обе", "Правая", "Both", "Right"})
