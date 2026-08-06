@@ -1312,11 +1312,14 @@ def _synced_add_athlete(self, first_name, last_name, birth_date, gender,
                                  gender, club, rank, photo_path, coach_id,
                                  iin=iin, phone=phone, club_id=club_id)
     try:
+        # Локальные данные (имя тренера) читаем здесь, на UI-потоке, а сам
+        # сетевой вызов уходим в фоновый FIFO-воркер — добавление спортсмена
+        # не должно замораживать интерфейс на HTTP-таймауты (как для матчей).
         coach = self.get_coach(coach_id) if coach_id else None
-        sync_manager.on_athlete_created(aid, first_name, last_name,
-                                         birth_date, gender, club, rank, photo_path,
-                                         coach_name=coach["full_name"] if coach else None,
-                                         iin=iin, phone=phone)
+        coach_name = coach["full_name"] if coach else None
+        sync_manager.dispatch_async(lambda: sync_manager.on_athlete_created(
+            aid, first_name, last_name, birth_date, gender, club, rank,
+            photo_path, coach_name=coach_name, iin=iin, phone=phone))
     except Exception as e:
         print(f"[sync] add_athlete: {e}")
     return aid
@@ -1336,10 +1339,11 @@ def _synced_update_athlete(self, aid, first_name, last_name, birth_date,
         coach = self.get_coach(coach_id) if coach_id else None
         card = self.get_athlete(aid)
         is_hidden = card["is_hidden"] if card is not None and "is_hidden" in card.keys() else None
-        sync_manager.on_athlete_updated(aid, first_name, last_name,
-                                         birth_date, gender, club, rank, photo_path,
-                                         coach_name=coach["full_name"] if coach else "",
-                                         iin=iin, phone=phone, is_hidden=is_hidden)
+        coach_name = coach["full_name"] if coach else ""
+        sync_manager.dispatch_async(lambda: sync_manager.on_athlete_updated(
+            aid, first_name, last_name, birth_date, gender, club, rank,
+            photo_path, coach_name=coach_name, iin=iin, phone=phone,
+            is_hidden=is_hidden))
     except Exception as e:
         print(f"[sync] update_athlete: {e}")
 
@@ -1351,11 +1355,12 @@ def _synced_set_athlete_hidden(self, aid, hidden):
         if card is None:
             return
         coach = self.get_coach(card["coach_id"]) if card["coach_id"] else None
-        sync_manager.on_athlete_updated(
+        coach_name = coach["full_name"] if coach else ""
+        sync_manager.dispatch_async(lambda: sync_manager.on_athlete_updated(
             aid, card["first_name"], card["last_name"], card["birth_date"],
             card["gender"], card["club"], card["rank"], card["photo_path"],
-            coach_name=coach["full_name"] if coach else "",
-            iin=card["iin"], phone=card["phone"], is_hidden=bool(hidden))
+            coach_name=coach_name,
+            iin=card["iin"], phone=card["phone"], is_hidden=bool(hidden)))
     except Exception as e:
         print(f"[sync] set_athlete_hidden: {e}")
 
@@ -1366,11 +1371,10 @@ def _synced_add_coach(self, full_name, club="", photo_path="", bio="",
                                first_name, last_name, birth_date, iin,
                                qualification, city, phone, club_id)
     try:
-        sync_manager.on_coach_created(cid, full_name, club, photo_path, bio,
-                                       first_name=first_name, last_name=last_name,
-                                       birth_date=birth_date, iin=iin,
-                                       qualification=qualification, city=city,
-                                       phone=phone)
+        sync_manager.dispatch_async(lambda: sync_manager.on_coach_created(
+            cid, full_name, club, photo_path, bio,
+            first_name=first_name, last_name=last_name, birth_date=birth_date,
+            iin=iin, qualification=qualification, city=city, phone=phone))
     except Exception as e:
         print(f"[sync] add_coach: {e}")
     return cid
@@ -1382,11 +1386,10 @@ def _synced_update_coach(self, cid, full_name, club="", photo_path="", bio="",
                             first_name, last_name, birth_date, iin,
                             qualification, city, phone, club_id)
     try:
-        sync_manager.on_coach_updated(cid, full_name, club, photo_path, bio,
-                                       first_name=first_name, last_name=last_name,
-                                       birth_date=birth_date, iin=iin,
-                                       qualification=qualification, city=city,
-                                       phone=phone)
+        sync_manager.dispatch_async(lambda: sync_manager.on_coach_updated(
+            cid, full_name, club, photo_path, bio,
+            first_name=first_name, last_name=last_name, birth_date=birth_date,
+            iin=iin, qualification=qualification, city=city, phone=phone))
     except Exception as e:
         print(f"[sync] update_coach: {e}")
 
@@ -1396,19 +1399,19 @@ def _synced_set_coach_hidden(self, cid, hidden):
         card = self.get_coach(cid)
         if card is None:
             return
-        sync_manager.on_coach_updated(
+        sync_manager.dispatch_async(lambda: sync_manager.on_coach_updated(
             cid, card["full_name"], card["club"], card["photo_path"], card["bio"],
             first_name=card["first_name"], last_name=card["last_name"],
             birth_date=card["birth_date"], iin=card["iin"],
             qualification=card["qualification"], city=card["city"],
-            phone=card["phone"], is_hidden=bool(hidden))
+            phone=card["phone"], is_hidden=bool(hidden)))
     except Exception as e:
         print(f"[sync] set_coach_hidden: {e}")
 
 def _synced_delete_coach(self, cid):
     _original_delete_coach(self, cid)
     try:
-        sync_manager.on_coach_deleted(cid)
+        sync_manager.dispatch_async(lambda: sync_manager.on_coach_deleted(cid))
     except Exception as e:
         print(f"[sync] delete_coach: {e}")
 
@@ -1456,16 +1459,17 @@ def _synced_delete_participant(self, pid):
 def _synced_delete_athlete(self, aid):
     _original_delete_athlete(self, aid)
     try:
-        sync_manager.on_athlete_deleted(aid)
+        sync_manager.dispatch_async(lambda: sync_manager.on_athlete_deleted(aid))
     except Exception as e:
         print(f"[sync] delete_athlete: {e}")
 
 def _synced_add_club(self, name, city="", address="", founded_year=None, logo_path="", phone=""):
     cid = _original_add_club(self, name, city, address, founded_year, logo_path, phone)
     try:
-        sync_manager.on_club_created(cid, name, city=city, address=address,
-                                     founded_date=_founded_date(founded_year),
-                                     logo_path=logo_path, phone=phone)
+        founded_date = _founded_date(founded_year)
+        sync_manager.dispatch_async(lambda: sync_manager.on_club_created(
+            cid, name, city=city, address=address, founded_date=founded_date,
+            logo_path=logo_path, phone=phone))
     except Exception as e:
         print(f"[sync] add_club: {e}")
     return cid
@@ -1473,9 +1477,10 @@ def _synced_add_club(self, name, city="", address="", founded_year=None, logo_pa
 def _synced_update_club(self, cid, name, city="", address="", founded_year=None, logo_path="", phone=""):
     _original_update_club(self, cid, name, city, address, founded_year, logo_path, phone)
     try:
-        sync_manager.on_club_updated(cid, name, city=city, address=address,
-                                     founded_date=_founded_date(founded_year),
-                                     logo_path=logo_path, phone=phone)
+        founded_date = _founded_date(founded_year)
+        sync_manager.dispatch_async(lambda: sync_manager.on_club_updated(
+            cid, name, city=city, address=address, founded_date=founded_date,
+            logo_path=logo_path, phone=phone))
     except Exception as e:
         print(f"[sync] update_club: {e}")
 
@@ -1491,7 +1496,7 @@ def _founded_date(founded_year):
 def _synced_delete_club(self, cid):
     _original_delete_club(self, cid)
     try:
-        sync_manager.on_club_deleted(cid)
+        sync_manager.dispatch_async(lambda: sync_manager.on_club_deleted(cid))
     except Exception as e:
         print(f"[sync] delete_club: {e}")
 

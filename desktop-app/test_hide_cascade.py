@@ -292,6 +292,9 @@ class OfflineSyncTest(unittest.TestCase):
             self.db, "Иванов Иван", club="Алга", phone="+77771112233")
         self.mgr.state.map_set("coach", cid, 4242)
         self.db.set_coach_hidden(cid, True)
+        # Обёртка теперь кладёт задачу в фоновый FIFO-воркер (неблокирующий
+        # синк, UI не виснет) — дожидаемся, пока воркер обработает очередь.
+        self.mgr._sync_queue.join()
         succeeded, remaining = self._flush()
         self.assertEqual(remaining, 0)
         self.assertEqual(succeeded, 1)
@@ -309,6 +312,7 @@ class OfflineSyncTest(unittest.TestCase):
         cid = app._original_add_coach(self.db, "Иванов Иван")
         self.mgr.state.map_set("coach", cid, 4242)
         self.db.set_coach_hidden(cid, False)
+        self.mgr._sync_queue.join()
         succeeded, remaining = self._flush()
         self.assertEqual(remaining, 0)
         self.assertEqual(succeeded, 1)
@@ -323,6 +327,7 @@ class OfflineSyncTest(unittest.TestCase):
             phone="+77772223344")
         self.mgr.state.map_set("athlete", aid, 8080)
         self.db.set_athlete_hidden(aid, True)
+        self.mgr._sync_queue.join()
         succeeded, remaining = self._flush()
         self.assertEqual(remaining, 0)
         self.assertEqual(succeeded, 1)
