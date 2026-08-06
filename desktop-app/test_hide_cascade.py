@@ -90,14 +90,16 @@ class HideCascadeDbTest(unittest.TestCase):
     def setUp(self):
         self.tmp = TempDb()
         self.db = self.tmp.make_database()
-        self.club_id = self.db.add_club("Алга")
-        self.coach_id = self.db.add_coach(
-            "Иванов Иван", club="Алга", phone="+77771112233", club_id=self.club_id
-        )
-        self.athlete_id = self.db.add_athlete(
-            "Петров", "Пётр", "01.01.2000", "M", club="Алга",
-            coach_id=self.coach_id, club_id=self.club_id,
-        )
+        # Оригиналы, а не синк-обёртки (add_club/add_coach/add_athlete): тест
+        # про каскады скрытия и не должен трогать сеть (реальный sync_manager
+        # дергает прод API с таймаутом 10с).
+        self.club_id = app._original_add_club(self.db, "Алга")
+        self.coach_id = app._original_add_coach(
+            self.db, "Иванов Иван", club="Алга", phone="+77771112233",
+            club_id=self.club_id)
+        self.athlete_id = app._original_add_athlete(
+            self.db, "Петров", "Пётр", "01.01.2000", "M", club="Алга",
+            coach_id=self.coach_id, club_id=self.club_id)
 
     def tearDown(self):
         self.db.conn.close()
