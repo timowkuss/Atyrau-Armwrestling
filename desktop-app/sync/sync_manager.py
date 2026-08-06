@@ -38,6 +38,14 @@ class SyncManager:
         self.force_queue = False
         self._last_flush_attempt = 0
         self._flush_in_progress = False
+        # Backoff периодических попыток: если последний flush_pending() не
+        # сделал прогресса (все операции упираются в недоступный сервер),
+        # авто-тикер не долбит его каждые ~10с бесконечно, а ждёт
+        # _BACKOFF_SECONDS. Как только хоть одна операция доехала или
+        # очередь опустела — снова пробуем часто. Сами операции из очереди
+        # при этом НЕ выбрасываются и ничего не теряется.
+        self._BACKOFF_SECONDS = 60
+        self._flush_backoff_until = 0.0
         # Настоящая блокировка на случай, если flush_pending() вызовут
         # из нескольких мест одновременно (фоновый поток после генерации
         # сетки, периодический авто-тик UI, кнопка "Синхронизация") —
@@ -120,6 +128,8 @@ class SyncManager:
         now = _time.time()
         if self.state.pending_count() == 0:
             return None
+        if now < self._flush_backoff_until:
+            return None
         if now - self._last_flush_attempt < 5:
             return None
         self._last_flush_attempt = now
@@ -130,14 +140,18 @@ class SyncManager:
 
     def try_auto_flush_async(self) -> bool:
         """Неблокирующая версия try_auto_flush для UI-тикера: та же
-        проверка очереди и rate-limit (не чаще раза в 5с), но сама сетевая
-        часть (HTTP с таймаутом до REQUEST_TIMEOUT_SECONDS на вызов) уходит
-        в отдельный фоновый поток через _trigger_immediate_flush, чтобы
-        тикер на UI-потоке не замирал на недоступном сервере. Возвращает
-        True, если отправка запланирована."""
+        проверка очереди и rate-limit, но сама сетевая часть (HTTP с
+        таймаутом до REQUEST_TIMEOUT_SECONDS на вызов) уходит в отдельный
+        фоновый поток через _trigger_immediate_flush, чтобы тикер на
+        UI-потоке не замирал на недоступном сервере. Возвращает True, если
+        отправка запланирована."""
         import time as _time
         now = _time.time()
         if self.state.pending_count() == 0:
+            return False
+        # Backoff: если последний flush упёрся в недоступный сервер, не
+        # долбим его новой попыткой каждые ~10с — ждём _BACKOFF_SECONDS.
+        if now < self._flush_backoff_until:
             return False
         if now - self._last_flush_attempt < 5:
             return False
@@ -969,16 +983,24 @@ class SyncManager:
                         # спортсмены/тренеры навсегда не попадут на сайт).
                         self._record_blocked(row)
                     payload = __import__("json").loads(row["payload"])
-                    print(f"[sync] TRY: {op} payload={payload}")
+                    # Тихие логи: TRY/REPLAY FAIL/RESULT печатаем только при
+                    # ПЕРВОЙ попытке операции (или при успехе), чтобы мёртвый
+                    # сервер не спамил консоль одной и той же ошибкой каждые
+                    # ~10с до бесконечности.
+                    first_attempt = row["attempts"] == 0
+                    if first_attempt:
+                        print(f"[sync] TRY: {op} payload={payload}")
                     try:
-                        ok = self._replay(op, payload)
+                        ok = self._replay(op, payload, verbose=first_attempt)
                     except Exception as e:
                         # Одна упавшая операция не должна валить весь
                         # flush_pending (а значит и auto-sync тикер): любое
                         # неожиданное исключение считаем просто неудачей.
-                        print(f"[sync] RESULT: {op} -> ОШИБКА {e}")
+                        if first_attempt:
+                            print(f"[sync] RESULT: {op} -> ОШИБКА {e}")
                         ok = False
-                    print(f"[sync] RESULT: {op} -> {ok}")
+                    if ok is True or first_attempt:
+                        print(f"[sync] RESULT: {op} -> {ok}")
 
                     if ok is True:
                         self.state.mark_done(row["id"])
@@ -1002,8 +1024,17 @@ class SyncManager:
             return succeeded, self.state.pending_count()
         finally:
             self._flush_lock.release()
+            # Обновляем backoff по результату этого прогона: если ни одна
+            # операция не доехала и очередь ещё не пуста — сервер, судя по
+            # всему, недоступен, ждём _BACKOFF_SECONDS до следующей
+            # периодической попытки. Прогресс есть — пробуем снова часто.
+            now = time.time()
+            if succeeded > 0 or self.state.pending_count() == 0:
+                self._flush_backoff_until = 0.0
+            else:
+                self._flush_backoff_until = now + self._BACKOFF_SECONDS
 
-    def _replay(self, operation: str, payload: dict) -> bool:
+    def _replay(self, operation: str, payload: dict, verbose: bool = False) -> bool:
         try:
             if operation == "delete_participant":
                 delete_fn = getattr(self.api, "delete_participant", None)
@@ -1405,7 +1436,8 @@ class SyncManager:
                 return True
 
         except ApiClientError as e:
-            print(f"[sync] REPLAY FAIL: {operation} -> {e}")
+            if verbose:
+                print(f"[sync] REPLAY FAIL: {operation} -> {e}")
 
         return False
 
