@@ -4806,22 +4806,75 @@ class AthletesWindow(ctk.CTkFrame):
                     command=self._sync_now).pack(side="left", padx=5)
 
         self.search_var = ctk.StringVar()
-        self.search_var.trace_add("write", lambda *_: self._refresh_list())
+        self.search_var.trace_add("write", lambda *_: self._schedule_refresh())
         ctk.CTkEntry(ctrl, textvariable=self.search_var, width=220,
                     placeholder_text="🔍 Поиск по имени/фамилии...").pack(side="left", padx=10)
 
         self.age_filter_var = ctk.StringVar(value="Все возрасты")
         age_options = ["Все возрасты"] + list(AGE_LEVEL_LABELS.values())
         OptionMenu(ctrl, variable=self.age_filter_var, values=age_options,
-                    width=200, command=lambda *_: self._refresh_list()).pack(side="left", padx=5)
+                    width=200, command=lambda *_: self._schedule_refresh()).pack(side="left", padx=5)
 
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.pack(fill="x", padx=15, pady=(0, 5))
         self.total_label = ctk.CTkLabel(header, text="", text_color="#556677")
         self.total_label.pack(side="left")
 
+        # Пагинация: по 25 карточек на страницу — иначе с тысячами записей
+        # каждый рендер пересоздавал бы десятки тысяч виджетов.
+        self._page_size = 25
+        self._page = 0
+        self._total_pages = 1
+        self._search_after = None
+
         self.list_frame = ScrollableFrame(self, fg_color=BG)
-        self.list_frame.pack(fill="both", expand=True, padx=15, pady=(0, 15))
+        self.list_frame.pack(fill="both", expand=True, padx=15, pady=(0, 5))
+
+        paging = ctk.CTkFrame(self, fg_color="transparent")
+        paging.pack(fill="x", padx=15, pady=(0, 10))
+        self.page_label = ctk.CTkLabel(paging, text="", text_color="#8899aa")
+        self.page_label.pack(side="left", padx=5)
+        self.next_btn = ctk.CTkButton(paging, text="Вперёд ▶", width=90, height=30,
+                    command=self._next_page)
+        self.next_btn.pack(side="right", padx=5)
+        self.prev_btn = ctk.CTkButton(paging, text="◀ Назад", width=90, height=30,
+                    command=self._prev_page)
+        self.prev_btn.pack(side="right", padx=5)
+
+    def _schedule_refresh(self):
+        """Debounce поиска/фильтра: перерисовываем не на каждый символ,
+        а спустя 300мс после последнего изменения — иначе с тысячами
+        записей каждый ввод символа пересоздавал бы все карточки."""
+        if getattr(self, "_search_after", None):
+            try:
+                self.after_cancel(self._search_after)
+            except Exception:
+                pass
+        self._search_after = self.after(300, self._debounced_refresh)
+
+    def _debounced_refresh(self):
+        self._search_after = None
+        self._page = 0
+        self._refresh_list()
+
+    def _prev_page(self):
+        if self._page > 0:
+            self._page -= 1
+            self._refresh_list()
+
+    def _next_page(self):
+        if self._page < self._total_pages - 1:
+            self._page += 1
+            self._refresh_list()
+
+    def _update_paging(self, total):
+        self._total_pages = max(1, math.ceil(total / self._page_size))
+        if self._page >= self._total_pages:
+            self._page = self._total_pages - 1
+        self.page_label.configure(
+            text=f"Стр. {self._page + 1} из {self._total_pages} · всего {total}")
+        self.prev_btn.configure(state="normal" if self._page > 0 else "disabled")
+        self.next_btn.configure(state="normal" if self._page < self._total_pages - 1 else "disabled")
 
     def _refresh_list(self):
         for w in self.list_frame.winfo_children():
@@ -4835,11 +4888,14 @@ class AthletesWindow(ctk.CTkFrame):
             athletes = [a for a in athletes if get_age_level(a["birth_date"]) == target_level]
 
         self.total_label.configure(text=f"👥 Всего спортсменов: {self.db.count_athletes()}")
-        if not athletes:
+        self._update_paging(len(athletes))
+        start = self._page * self._page_size
+        page_athletes = athletes[start:start + self._page_size]
+        if not page_athletes:
             ctk.CTkLabel(self.list_frame, text="Нет спортсменов.",
                     text_color="#445566").pack(pady=20)
         else:
-            for i, a in enumerate(athletes, start=1):
+            for i, a in enumerate(page_athletes, start=start + 1):
                 card = AthleteCard(self.list_frame, a,
                         on_edit=self._add_athlete_dialog,
                         on_delete=self._delete_athlete,
@@ -5389,26 +5445,80 @@ class CoachesWindow(ctk.CTkFrame):
                     command=self._sync_now).pack(side="left", padx=5)
 
         self.search_var = ctk.StringVar()
-        self.search_var.trace_add("write", lambda *_: self._refresh_list())
+        self.search_var.trace_add("write", lambda *_: self._schedule_refresh())
         ctk.CTkEntry(ctrl, textvariable=self.search_var, width=220,
                     placeholder_text="🔍 Поиск по ФИО...").pack(side="left", padx=10)
 
         self.count_label = ctk.CTkLabel(ctrl, text="", text_color="#556677")
         self.count_label.pack(side="right", padx=10)
 
+        self._page_size = 25
+        self._page = 0
+        self._total_pages = 1
+        self._search_after = None
+
         self.list_frame = ScrollableFrame(self, fg_color=BG)
-        self.list_frame.pack(fill="both", expand=True, padx=15, pady=(0, 15))
+        self.list_frame.pack(fill="both", expand=True, padx=15, pady=(0, 5))
+
+        paging = ctk.CTkFrame(self, fg_color="transparent")
+        paging.pack(fill="x", padx=15, pady=(0, 10))
+        self.page_label = ctk.CTkLabel(paging, text="", text_color="#8899aa")
+        self.page_label.pack(side="left", padx=5)
+        self.next_btn = ctk.CTkButton(paging, text="Вперёд ▶", width=90, height=30,
+                    command=self._next_page)
+        self.next_btn.pack(side="right", padx=5)
+        self.prev_btn = ctk.CTkButton(paging, text="◀ Назад", width=90, height=30,
+                    command=self._prev_page)
+        self.prev_btn.pack(side="right", padx=5)
+
+    def _schedule_refresh(self):
+        """Debounce поиска: перерисовываем спустя 300мс после последнего
+        изменения — иначе с тысячами записей каждый символ пересоздавал бы
+        все карточки."""
+        if getattr(self, "_search_after", None):
+            try:
+                self.after_cancel(self._search_after)
+            except Exception:
+                pass
+        self._search_after = self.after(300, self._debounced_refresh)
+
+    def _debounced_refresh(self):
+        self._search_after = None
+        self._page = 0
+        self._refresh_list()
+
+    def _prev_page(self):
+        if self._page > 0:
+            self._page -= 1
+            self._refresh_list()
+
+    def _next_page(self):
+        if self._page < self._total_pages - 1:
+            self._page += 1
+            self._refresh_list()
+
+    def _update_paging(self, total):
+        self._total_pages = max(1, math.ceil(total / self._page_size))
+        if self._page >= self._total_pages:
+            self._page = self._total_pages - 1
+        self.page_label.configure(
+            text=f"Стр. {self._page + 1} из {self._total_pages} · всего {total}")
+        self.prev_btn.configure(state="normal" if self._page > 0 else "disabled")
+        self.next_btn.configure(state="normal" if self._page < self._total_pages - 1 else "disabled")
 
     def _refresh_list(self):
         for w in self.list_frame.winfo_children():
             w.destroy()
         coaches = self.db.get_coaches(self.search_var.get().strip())
         self.count_label.configure(text=f"Всего: {len(coaches)}")
-        if not coaches:
+        self._update_paging(len(coaches))
+        start = self._page * self._page_size
+        page_coaches = coaches[start:start + self._page_size]
+        if not page_coaches:
             ctk.CTkLabel(self.list_frame, text="Нет тренеров.",
                     text_color="#445566").pack(pady=20)
         else:
-            for i, c in enumerate(coaches, start=1):
+            for i, c in enumerate(page_coaches, start=start + 1):
                 count = len(self.db.get_athletes_by_coach(c["id"]))
                 card = CoachCard(self.list_frame, c, count,
                         on_edit=self._add_coach_dialog,
@@ -6118,26 +6228,80 @@ class ClubsWindow(ctk.CTkFrame):
                     command=self._sync_now).pack(side="left", padx=5)
 
         self.search_var = ctk.StringVar()
-        self.search_var.trace_add("write", lambda *_: self._refresh_list())
+        self.search_var.trace_add("write", lambda *_: self._schedule_refresh())
         ctk.CTkEntry(ctrl, textvariable=self.search_var, width=220,
                     placeholder_text="🔍 Поиск по названию...").pack(side="left", padx=10)
 
         self.count_label = ctk.CTkLabel(ctrl, text="", text_color="#556677")
         self.count_label.pack(side="right", padx=10)
 
+        self._page_size = 25
+        self._page = 0
+        self._total_pages = 1
+        self._search_after = None
+
         self.list_frame = ScrollableFrame(self, fg_color=BG)
-        self.list_frame.pack(fill="both", expand=True, padx=15, pady=(0, 15))
+        self.list_frame.pack(fill="both", expand=True, padx=15, pady=(0, 5))
+
+        paging = ctk.CTkFrame(self, fg_color="transparent")
+        paging.pack(fill="x", padx=15, pady=(0, 10))
+        self.page_label = ctk.CTkLabel(paging, text="", text_color="#8899aa")
+        self.page_label.pack(side="left", padx=5)
+        self.next_btn = ctk.CTkButton(paging, text="Вперёд ▶", width=90, height=30,
+                    command=self._next_page)
+        self.next_btn.pack(side="right", padx=5)
+        self.prev_btn = ctk.CTkButton(paging, text="◀ Назад", width=90, height=30,
+                    command=self._prev_page)
+        self.prev_btn.pack(side="right", padx=5)
+
+    def _schedule_refresh(self):
+        """Debounce поиска: перерисовываем спустя 300мс после последнего
+        изменения — иначе с тысячами записей каждый символ пересоздавал бы
+        все карточки."""
+        if getattr(self, "_search_after", None):
+            try:
+                self.after_cancel(self._search_after)
+            except Exception:
+                pass
+        self._search_after = self.after(300, self._debounced_refresh)
+
+    def _debounced_refresh(self):
+        self._search_after = None
+        self._page = 0
+        self._refresh_list()
+
+    def _prev_page(self):
+        if self._page > 0:
+            self._page -= 1
+            self._refresh_list()
+
+    def _next_page(self):
+        if self._page < self._total_pages - 1:
+            self._page += 1
+            self._refresh_list()
+
+    def _update_paging(self, total):
+        self._total_pages = max(1, math.ceil(total / self._page_size))
+        if self._page >= self._total_pages:
+            self._page = self._total_pages - 1
+        self.page_label.configure(
+            text=f"Стр. {self._page + 1} из {self._total_pages} · всего {total}")
+        self.prev_btn.configure(state="normal" if self._page > 0 else "disabled")
+        self.next_btn.configure(state="normal" if self._page < self._total_pages - 1 else "disabled")
 
     def _refresh_list(self):
         for w in self.list_frame.winfo_children():
             w.destroy()
         clubs = self.db.get_clubs(self.search_var.get().strip())
         self.count_label.configure(text=f"Всего: {len(clubs)}")
-        if not clubs:
+        self._update_paging(len(clubs))
+        start = self._page * self._page_size
+        page_clubs = clubs[start:start + self._page_size]
+        if not page_clubs:
             ctk.CTkLabel(self.list_frame, text="Нет клубов.",
                     text_color="#445566").pack(pady=20)
             return
-        for i, cl in enumerate(clubs, start=1):
+        for i, cl in enumerate(page_clubs, start=start + 1):
             athletes_count = len(self.db.get_athletes_by_club(cl["id"]))
             coaches_count = len(self.db.get_coaches_by_club(cl["id"]))
             card = ClubCard(self.list_frame, cl, athletes_count, coaches_count,
