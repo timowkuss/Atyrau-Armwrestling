@@ -8151,7 +8151,7 @@ class App(ctk.CTk):
         form.pack(fill="x", padx=35)
 
         name_var = ctk.StringVar()
-        date_var = ctk.StringVar(value=datetime.now().strftime("%d.%m.%Y"))
+        date_var = ctk.StringVar()
         loc_var = ctk.StringVar()
 
         fields_cfg = [
@@ -8167,6 +8167,31 @@ class App(ctk.CTk):
                     height=38, font=ctk.CTkFont(size=13))
             e.pack(fill="x", pady=(0, 2))
             entries[label] = e
+
+        # Автоформат даты как в карточке спортсмена: вводишь цифры —
+        # подставляется маска ДД.ММ.ГГГГ с проверкой дня/месяца/года.
+        date_entry = entries["Дата *"]
+        def format_date(event=None):
+            now_year = datetime.now().year
+            value = "".join(ch for ch in date_entry.get() if ch.isdigit())[:8]
+            if len(value) >= 2:
+                value = f"{min(31, max(1, int(value[:2]))):02d}" + value[2:]
+            if len(value) >= 4:
+                value = value[:2] + f"{min(12, max(1, int(value[2:4]))):02d}" + value[4:]
+            if len(value) >= 8:
+                value = value[:4] + f"{min(now_year + 10, max(now_year - 10, int(value[4:8]))):04d}"
+            result = ""
+            if len(value) >= 1:
+                result += value[:2]
+            if len(value) > 2:
+                result += "." + value[2:4]
+            if len(value) > 4:
+                result += "." + value[4:]
+            cursor = len(result)
+            date_entry.delete(0, "end")
+            date_entry.insert(0, result)
+            date_entry.icursor(cursor)
+        date_entry.bind("<KeyRelease>", format_date)
 
         ctk.CTkLabel(form,
                     text="* После создания турнира добавьте весовые категории и участников",
