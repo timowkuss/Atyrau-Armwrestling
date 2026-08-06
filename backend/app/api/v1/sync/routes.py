@@ -1,7 +1,15 @@
 from fastapi import APIRouter, Depends
 
 from app.api.v1.deps import require_desktop_sync
-from app.api.v1.sync import athletes, categories, clubs, coaches, competitions, matches
+from app.api.v1.sync import (
+    athletes,
+    categories,
+    clubs,
+    coaches,
+    competitions,
+    matches,
+    photos,
+)
 
 router = APIRouter(prefix="/sync", tags=["sync"])
 router.include_router(athletes.router)
@@ -10,6 +18,7 @@ router.include_router(clubs.router)
 router.include_router(coaches.router)
 router.include_router(competitions.router)
 router.include_router(matches.router)
+router.include_router(photos.router)
 
 @router.get("/ping")
 def ping(_: bool = Depends(require_desktop_sync)):

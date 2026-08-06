@@ -250,6 +250,35 @@ def get_dvoeborie_points(place):
     return DVOEBORIE_POINTS.get(place, 0)
 
 
+# ─── Папка в Cloudinary для фото участников турнира ──────────
+# Cloudinary создаёт папки сам (параметр folder, вложенность через '/'),
+# поэтому отдельного API для "создания папки" не нужно. Имя папки
+# транслитерируем в латиницу, чтобы в Cloudinary Media Library не было
+# кириллицы и проблем с URL-кодированием.
+_TRANSLIT = {
+    ord("а"): "a", ord("б"): "b", ord("в"): "v", ord("г"): "g",
+    ord("д"): "d", ord("е"): "e", ord("ё"): "yo", ord("ж"): "zh",
+    ord("з"): "z", ord("и"): "i", ord("й"): "y", ord("к"): "k",
+    ord("л"): "l", ord("м"): "m", ord("н"): "n", ord("о"): "o",
+    ord("п"): "p", ord("р"): "r", ord("с"): "s", ord("т"): "t",
+    ord("у"): "u", ord("ф"): "f", ord("х"): "kh", ord("ц"): "ts",
+    ord("ч"): "ch", ord("ш"): "sh", ord("щ"): "sch", ord("ъ"): "",
+    ord("ы"): "y", ord("ь"): "", ord("э"): "e", ord("ю"): "yu",
+    ord("я"): "ya",
+}
+
+
+def tournament_photo_folder(name):
+    """'Чемпионат города-2026' -> 'competitions/chempionat-goroda-2026'.
+    Возвращает None для пустого имени — тогда участники без фото."""
+    if not name:
+        return None
+    s = name.strip().lower().translate(_TRANSLIT)
+    s = "".join(ch if ch.isalnum() else "-" for ch in s)
+    s = "-".join(part for part in s.split("-") if part)
+    return f"competitions/{s}" if s else None
+
+
 
 def extract_birth_year(birth_date_str):
     """Достаёт год рождения независимо от формата строки. Основной формат
@@ -548,6 +577,18 @@ iin TEXT,                        -- ИИН, 12 цифр
             self.conn.execute("ALTER TABLE tournaments ADD COLUMN status TEXT DEFAULT 'active'")
         if "finished_at" not in t_cols:
             self.conn.execute("ALTER TABLE tournaments ADD COLUMN finished_at TEXT")
+        if "photo_folder" not in t_cols:
+            self.conn.execute("ALTER TABLE tournaments ADD COLUMN photo_folder TEXT")
+        # Бэкфилл: турниры, созданные до появления папок в Cloudinary (или в
+        # старой версии приложения), получают папку по названию — иначе их
+        # участники продолжали бы падать в общую папку "athletes".
+        for row in self.conn.execute(
+                "SELECT id, name FROM tournaments WHERE photo_folder IS NULL").fetchall():
+            folder = tournament_photo_folder(row["name"])
+            if folder:
+                self.conn.execute(
+                    "UPDATE tournaments SET photo_folder=? WHERE id=?",
+                    (folder, row["id"]))
 
         self.conn.commit()
         cols = [r[1] for r in self.conn.execute("PRAGMA table_info(matches)").fetchall()]
@@ -676,8 +717,9 @@ iin TEXT,                        -- ИИН, 12 цифр
                           bracket_system="double", format_type="separate"):
         cur = self.conn.execute(
             "INSERT INTO tournaments (name, date, location, weight_tolerance, "
-            "bracket_system, format_type) VALUES (?,?,?,?,?,?)",
-            (name, date, location, weight_tolerance, bracket_system, format_type))
+            "bracket_system, format_type, photo_folder) VALUES (?,?,?,?,?,?,?)",
+            (name, date, location, weight_tolerance, bracket_system,
+             format_type, tournament_photo_folder(name)))
         self.conn.commit()
         return cur.lastrowid
 
@@ -1385,9 +1427,29 @@ def _synced_delete_category(self, cid):
         print(f"[sync] delete_category: {e}")
 
 def _synced_delete_participant(self, pid):
+    # Фото участника может быть отдельной загрузкой под турнир (папка
+    # competitions/...) ИЛИ копией аватарки спортсмена (photo_path_var
+    # наследуется из a["photo_path"] при выборе спортсмена). Удалять из
+    # Cloudinary можно ТОЛЬКО первое — второй случай убьёт аватарку
+    # спортсмена на сайте. Собираем URL до удаления строки из БД.
+    photo_url = None
+    try:
+        row = self.get_participant(pid)
+        if row and row["photo_path"]:
+            pp = row["photo_path"]
+            is_athlete_avatar = False
+            if row["athlete_id"]:
+                athlete = self.get_athlete(row["athlete_id"])
+                if athlete and athlete["photo_path"] == pp:
+                    is_athlete_avatar = True
+            if not is_athlete_avatar:
+                photo_url = pp
+    except Exception as e:
+        print(f"[sync] delete_participant: не удалось собрать фото участника: {e}")
+        photo_url = None
     _original_delete_participant(self, pid)
     try:
-        sync_manager.on_participant_deleted(pid)
+        sync_manager.on_participant_deleted(pid, photo_url)
     except Exception as e:
         print(f"[sync] delete_participant: {e}")
 
@@ -5679,7 +5741,17 @@ class CoachesWindow(ctk.CTkToplevel):
 
             def worker():
                 try:
-                    url = upload_photo(p, folder="coaches")
+                    tournament = (self.db.get_tournament(self.current_tournament_id)
+                                  if self.current_tournament_id else None)
+                    folder = "athletes"
+                    if tournament:
+                        # Если у турнира папки нет (создан до этой функции или
+                        # ещё не бэкфиллен) — вычисляем её из названия на лету,
+                        # чтобы фото не падало в общую "athletes".
+                        folder = (tournament["photo_folder"]
+                                  or tournament_photo_folder(tournament["name"])
+                                  or "athletes")
+                    url = upload_photo(p, folder=folder)
                 except CloudinaryUploadError as e:
                     def on_error():
                         photo_status_lbl.configure(text=f"Ошибка: {e}", text_color=ERR)

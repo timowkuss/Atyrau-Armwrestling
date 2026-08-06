@@ -246,6 +246,11 @@ class SyncApiClient:
     def delete_participant(self, remote_id):
         return self._request("DELETE", f"/participants/{remote_id}")
 
+    def delete_photo(self, url):
+        """Удаляет файл Cloudinary по его URL (десктоп сам это делать не
+        может — нет API secret; бэкенд вызывает delete_cloudinary_photo)."""
+        return self._request("POST", "/photos/delete", json_body={"url": url})
+
     def publish_competition(self, remote_competition_id):
         return self._request("POST", f"/competitions/{remote_competition_id}/publish")
 

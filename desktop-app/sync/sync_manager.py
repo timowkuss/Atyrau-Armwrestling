@@ -686,7 +686,15 @@ class SyncManager:
         # осознанное упрощение Этапа 6, не баг.
         pass
     
-    def on_participant_deleted(self, pid):
+    def on_participant_deleted(self, pid, photo_url=None):
+        # 0. отдельное фото участника в Cloudinary (загруженное под турнир)
+        #    удаляем отдельно — десктоп сам это делать не может (нет API
+        #    secret), поэтому шлём URL на бэкенд. Неудача уходит в
+        #    офлайн-очередь (delete_photo) и повторится позже.
+        if photo_url and "res.cloudinary.com" in photo_url:
+            self._try("delete_photo", {"url": photo_url},
+                      lambda: self.api.delete_photo(photo_url))
+
         # 1. если ещё не отправлен — вообще не даём ему уйти
         self.state.purge_pending("create_participant", "pid", pid)
 
@@ -991,6 +999,21 @@ class SyncManager:
                 except ApiClientError as e:
                     if e.status_code == 404:
                         return True
+                    raise
+                return True
+
+            if operation == "delete_photo":
+                delete_fn = getattr(self.api, "delete_photo", None)
+                if delete_fn is None:
+                    return False
+                try:
+                    delete_fn(payload["url"])
+                except ApiClientError as e:
+                    if e.status_code == 404:
+                        # Бэкенд ещё не обновлён (нет роута /sync/photos/delete) —
+                        # не считаем ошибкой повтор роута; операция останется
+                        # в очереди и доедет, когда роут появится.
+                        return None
                     raise
                 return True
 

@@ -170,6 +170,18 @@ class _DropdownFrame(ctk.CTkFrame):
         self._current = None
         self._buttons = []
 
+        # Список живёт в прокручиваемой области: если пунктов много, а окно
+        # маленькое (мастер категории 420x300 и 11 возрастных категорий),
+        # низ раньше обрезался границами окна — до последнего пункта нельзя
+        # было добраться. Теперь высота списка ограничивается свободным
+        # местом, а лишние пункты уходят в скролл колесом мыши.
+        self._scroller = ctk.CTkScrollableFrame(
+            self, fg_color="transparent", corner_radius=0,
+            scrollbar_button_color=hover_color,
+            scrollbar_button_hover_color=hover_color,
+        )
+        self._scroller.pack(fill="both", expand=True, padx=3, pady=3)
+
         self._bind_id = None
         self._bind_pending = None
         self._rebuild()
@@ -182,7 +194,7 @@ class _DropdownFrame(ctk.CTkFrame):
         for value in self._values:
             selected = (value == self._current)
             btn = ctk.CTkButton(
-                self,
+                self._scroller,
                 text=("✓ " if selected else "  ") + value,
                 fg_color="transparent",
                 hover_color=self._hover_color,
@@ -206,17 +218,31 @@ class _DropdownFrame(ctk.CTkFrame):
         # иначе при DPI-масштабировании список уезжает вниз-вправо.
         scaling = self._apply_widget_scaling(1.0) or 1.0
         width = max((b.winfo_reqwidth() for b in self._buttons), default=140) + 12
-        height = len(self._buttons) * 36 + 8
-        self.configure(width=int(width / scaling), height=int(height / scaling))
+        content_height = len(self._buttons) * 36 + 8
+        self.configure(width=int(width / scaling))
         self.update_idletasks()
         toplevel = self.winfo_toplevel()
         # пересчитываем экранные координаты в координаты верхнего окна
         x = (x_root - toplevel.winfo_rootx()) / scaling
         y = (y_root - toplevel.winfo_rooty()) / scaling
-        # если снизу не влезает — показываем список выше виджета
         avail_h = toplevel.winfo_height() / scaling
-        if y + height > avail_h and y - height > 0:
-            y -= height + 8
+        margin = 8
+        # Сначала пробуем раскрыть вниз. Если не влезает целиком — наверх.
+        # Если не помещается ни с одной стороны (длинный список в маленьком
+        # окне) — ограничиваем высоту доступным местом с той стороны, где
+        # его больше, остальное уходит в скролл.
+        height = content_height
+        space_below = avail_h - y - margin
+        space_above = y - margin
+        if height > space_below:
+            if height <= space_above:
+                y -= height + margin
+            elif space_below >= space_above and space_below > 60:
+                height = space_below
+            else:
+                height = space_above
+                y -= height + margin
+        self.configure(height=int(height / scaling))
         self.place(x=int(x), y=int(y))
         self.tkraise()
         # закрытие по клику мимо ловим bind'ом на верхнем окне; привязку
