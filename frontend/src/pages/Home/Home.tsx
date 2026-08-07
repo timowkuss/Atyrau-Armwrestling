@@ -10,7 +10,10 @@ import { LoadingState, ErrorState, EmptyState } from '@/components/ui/States'
 const ArmTable3D = lazy(() => import('@/components/model/ArmTable3D').then((m) => ({ default: m.ArmTable3D })))
 
 export function Home() {
-  const competitions = useCompetitions({ status: 'published', page_size: 3 })
+  // Без status бэкенд отдаёт всё, кроме draft (published + in_progress +
+  // completed) — чтобы на главной были видны и идущие сейчас турниры,
+  // и прошедшие с результатами, а не только будущие (published).
+  const competitions = useCompetitions({ page_size: 3 })
   const athletes = useAthletes({ page_size: 4 })
 
   return (
@@ -114,7 +117,7 @@ export function Home() {
           <ErrorState message={(competitions.error as Error).message} onRetry={() => competitions.refetch()} />
         )}
         {competitions.data && competitions.data.items.length === 0 && (
-          <EmptyState title="Опубликованных турниров пока нет" message="Загляните позже — здесь появятся результаты." />
+          <EmptyState title="Турниров пока нет" message="Загляните позже — здесь появятся результаты." />
         )}
         {competitions.data && competitions.data.items.length > 0 && (
           <div className="grid gap-5 sm:grid-cols-2 2xl:grid-cols-3">
