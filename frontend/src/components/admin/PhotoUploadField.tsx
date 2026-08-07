@@ -1,23 +1,23 @@
-import { useRef, useState } from 'react'
-import { useAuth } from '@/features/auth/AuthContext'
+﻿import { useRef, useState } from 'react'
+import { useAuth } from '@/features/auth/useAuth'
 import { adminApi } from '@/lib/adminApi'
 import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 
 interface PhotoUploadFieldProps {
   value: string | null | undefined
   onChange: (url: string) => void
-  /** Показать поверх текущего значения (в форме редактирования, где value
-   * из формы ещё пустой, а превью надо брать из уже сохранённой записи). */
+  /** РџРѕРєР°Р·Р°С‚СЊ РїРѕРІРµСЂС… С‚РµРєСѓС‰РµРіРѕ Р·РЅР°С‡РµРЅРёСЏ (РІ С„РѕСЂРјРµ СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРёСЏ, РіРґРµ value
+   * РёР· С„РѕСЂРјС‹ РµС‰С‘ РїСѓСЃС‚РѕР№, Р° РїСЂРµРІСЊСЋ РЅР°РґРѕ Р±СЂР°С‚СЊ РёР· СѓР¶Рµ СЃРѕС…СЂР°РЅС‘РЅРЅРѕР№ Р·Р°РїРёСЃРё). */
   fallbackPreview?: string | null
   size?: number
-  /** 'circle' (по умолчанию, как для спортсменов) или 'square' — мягко
-   * скруглённый квадрат, крупнее подходит для тренерских карточек. */
+  /** 'circle' (РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ, РєР°Рє РґР»СЏ СЃРїРѕСЂС‚СЃРјРµРЅРѕРІ) РёР»Рё 'square' вЂ” РјСЏРіРєРѕ
+   * СЃРєСЂСѓРіР»С‘РЅРЅС‹Р№ РєРІР°РґСЂР°С‚, РєСЂСѓРїРЅРµРµ РїРѕРґС…РѕРґРёС‚ РґР»СЏ С‚СЂРµРЅРµСЂСЃРєРёС… РєР°СЂС‚РѕС‡РµРє. */
   shape?: 'circle' | 'square'
 }
 
-/** Кнопка выбора/съёмки фото + загрузка на Cloudinary через
- * POST /admin/media/upload. На телефоне открывается системный выбор:
- * снять камерой или выбрать существующее фото из галереи. */
+/** РљРЅРѕРїРєР° РІС‹Р±РѕСЂР°/СЃСЉС‘РјРєРё С„РѕС‚Рѕ + Р·Р°РіСЂСѓР·РєР° РЅР° Cloudinary С‡РµСЂРµР·
+ * POST /admin/media/upload. РќР° С‚РµР»РµС„РѕРЅРµ РѕС‚РєСЂС‹РІР°РµС‚СЃСЏ СЃРёСЃС‚РµРјРЅС‹Р№ РІС‹Р±РѕСЂ:
+ * СЃРЅСЏС‚СЊ РєР°РјРµСЂРѕР№ РёР»Рё РІС‹Р±СЂР°С‚СЊ СЃСѓС‰РµСЃС‚РІСѓСЋС‰РµРµ С„РѕС‚Рѕ РёР· РіР°Р»РµСЂРµРё. */
 export function PhotoUploadField({
   value,
   onChange,
@@ -35,7 +35,7 @@ export function PhotoUploadField({
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
-    e.target.value = '' // чтобы повторный выбор того же файла тоже сработал
+    e.target.value = '' // С‡С‚РѕР±С‹ РїРѕРІС‚РѕСЂРЅС‹Р№ РІС‹Р±РѕСЂ С‚РѕРіРѕ Р¶Рµ С„Р°Р№Р»Р° С‚РѕР¶Рµ СЃСЂР°Р±РѕС‚Р°Р»
     if (!file || !token) return
     setError(null)
     setUploading(true)
@@ -72,7 +72,7 @@ export function PhotoUploadField({
           onClick={() => inputRef.current?.click()}
           className="rounded-[var(--radius-rivet)] border border-steel-dim px-3 py-1.5 text-sm text-steel hover:border-brass hover:text-brass disabled:opacity-50"
         >
-          {uploading ? 'Загрузка…' : '📷 Фото'}
+          {uploading ? 'Р—Р°РіСЂСѓР·РєР°вЂ¦' : 'рџ“· Р¤РѕС‚Рѕ'}
         </button>
         {error && <p className="text-xs text-danger">{error}</p>}
       </div>

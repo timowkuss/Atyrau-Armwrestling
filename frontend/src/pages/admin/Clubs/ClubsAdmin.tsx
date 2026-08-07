@@ -1,5 +1,5 @@
 ﻿import { useState } from 'react'
-import { useAuth } from '@/features/auth/AuthContext'
+import { useAuth } from '@/features/auth/useAuth'
 import {
   useAddClubMembers,
   useAdminClubDetail,

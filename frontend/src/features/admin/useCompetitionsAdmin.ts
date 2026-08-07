@@ -1,5 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useAuth } from '@/features/auth/AuthContext'
+﻿import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useAuth } from '@/features/auth/useAuth'
 import { adminApi } from '@/lib/adminApi'
 import type { CompetitionAdminUpdateInput, GalleryDocumentInput } from '@/types/api'
 

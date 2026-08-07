@@ -260,12 +260,11 @@ export function CompetitionBoard() {
     setSearchParams(params, { replace: true })
   }
 
-  const allTables = queue.data ?? []
-
   const tables = useMemo(() => {
+    const allTables = queue.data ?? []
     if (selectedNames.size === 0) return allTables
     return allTables.filter((table) => selectedNames.has(table.category_name))
-  }, [allTables, selectedNames])
+  }, [queue.data, selectedNames])
 
   const gridClass = tables.length <= 1
     ? 'grid-cols-1'

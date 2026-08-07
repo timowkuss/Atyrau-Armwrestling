@@ -1,18 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { API_BASE_URL } from '@/lib/api'
 import type { AuthUser } from '@/types/api'
+import { AuthContext, type AuthContextValue } from './auth-context'
 
 const TOKEN_KEY = 'atyrau_armsport_admin_token'
-
-interface AuthContextValue {
-  token: string | null
-  user: AuthUser | null
-  isLoading: boolean
-  login: (username: string, password: string) => Promise<void>
-  logout: () => void
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null)
 
 async function fetchMe(token: string): Promise<AuthUser> {
   const res = await fetch(`${API_BASE_URL}/auth/me`, {
@@ -65,13 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }, [])
 
-  const value = useMemo(() => ({ token, user, isLoading, login, logout }), [token, user, isLoading, login, logout])
+  const value = useMemo<AuthContextValue>(() => ({ token, user, isLoading, login, logout }), [token, user, isLoading, login, logout])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
-
-export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth должен использоваться внутри <AuthProvider>')
-  return ctx
 }

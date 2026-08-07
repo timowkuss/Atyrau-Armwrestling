@@ -1,5 +1,5 @@
 ﻿import { useState } from 'react'
-import { useAuth } from '@/features/auth/AuthContext'
+import { useAuth } from '@/features/auth/useAuth'
 import { useAdminClubsList } from '@/features/admin/useClubsAdmin'
 import { useAdminCoachesList } from '@/features/admin/useCoachesAdmin'
 import {
