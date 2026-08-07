@@ -423,13 +423,19 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
         if not stats:
             continue
 
-        # Завершён ли ГФ
-        gf_done = any(m.bracket == "final" and m.status == "done" for m in cat_matches)
+        # Чемпион — победитель последнего сыгранного матча, из которого уже
+        # нет перехода дальше (win_next_id IS NULL): финал winners-сетки для
+        # single elimination или гранд-финал для double elimination. Та же
+        # логика, что и get_standings в десктопе — по bracket == "final"
+        # искать нельзя, в SE финал лежит в winners-сетке.
+        terminal_done = [
+            m for m in cat_matches if m.win_next_id is None and m.status == "done"
+        ]
         champion = None
-        if gf_done:
-            gf_matches = [m for m in cat_matches if m.bracket == "final"]
-            last_gf = max(gf_matches, key=lambda m: m.id)
-            champion = last_gf.winner_id
+        if terminal_done:
+            last_term = max(terminal_done, key=lambda m: m.stage)
+            champion = last_term.winner_id
+        gf_done = champion is not None
 
         eliminated = []
         if max_losses == 1:
