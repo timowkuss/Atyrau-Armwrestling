@@ -105,29 +105,143 @@ import tkinter.messagebox as _tkmb
 import tkinter.simpledialog as _tksd
 
 
-def _messagebox_owner():
-    """Активный Toplevel приложения (окно, в котором сейчас фокус)."""
+# Последнее окно, с которым работал пользователь (кликал/вводил данные).
+# Фокус после модального диалога на Windows «уезжает», поэтому определять
+# владельца по фокусу в момент вызова ненадёжно — запоминаем активное окно.
+_LAST_ACTIVE_WINDOW = None
+_ACTIVE_TRACKER_INSTALLED = False
+
+
+def _install_active_tracker(root):
+    """Привязывает к root обработчик: любое нажатие/фокус запоминает окно,
+    в котором это произошло. Вызывается один раз при старте приложения."""
+    global _ACTIVE_TRACKER_INSTALLED
+    if _ACTIVE_TRACKER_INSTALLED:
+        return
+    _ACTIVE_TRACKER_INSTALLED = True
+    try:
+        def _on_focus(event=None):
+            global _LAST_ACTIVE_WINDOW
+            try:
+                w = event.widget if event is not None else root.focus_get()
+                if w is not None:
+                    tl = w.winfo_toplevel()
+                    if tl is not None:
+                        _LAST_ACTIVE_WINDOW = tl
+            except Exception:
+                pass
+        root.bind_all("<ButtonPress>", _on_focus, add="+")
+        root.bind_all("<KeyPress>", _on_focus, add="+")
+        root.bind_all("<FocusIn>", _on_focus, add="+")
+    except Exception:
+        pass
+
+
+def _active_window():
+    """Окно приложения, с которым пользователь работал последним (root или
+    дочерний Toplevel).
+
+    Ключевой момент: если открыто хотя бы одно дочернее окно (сетка и т.п.),
+    никогда не возвращаем root — иначе после закрытия диалога поднимется
+    главное окно, и рабочее (сетка) уйдёт в задний фон за ним.
+    """
     try:
         root = ctk.CTk._default_root
         if root is None:
             root = tk._default_root
         if root is None:
             return None
+        _install_active_tracker(root)
+        global _LAST_ACTIVE_WINDOW
+        # 1) Текущий фокус — самое точное.
         for w in (root.focus_get(), root.focus_displayof()):
-            while w is not None and not isinstance(w, tk.Toplevel) and w.master is not None:
-                w = w.master
-            if isinstance(w, tk.Toplevel):
-                return w
+            if w is not None:
+                tl = w.winfo_toplevel()
+                if tl is not None:
+                    if tl is not root:
+                        _LAST_ACTIVE_WINDOW = tl
+                        return tl
+        # 2) Последнее запомненное окно, если ещё живо и это не root.
+        if _LAST_ACTIVE_WINDOW is not None:
+            try:
+                if _LAST_ACTIVE_WINDOW.winfo_exists() and _LAST_ACTIVE_WINDOW is not root:
+                    return _LAST_ACTIVE_WINDOW
+            except Exception:
+                _LAST_ACTIVE_WINDOW = None
+        # 3) Фокус не на дочернем окне (вызов из after/timer) — берём первое
+        #    видимое дочернее окно, если оно есть; root — только в крайнем случае.
+        for child in root.winfo_children():
+            if isinstance(child, tk.Toplevel) and child.winfo_viewable():
+                return child
         return root
     except Exception:
         return None
 
 
-def _pin_topmost(win, on):
+def _messagebox_owner():
+    """Активное окно приложения (root или дочерний Toplevel) для привязки
+    модального диалога — чтобы на Windows окно не уходило в задний план."""
+    return _active_window()
+
+
+# Окна приложения, которые делаем owned (transient) к главному окну.
+# На Windows transient — это нативный owned-механизм: Windows сам держит
+# owned-окно ПОВЕРХ родителя (не уходит в фон) и сам показывает его
+# диалоги поверх окна. Это надёжнее topmost: topmost-окно прячет диалоги
+# за собой, а owned-окно — нет.
+_OWNED_WINDOWS = set()
+
+
+def _keep_topmost(win):
+    """Делает окно owned (transient) к главному окну приложения.
+
+    Windows-механизм owned-окон:
+      * owned-окно всегда поверх своего родителя — сетка не уходит в фон;
+      * диалог с parent=owned-окно появляется ПОВЕРХ него;
+      * после закрытия диалога Windows сам возвращает фокус owned-окну.
+    """
     if win is None:
         return
     try:
-        win.attributes("-topmost", bool(on))
+        tl = win.winfo_toplevel()
+        if tl in _OWNED_WINDOWS:
+            return
+        root = ctk.CTk._default_root
+        if root is None:
+            root = tk._default_root
+        if root is None or tl is root:
+            return
+        tl.transient(root)
+        _OWNED_WINDOWS.add(tl)
+
+        def _cleanup(event=None):
+            _OWNED_WINDOWS.discard(tl)
+        try:
+            tl.bind("<Destroy>", _cleanup, add="+")
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+def _force_foreground(win):
+    """Гарантированно поднимает окно поверх других окон ПРИЛОЖЕНИЯ на Windows.
+    SetForegroundWindow в этот момент разрешён — окно только что закрыло
+    модальный диалог, и приложение активно (не перехват чужих окон)."""
+    if win is None:
+        return
+    try:
+        import ctypes
+        tl = win.winfo_toplevel()
+        hwnd = tl.winfo_id()
+        user32 = ctypes.windll.user32
+        user32.SetForegroundWindow(hwnd)
+        user32.BringWindowToTop(hwnd)
+        # SetWindowPos без флага HWND_TOPMOST: просто поднять в Z-порядке,
+        # НЕ делая окно «всегда поверх» — иначе диалоги будут прятаться за ним.
+        SWP_NOSIZE = 0x0001
+        SWP_NOMOVE = 0x0002
+        user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE)
     except Exception:
         pass
 
@@ -140,38 +254,53 @@ def _raise_all_windows():
             root = tk._default_root
         if root is None:
             return
+        # root.lift() и root.focus_force() НЕ вызываем: главное окно не должно
+        # перекрывать дочерние (сетка и т.п.) и забирать у них фокус.
         for child in root.winfo_children():
             if isinstance(child, tk.Toplevel) and child.winfo_viewable():
                 child.lift()
-        root.lift()
-        root.focus_force()
+                _force_foreground(child)
     except Exception:
         pass
 
 
 def _with_owner(fn):
     def wrapped(*args, **kwargs):
-        owner = kwargs.get("parent")
+        # Запоминаем активное окно ДО показа диалога: после закрытия модального
+        # диалога фокус на Windows уходит, и без этого следующий диалог
+        # привяжется не к тому окну.
+        global _LAST_ACTIVE_WINDOW
+        _LAST_ACTIVE_WINDOW = _active_window() or _LAST_ACTIVE_WINDOW
+        parent = kwargs.get("parent")
+        # Владелец: явно переданный parent (self) надёжнее, чем фокус —
+        # после предыдущего модального диалога фокус может «уехать» на
+        # главное окно, и тогда окно сетки после закрытия уйдёт в фон.
+        owner = parent
         if owner is None:
             owner = _messagebox_owner()
-            if owner is not None:
-                kwargs["parent"] = owner
-        # Пока диалог открыт, держим окно-владельца поверх всех — тогда и сам
-        # модальный диалог гарантированно виден поверх других приложений.
         if owner is not None:
-            _pin_topmost(owner, True)
+            kwargs["parent"] = owner
+        # Рабочие окна (сетки и т.п.) делаем owned (transient) к главному окну:
+        # Windows сам держит их поверх родителя и сам показывает их диалоги
+        # поверх окна. Главное окно (root) не трогаем.
+        owner_tl = None
+        if owner is not None:
+            try:
+                owner_tl = owner.winfo_toplevel()
+                _keep_topmost(owner_tl)
+            except Exception:
+                pass
         try:
             return fn(*args, **kwargs)
         finally:
-            _pin_topmost(owner, False)
+            # Windows с transient-окном сам возвращает фокус владельцу после
+            # закрытия модального диалога, но для надёжности дополнительно
+            # поднимаем окно на передний план.
             _raise_all_windows()
             if owner is not None:
                 try:
+                    _force_foreground(owner)
                     owner.focus_force()
-                    # Небольшой topmost-«толчок» после закрытия диалога:
-                    # Windows иногда не сразу отдаёт фокус/передний план.
-                    owner.after(150, lambda: _pin_topmost(owner, True))
-                    owner.after(500, lambda: _pin_topmost(owner, False))
                 except Exception:
                     pass
     return wrapped
@@ -558,6 +687,12 @@ iin TEXT,                        -- ИИН, 12 цифр
             pid INTEGER NOT NULL,
             manual_rank INTEGER NOT NULL,
             PRIMARY KEY (tournament_id, category_id, pid)
+        );
+        CREATE TABLE IF NOT EXISTS bracket_generations (
+            category_id INTEGER NOT NULL,
+            hand TEXT NOT NULL,
+            generation INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (category_id, hand)
         );
         """)
 
@@ -1204,6 +1339,23 @@ iin TEXT,                        -- ИИН, 12 цифр
 
     def clear_matches(self, category_id, hand):
         self.conn.execute("DELETE FROM matches WHERE category_id=? AND hand=?", (category_id, hand))
+        self.conn.commit()
+
+    def get_bracket_generation(self, category_id, hand):
+        """Номер поколения сетки (0 — первая). Растёт при сбросе сетки,
+        поэтому «Сбросить сетку» + «Создать сетку» дают НОВУЮ случайную
+        сетку, а простое повторное «Создать» — ту же самую."""
+        row = self.conn.execute(
+            "SELECT generation FROM bracket_generations WHERE category_id=? AND hand=?",
+            (category_id, hand)).fetchone()
+        return row["generation"] if row else 0
+
+    def bump_bracket_generation(self, category_id, hand):
+        """Увеличивает поколение сетки (вызывается при сбросе сетки)."""
+        self.conn.execute(
+            "INSERT INTO bracket_generations (category_id, hand, generation) VALUES (?, ?, 1) "
+            "ON CONFLICT(category_id, hand) DO UPDATE SET generation = generation + 1",
+            (category_id, hand))
         self.conn.commit()
 
     def get_bracket_table_number(self, category_id, hand):
@@ -2710,50 +2862,58 @@ class DisplayServer:
         self.app = Flask(__name__)
 
         def _fighter_html(tnum, slot, fighter, name_size, photo_size):
-            """Один боец: фото (круг) + имя. Слот — 'c1'/'c2'/'n1'/'n2'."""
+            """Один боец: имя (без фото — на табло оно не нужно)."""
             if not fighter:
                 return (f'<div class="fighter">'
                         f'<div class="fighter-name" style="font-size:{name_size}px">?</div></div>')
             name = fighter.get("name") or "?"
-            pp = fighter.get("photo") or ""
-            # Cloudinary-URL грузим прямо с CDN (без скачивания на десктоп).
-            # Локальные пути (наследие) — через роут /photo (кэш).
-            src = pp if pp.startswith("http://") or pp.startswith("https://") else f"/photo/{tnum}-{slot}"
-            fb = (f"if(!this.dataset.fb){{this.dataset.fb='1';"
-                  f"this.src='/photo/{tnum}-{slot}';}}"
-                  f"else{{this.style.display='none';}}")
-            photo = (f'<img class="fighter-photo" src="{src}" '
-                     f'referrerpolicy="no-referrer" '
-                     f'style="width:{photo_size}px;height:{photo_size}px" '
-                     f'onerror="{fb}">')
-            return (f'<div class="fighter">{photo}'
+            return (f'<div class="fighter">'
                     f'<div class="fighter-name" style="font-size:{name_size}px">{name}</div></div>')
 
         def _match_html(tnum, prefix, match_data, sizes):
             """Поединок: два бойца с 'VS' между ними."""
             if not match_data:
                 return ""
-            p1 = _fighter_html(tnum, prefix + "1", match_data.get("p1"), sizes["name"], sizes["photo"])
-            p2 = _fighter_html(tnum, prefix + "2", match_data.get("p2"), sizes["name"], sizes["photo"])
+            p1 = _fighter_html(tnum, prefix + "1", match_data.get("p1"), sizes["name"], 0)
+            p2 = _fighter_html(tnum, prefix + "2", match_data.get("p2"), sizes["name"], 0)
             return (f'<div class="match">{p1}'
                     f'<div class="vs" style="font-size:{sizes["vs"]}px">VS</div>'
                     f'{p2}</div>')
 
-        def _render_table_block(tnum, data, sizes):
+        def _render_table_block(tnum, data, sizes, cols=1):
             cat = data.get("category", "")
+            # "Senior Men 55kg Both" -> "Senior Men 55kg Двоеборье"
+            cat = cat.replace(" Both", " Двоеборье").replace("Both", "Двоеборье")
             hand = data.get("hand", "")
-            current = data.get("current_match")
-            nxt = data.get("next_match")
+            finished = bool(data.get("finished"))
+            eliminated = data.get("eliminated") or []
 
-            if isinstance(current, dict) and current.get("p1"):
-                cur_html = _match_html(tnum, "c", current, sizes["cur"])
-            elif isinstance(current, dict) and current.get("message"):
+            # Завершённая сетка: Стол, Категория, рука + итоговая таблица
+            # участников по местам с очками (победы-поражения).
+            if finished and eliminated:
+                rows = "".join(
+                    f'<div class="final-row">'
+                    f'<span class="final-place">{e["place"]}.</span>'
+                    f'<span class="final-name">{e["name"]}</span>'
+                    f'<span class="final-rec">{e["wins"]}-{e["losses"]}</span>'
+                    f'</div>' for e in eliminated)
+                return f"""
+                <div class="table-block">
+                  <div class="table-title">СТОЛ {tnum}</div>
+                  <div class="category">Категория {cat}<br>{hand} рука</div>
+                  <div class="final-list">{rows}</div>
+                </div>"""
+
+            if isinstance(current_data := data.get("current_match"), dict) and current_data.get("p1"):
+                cur_html = _match_html(tnum, "c", current_data, sizes["cur"])
+            elif isinstance(current_data, dict) and current_data.get("message"):
                 cur_html = (f'<div class="current" '
-                            f'style="font-size:{sizes["cur"]["name"]}px">{current["message"]}</div>')
+                            f'style="font-size:{sizes["cur"]["name"]}px">{current_data["message"]}</div>')
             else:
                 cur_html = (f'<div class="current" '
                             f'style="font-size:{sizes["cur"]["name"]}px">Нет активного поединка</div>')
 
+            nxt = data.get("next_match")
             if isinstance(nxt, dict) and nxt.get("p1"):
                 nxt_html = _match_html(tnum, "n", nxt, sizes["nxt"])
             elif isinstance(nxt, dict) and nxt.get("message"):
@@ -2762,6 +2922,17 @@ class DisplayServer:
             else:
                 nxt_html = '<div class="next">—</div>'
 
+            elim_html = ""
+            if eliminated:
+                elim_size = "12px" if cols == 2 else "18px"
+                rows = "".join(
+                    f'<div class="elim-row" style="font-size:{elim_size}">'
+                    f'<span class="elim-place">{e["place"]}.</span>'
+                    f'<span class="elim-name">{e["name"]}</span>'
+                    f'<span class="elim-rec">{e["wins"]}-{e["losses"]}</span>'
+                    f'</div>' for e in eliminated)
+                elim_html = f'<div class="elim-title" style="font-size:{"16px" if cols == 2 else "22px"}">Выбыли</div><div class="elim-list">{rows}</div>'
+
             return f"""
             <div class="table-block">
               <div class="table-title">СТОЛ {tnum}</div>
@@ -2769,44 +2940,8 @@ class DisplayServer:
               <div class="current-wrap">{cur_html}</div>
               <div class="next-title">Следующий бой</div>
               <div class="next-wrap">{nxt_html}</div>
+              {elim_html}
             </div>"""
-
-        @self.app.route("/photo/<path:key>")
-        def photo(key):
-            """Отдаёт локальное фото бойца по ключу вида '<стол>-c1' / '<стол>-n2'.
-            Браузер кэширует ответ, поэтому при авто-обновлении страницы
-            каждые 2с фото не скачиваются заново."""
-            parts = key.split("-", 1)
-            if len(parts) != 2:
-                return "", 404
-            tnum, slot = parts
-            d = self.tables.get(tnum)
-            if not d:
-                return "", 404
-            if slot.startswith("c") and isinstance(d.get("current_match"), dict):
-                holder = d["current_match"]
-            elif slot.startswith("n") and isinstance(d.get("next_match"), dict):
-                holder = d["next_match"]
-            else:
-                return "", 404
-            fighter = holder.get("p1" if slot.endswith("1") else "p2") or {}
-            pp = fighter.get("photo")
-            if not pp:
-                return "", 404
-            try:
-                # Только локальный кэш: табло обновляется каждые 2с, и
-                # синхронное скачивание Cloudinary (до 15с) завесило бы
-                # страницу. Если фото ещё не в кэше — запускаем фоновую
-                # загрузку и отдаём 404; следующая авто-перезагрузка
-                # (через 2с) уже отдаст скачанное фото.
-                local = resolve_local_photo_path(pp, only_cached=True)
-            except Exception:
-                local = None
-            if not local:
-                precache_photos([pp])
-                return "", 404
-            from flask import send_file
-            return send_file(str(local), max_age=300)
 
         @self.app.route("/")
         def home():
@@ -2816,13 +2951,11 @@ class DisplayServer:
 
             blocks = ""
             sizes = {
-                "cur": {"name": 40, "photo": 150, "vs": 40} if cols == 2
-                       else {"name": 56, "photo": 220, "vs": 56},
-                "nxt": {"name": 22, "photo": 80, "vs": 34} if cols == 2
-                       else {"name": 30, "photo": 110, "vs": 46},
+                "cur": {"name": 40, "vs": 40} if cols == 2 else {"name": 56, "vs": 56},
+                "nxt": {"name": 22, "vs": 34} if cols == 2 else {"name": 30, "vs": 46},
             }
             for tnum in sorted(active.keys()):
-                blocks += _render_table_block(tnum, active[tnum], sizes)
+                blocks += _render_table_block(tnum, active[tnum], sizes, cols)
 
             if n == 0:
                 blocks = "<div class='table-block'><div class='table-title'>Нет активных столов</div></div>"
@@ -2838,7 +2971,6 @@ class DisplayServer:
 <meta charset="utf-8">
 <meta http-equiv="refresh" content="2">
 <title>Турнир</title>
-<!-- board v3: direct cloudinary photos -->
 <style>
 * {{ box-sizing: border-box; margin: 0; padding: 0; }}
 body {{
@@ -2908,12 +3040,6 @@ body {{
   align-items: center;
   gap: 12px;
 }}
-.fighter-photo {{
-  border-radius: 50%;
-  object-fit: cover;
-  border: 4px solid #00ff88;
-  background: #222;
-}}
 .fighter-name {{
   font-weight: bold;
   color: white;
@@ -2921,6 +3047,75 @@ body {{
 .vs {{
   color: #ffaa00;
   font-weight: bold;
+}}
+.elim-title {{
+  font-size: 22px;
+  color: #ffaa00;
+  margin-top: 14px;
+  font-weight: bold;
+}}
+.elim-list {{
+  width: 100%;
+  margin-top: 6px;
+}}
+.elim-row {{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0;
+}}
+.elim-place {{
+  width: 34px;
+  text-align: right;
+  color: #8899aa;
+  flex-shrink: 0;
+}}
+.elim-name {{
+  color: #dddddd;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}}
+.elim-rec {{
+  margin-left: auto;
+  color: #556677;
+  flex-shrink: 0;
+}}
+.final-list {{
+  width: 100%;
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}}
+.final-row {{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: #16202e;
+  font-size: 20px;
+}}
+.final-place {{
+  width: 40px;
+  text-align: right;
+  color: #00ff88;
+  font-weight: bold;
+  flex-shrink: 0;
+}}
+.final-name {{
+  color: white;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}}
+.final-rec {{
+  margin-left: auto;
+  color: #8899aa;
+  font-weight: bold;
+  flex-shrink: 0;
 }}
 .footer {{
   text-align: center;
@@ -2962,12 +3157,14 @@ body {{
             from flask import jsonify
             return jsonify(out)
 
-    def update_table(self, table_num, category, hand, current_match, next_match):
+    def update_table(self, table_num, category, hand, current_match, next_match, eliminated=None, finished=False):
         self.tables[str(table_num)] = {
             "category": category,
             "hand": hand,
             "current_match": current_match,
             "next_match": next_match,
+            "eliminated": eliminated or [],
+            "finished": finished,
         }
 
     def remove_table(self, table_num):
@@ -3634,6 +3831,9 @@ class BracketWindow(ctk.CTkToplevel):
             self._assign_table_number()
             self.deiconify()
             self.update_idletasks()
+            # Окно сетки делаем owned (transient) к главному окну: Windows сам
+            # держит его поверх родителя и показывает диалоги поверх него.
+            _keep_topmost(self)
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -3873,13 +4073,120 @@ class BracketWindow(ctk.CTkToplevel):
 
         app = self.master
         if hasattr(app, "display_server") and self.table_number is not None:
+            finished = False
+            if self._match_cache:
+                finals = [m for m in self._match_cache
+                          if m["bracket"] == "final" and m["status"] == "done"]
+                pending_any = [m for m in self._match_cache if m["status"] == "pending"]
+                finished = bool(finals) or (not pending_any and
+                                            all(m["status"] in ("done", "bye") for m in self._match_cache))
             app.display_server.update_table(
                 self.table_number,
                 self.category["name"],
                 self.hand,
                 current_data,
                 next_data,
+                self._compute_eliminated(),
+                finished,
             )
+
+    def _compute_eliminated(self):
+        """Выбывшие спортсмены этой категории/руки для табло — по той же
+        логике, что на сайте (см. backend/app/api/v1/public/competitions.py)."""
+        matches = self.db.get_matches(self.category["id"], self.hand)
+        done = [m for m in matches if m["status"] == "done" and m["winner_id"]]
+        if not done:
+            return []
+
+        stats = OrderedDict()
+
+        def ensure(pid):
+            if pid is not None and pid not in stats:
+                stats[pid] = {"pid": pid, "wins": 0, "losses": 0,
+                              "last_loss_stage": -1, "last_loss_order": 0}
+
+        for m in done:
+            ensure(m["p1_id"])
+            ensure(m["p2_id"])
+            winner = m["winner_id"]
+            loser = m["p2_id"] if winner == m["p1_id"] else m["p1_id"]
+            ensure(winner)
+            stats[winner]["wins"] += 1
+            if loser:
+                ensure(loser)
+                stats[loser]["losses"] += 1
+                if m["stage"] > stats[loser]["last_loss_stage"]:
+                    stats[loser]["last_loss_stage"] = m["stage"]
+                    stats[loser]["last_loss_order"] = m["match_order"]
+
+        # Чемпион — победитель последнего терминального матча (win_next_id IS NULL).
+        terminal = [m for m in done if m["win_next_id"] is None]
+        champion = None
+        if terminal:
+            last_term = max(terminal, key=lambda m: m["stage"])
+            champion = last_term["winner_id"]
+        gf_done = champion is not None
+
+        max_losses = 2 if self.engine.__class__.__name__ == "DoubleEliminationEngine" else 1
+
+        def name_of(pid):
+            p = self._participant_cache.get(pid)
+            return p["name"] if p else "?"
+
+        eliminated = []
+        if max_losses == 1:
+            # Single elimination: уникальные места по порядку выбывания.
+            all_ms = self._match_cache or matches
+            ids = set()
+            for m in all_ms:
+                if m["p1_id"] is not None:
+                    ids.add(m["p1_id"])
+                if m["p2_id"] is not None:
+                    ids.add(m["p2_id"])
+            n_total = len(ids)
+            by_round = {}
+            for s in stats.values():
+                if s["losses"] >= 1:
+                    by_round.setdefault(s["last_loss_stage"], []).append(s)
+            placed = {}
+            eliminated_so_far = 0
+            for st in sorted(by_round):
+                lst = sorted(by_round[st], key=lambda s: (s["last_loss_order"], s["pid"]))
+                max_place = n_total - eliminated_so_far
+                for i, s in enumerate(lst):
+                    placed[s["pid"]] = max_place - i
+                eliminated_so_far += len(lst)
+            if champion is not None:
+                placed[champion] = 1
+            ordered = [s for s in stats.values() if s["pid"] in placed]
+            ordered.sort(key=lambda s: placed[s["pid"]])
+            for s in ordered:
+                eliminated.append({
+                    "name": name_of(s["pid"]),
+                    "place": placed[s["pid"]],
+                    "wins": s["wins"],
+                    "losses": s["losses"],
+                })
+        else:
+            # Double elimination: чемпион первым, дальше по поражениям/победам.
+            ordered = sorted(
+                stats.values(),
+                key=lambda s: (
+                    0 if s["pid"] == champion else 1,
+                    s["losses"],
+                    -s["wins"],
+                )
+            )
+            for i, s in enumerate(ordered):
+                is_eliminated = gf_done or s["losses"] >= max_losses
+                if is_eliminated:
+                    eliminated.append({
+                        "name": name_of(s["pid"]),
+                        "place": i + 1,
+                        "wins": s["wins"],
+                        "losses": s["losses"],
+                    })
+        return eliminated
 
     def _ensure_cache(self):
         if not self._cache_dirty and self._match_cache is not None:
@@ -3929,15 +4236,30 @@ class BracketWindow(ctk.CTkToplevel):
         if len(participants) < 2:
             messagebox.showwarning("Мало участников", "Нужно минимум 2 участника в категории.")
             return
-        if not messagebox.askyesno("Создать сетку",
-                    f"Будет создана сетка для {len(participants)} участников.\n"
-                    "Все текущие результаты будут удалены. Продолжить?"):
+        # Защита от случайного «Создать сетку» по ходу турнира: если в сетке
+        # уже есть результаты, пересоздание не разрешаем — только сброс.
+        existing = self.db.get_matches(self.category["id"], self.hand)
+        played = [m for m in existing if m["winner_id"] is not None]
+        if played:
+            messagebox.showwarning("Сетка уже идёт",
+                    "В этой сетке уже есть результаты поединков.\n"
+                    "Пересоздать сетку можно только через «Сбросить сетку».")
+            return
+        if existing:
+            messagebox.showinfo("Сетка уже создана",
+                    "Сетка уже создана — при повторном создании будет "
+                    "повторён тот же порядок пар.\n"
+                    "Чтобы получить новую случайную сетку, нажмите «Сбросить сетку».")
+        elif not messagebox.askyesno("Создать сетку",
+                    f"Будет создана сетка для {len(participants)} участников. Продолжить?"):
             return
         import random
         ids = [p["id"] for p in participants]
-        # Сид зависит только от турнира и категории (БЕЗ hand), чтобы левая
-        # и правая рука одной категории получали ОДИНАКОВЫЙ порядок пар.
-        rng = random.Random(f"{self.tournament_id}-{self.category['id']}")
+        generation = self.db.get_bracket_generation(self.category["id"], self.hand)
+        # Сид включает руку и поколение сетки: левая и правая рука получают
+        # РАЗНЫЙ порядок пар, а каждая пересозданная после сброса сетка —
+        # новый случайный порядок.
+        rng = random.Random(f"{self.tournament_id}-{self.category['id']}-{self.hand}-{generation}")
         rng.shuffle(ids)
         self.engine.generate_bracket(self.tournament_id, self.category["id"], self.hand, ids)
         self._invalidate_cache()
@@ -4002,9 +4324,19 @@ class BracketWindow(ctk.CTkToplevel):
                 text=f"транслируется на /board — стол {self.table_number}")
 
     def _apply_broadcast_settings(self, table_number):
+        old_number = self.table_number
         self.table_number = table_number
         self._assign_table_number()
         self._refresh_broadcast_status_label()
+        # Сразу пушим/снимаем текущий матч с табло — иначе после включения
+        # трансляции оно пустое до следующей перезагрузки сетки.
+        try:
+            if table_number is not None:
+                self._refresh_match_info_bar()
+            elif old_number is not None and hasattr(self.master, "display_server"):
+                self.master.display_server.remove_table(old_number)
+        except Exception as e:
+            print(f"[display] apply broadcast: {e}")
 
     def _build_broadcast_bar(self):
         """Переключатель \"выводить эту сетку на публичное табло сайта /
@@ -4090,9 +4422,10 @@ class BracketWindow(ctk.CTkToplevel):
         except Exception as e:
             print(f"[sync] _reset_bracket: {e}")
         self.db.clear_matches(self.category["id"], self.hand)
+        self.db.bump_bracket_generation(self.category["id"], self.hand)
         self._invalidate_cache()
         self._load_bracket()
-        messagebox.showinfo("Готово", "Сетка сброшена.")
+        messagebox.showinfo("Готово", "Сетка сброшена.", parent=self)
 
     # ────
     @staticmethod
@@ -4686,14 +5019,19 @@ class BracketWindow(ctk.CTkToplevel):
                     continue
                 place = s["place"] if "place" in s.keys() else i + 1
                 medals_txt = {1: "1 (Золото)", 2: "2 (Серебро)", 3: "3 (Бронза)"}
+                club_txt = p["club"] if p["club"] and p["club"] != "—" else ""
                 data.append([
                     medals_txt.get(place, str(place)),
-                    p["name"], p["club"] or "—",
+                    p["name"], club_txt,
                     str(p["weight"]) if p["weight"] else "—",
                     str(s["wins"]), str(s["losses"])
                 ])
             col_widths = [2.5 * cm, 6 * cm, 4.5 * cm, 2 * cm, 2 * cm, 2.5 * cm]
             t_table = Table(data, colWidths=col_widths, repeatRows=1)
+            t_row_sep = []
+            for idx in range(len(standings)):
+                t_row_sep.append(
+                    ("LINEBELOW", (0, idx + 1), (-1, idx + 1), 1.4, colors.HexColor("#5b7b95")))
             t_table.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a3a5c")),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -4707,7 +5045,7 @@ class BracketWindow(ctk.CTkToplevel):
                 ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cccccc")),
                 ("ROWHEIGHT", (0, 0), (-1, -1), 22),
                 ("BACKGROUND", (0, 1), (0, 1), colors.HexColor("#ffd700")),
-            ]))
+            ] + t_row_sep))
             story.append(t_table)
             story.append(Spacer(1, 0.8 * cm))
 
@@ -4736,6 +5074,10 @@ class BracketWindow(ctk.CTkToplevel):
                 ])
             col_widths2 = [2 * cm, 2.2 * cm, 4.5 * cm, 4.5 * cm, 4.5 * cm]
             m_table = Table(m_data, colWidths=col_widths2, repeatRows=1)
+            m_row_sep = []
+            for idx in range(len(m_data) - 1):
+                m_row_sep.append(
+                    ("LINEBELOW", (0, idx + 1), (-1, idx + 1), 1.0, colors.HexColor("#8aa2b8")))
             m_table.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2a4a6c")),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -4748,7 +5090,7 @@ class BracketWindow(ctk.CTkToplevel):
                  [colors.HexColor("#f5f8fb"), colors.white]),
                 ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#dddddd")),
                 ("ROWHEIGHT", (0, 0), (-1, -1), 18),
-            ]))
+            ] + m_row_sep))
             story.append(m_table)
 
         story.append(Spacer(1, 1 * cm))
@@ -4795,6 +5137,7 @@ class CombinedResultsWindow(ctk.CTkToplevel):
             self._refresh()
             self.deiconify()
             self.update_idletasks()
+            _keep_topmost(self)
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -4952,6 +5295,13 @@ class CombinedResultsWindow(ctk.CTkToplevel):
             lambda: sync_manager.on_dvoeborie_overrides_changed(
                 self.tournament_id, overrides))
 
+    def _clean_category_name(self):
+        name = self.category["name"]
+        name = re.sub(r"\s+Both\b", "", name)
+        name = re.sub(r"\s+Left\b", "", name)
+        name = re.sub(r"\s+Right\b", "", name)
+        return name.strip()
+
     def _export_pdf(self):
         if not REPORTLAB_AVAILABLE:
             messagebox.showerror("Ошибка", "Установите reportlab:\npip install reportlab")
@@ -4960,10 +5310,11 @@ class CombinedResultsWindow(ctk.CTkToplevel):
         if not rows:
             messagebox.showwarning("Нет данных", "Нет результатов для экспорта.")
             return
+        cat_name = self._clean_category_name()
         filepath = filedialog.asksaveasfilename(
             defaultextension=".pdf",
             filetypes=[("PDF files", "*.pdf")],
-            initialfile=f"dvoeborie_{self.category['name']}.pdf")
+            initialfile=f"dvoeborie_{cat_name}.pdf")
         if not filepath:
             return
 
@@ -4975,7 +5326,9 @@ class CombinedResultsWindow(ctk.CTkToplevel):
 
         title_style = ParagraphStyle("Title", parent=styles["Title"],
                     fontName="Arial-Bold", fontSize=18, spaceAfter=6, alignment=1)
-        story.append(Paragraph("ИТОГИ ДВОЕБОРЬЯ", title_style))
+        cat_hand = self.category["hand"] if "hand" in self.category.keys() else "Обе"
+        hand_label = "Двоеборье" if cat_hand == "Обе" else (cat_hand or "Двоеборье")
+        story.append(Paragraph(f"{cat_name} {hand_label}", title_style))
 
         t = self.db.get_tournament(self.tournament_id)
         if t:
@@ -4984,15 +5337,6 @@ class CombinedResultsWindow(ctk.CTkToplevel):
             story.append(Paragraph(
                 f"{t['name']}  |  {t['date']}  |  {t['location'] or ''}", info_style))
 
-        story.append(Paragraph(
-            f"Весовая категория: {self.category['name']}",
-            ParagraphStyle("Cat", parent=styles["Normal"], fontName="Arial", fontSize=12, spaceAfter=8, alignment=1)))
-        story.append(Paragraph(
-            "Очки: 1 место — 10, 2 — 7, 3 — 5, 4 — 4, 5 — 3, 6 — 2, 7 — 1, 8 место и ниже — 0. "
-            "При равных очках выше спортсмен с меньшим весом; при равных очках и весе место делится "
-            "(по решению жюри может быть выбран победитель).",
-            ParagraphStyle("Rules", parent=styles["Normal"], fontName="Arial", fontSize=9,
-                    textColor=colors.grey, spaceAfter=10, alignment=1)))
         story.append(Spacer(1, 0.3 * cm))
 
         data = [["Место", "Спортсмен", "Клуб", "Вес", "Правая рука", "Левая рука", "Итого очков"]]
@@ -5000,14 +5344,36 @@ class CombinedResultsWindow(ctk.CTkToplevel):
             def fmt(place, points):
                 return f"{place} место ({points})" if place else "— (0)"
             weight_txt = f"{row['weight']:.1f}" if row.get("weight") is not None else "—"
+            club_txt = row["club"] if row.get("club") and row["club"] != "—" else ""
             data.append([
-                str(row["place"]), row["name"], row["club"], weight_txt,
+                str(row["place"]), row["name"], club_txt, weight_txt,
                 fmt(row["right_place"], row["right_points"]),
                 fmt(row["left_place"], row["left_points"]),
                 str(row["total_points"]),
             ])
         col_widths = [1.6 * cm, 4.4 * cm, 2.9 * cm, 1.4 * cm, 3.1 * cm, 3.1 * cm, 2.2 * cm]
         table = Table(data, colWidths=col_widths, repeatRows=1)
+
+        # Вертикальные линии-разделители между колонками (кроме последней).
+        col_separators = []
+        n_cols = len(data[0])
+        for col in range(n_cols - 1):
+            col_separators.append(
+                ("LINEAFTER", (col, 0), (col, -1), 1.0, colors.HexColor("#b8c4d0")))
+
+        # Горизонтальные полосы между строками данных.
+        row_separators = []
+        for idx in range(len(rows)):
+            row_separators.append(
+                ("LINEBELOW", (0, idx + 1), (-1, idx + 1), 1.4, colors.HexColor("#5b7b95")))
+
+        medal_colors = {1: "#ffd700", 2: "#c0c0c0", 3: "#cd7f32"}
+        background_cmds = []
+        for idx, row in enumerate(rows, start=1):
+            color = medal_colors.get(row["place"])
+            if color:
+                background_cmds.append(
+                    ("BACKGROUND", (0, idx), (0, idx), colors.HexColor(color)))
         table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a3a5c")),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -5020,8 +5386,7 @@ class CombinedResultsWindow(ctk.CTkToplevel):
              [colors.HexColor("#f0f4f8"), colors.white]),
             ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cccccc")),
             ("ROWHEIGHT", (0, 0), (-1, -1), 22),
-            ("BACKGROUND", (0, 1), (0, 1), colors.HexColor("#ffd700")),
-        ]))
+        ] + col_separators + row_separators + background_cmds))
         story.append(table)
         story.append(Spacer(1, 1 * cm))
         story.append(Paragraph(
@@ -7201,6 +7566,7 @@ class App(ctk.CTk):
         self.display_server = DisplayServer()
         self.display_server.start()
         self.current_tournament_id = None
+        self._pending_select = None
 
         self.title("🦾 ArmWrestling Tournament Manager")
         self.minsize(900, 600)
@@ -7436,8 +7802,180 @@ class App(ctk.CTk):
                     fg_color="#1a4a2a", hover_color="#2a6a3a",
                     command=self._open_category_wizard).pack(side="left")
 
+        self.cat_age_filter_frame = ctk.CTkFrame(tab, fg_color="transparent")
+        self.cat_age_filter_frame.pack(fill="x", padx=10, pady=(0, 5))
+        self._cat_age_vars = {}
+        self._age_filter_btn = None
+        self._rebuild_age_filter()
+
         self.cat_list_frame = ScrollableFrame(tab, fg_color=BG)
         self.cat_list_frame.pack(fill="both", expand=True, padx=10, pady=5)
+
+    def _age_filter_button_text(self):
+        selected = [a for a, v in self._cat_age_vars.items() if v.get()]
+        if not selected:
+            return "🎚 Категории: ничего не выбрано"
+        if len(selected) == len(self._cat_age_vars):
+            return "🎚 Категории: все"
+        if len(selected) == 1:
+            return f"🎚 Категории: {selected[0]}"
+        return f"🎚 Категории: {len(selected)} выбрано"
+
+    def _rebuild_age_filter(self):
+        """Пересоздаёт фильтр по возрастным категориям — только те, что реально
+        есть в текущем турнире. По умолчанию включены все."""
+        if self._age_filter_btn is not None:
+            try:
+                self._age_filter_btn.destroy()
+            except Exception:
+                pass
+            self._age_filter_btn = None
+        self._cat_age_vars = {}
+        if not self.current_tournament_id:
+            return
+        cats = self.db.get_categories(self.current_tournament_id)
+        ages = [c["age_category"] for c in cats if c["age_category"]]
+        seen = []
+        for a in ages:
+            if a not in seen:
+                seen.append(a)
+        if not seen:
+            return
+        for age in seen:
+            self._cat_age_vars[age] = ctk.BooleanVar(value=True)
+        self._age_filter_btn = ctk.CTkButton(
+            self.cat_age_filter_frame, text=self._age_filter_button_text(),
+            fg_color="#223047", hover_color="#2a3a57", height=34, width=220,
+            command=self._open_age_filter_popup)
+        self._age_filter_btn.pack(side="left")
+
+    def _open_age_filter_popup(self):
+        """Выпадающий селект с мультивыбором возрастных категорий.
+        Список живёт внутри того же окна (как _DropdownFrame в ui_theme),
+        закрывается по клику мимо."""
+        if self._age_filter_btn is None or not self._cat_age_vars:
+            return
+        if getattr(self, "_age_dropdown", None) is not None \
+                and self._age_dropdown.winfo_exists() \
+                and self._age_dropdown.winfo_viewable():
+            self._close_age_dropdown()
+            return
+
+        ages = list(self._cat_age_vars.keys())
+        toplevel = self.winfo_toplevel()
+        dd = ctk.CTkFrame(toplevel, fg_color=PANEL, corner_radius=8,
+                          border_width=1, border_color="#3d444d")
+        self._age_dropdown = dd
+
+        scroller = ctk.CTkScrollableFrame(dd, fg_color="transparent",
+                                          corner_radius=0)
+        scroller.pack(fill="both", expand=True, padx=6, pady=6)
+
+        for age in ages:
+            ctk.CTkCheckBox(scroller, text=age, variable=self._cat_age_vars[age],
+                            font=ctk.CTkFont(size=13)).pack(anchor="w", padx=4, pady=2)
+
+        bar = ctk.CTkFrame(dd, fg_color="transparent")
+        bar.pack(fill="x", padx=6, pady=(0, 6))
+
+        def select_all():
+            for v in self._cat_age_vars.values():
+                v.set(True)
+
+        def clear():
+            for v in self._cat_age_vars.values():
+                v.set(False)
+
+        def apply():
+            self._close_age_dropdown()
+            if self._age_filter_btn is not None:
+                self._age_filter_btn.configure(text=self._age_filter_button_text())
+            self._refresh_categories()
+
+        ctk.CTkButton(bar, text="Выбрать все", width=110, height=28,
+                      fg_color="#223047", hover_color="#2a3a57",
+                      command=select_all).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(bar, text="Сброс", width=80, height=28,
+                      fg_color="#3a1010", hover_color="#5a2020",
+                      command=clear).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(bar, text="Применить", width=90, height=28,
+                      fg_color="#1a4a2a", hover_color="#2a6a3a",
+                      command=apply).pack(side="right")
+
+        # Позиционируем под кнопкой внутри того же окна, с учётом scaling.
+        scaling = dd._apply_widget_scaling(1.0) or 1.0
+        dd.update_idletasks()
+        width = 260
+        content_h = len(ages) * 30 + 60
+        avail_h = toplevel.winfo_height() / scaling
+        x_root = self._age_filter_btn.winfo_rootx()
+        y_root = self._age_filter_btn.winfo_rooty() + self._age_filter_btn.winfo_height()
+        x = (x_root - toplevel.winfo_rootx()) / scaling
+        y = (y_root - toplevel.winfo_rooty()) / scaling
+        margin = 8
+        space_below = avail_h - y - margin
+        space_above = y - margin
+        height = min(content_h, 360)
+        if height > space_below:
+            if height <= space_above:
+                y -= height + margin
+            elif space_below >= space_above and space_below > 60:
+                height = space_below
+            else:
+                height = space_above
+                y -= height + margin
+        dd.configure(width=int(width / scaling), height=int(height / scaling))
+        dd.place(x=int(x), y=int(y))
+        dd.tkraise()
+        dd.update_idletasks()
+
+        # Закрытие по клику мимо — bind на верхнем окне, через after, чтобы
+        # клик, открывший список, не закрыл его тут же.
+        self._dd_bind_pending = dd.after(10, lambda: self._bind_dd_outside(dd))
+
+    def _bind_dd_outside(self, dd):
+        self._dd_bind_pending = None
+        try:
+            toplevel = dd.winfo_toplevel()
+            self._dd_bind_id = toplevel.bind("<Button-1>", self._on_dd_outside,
+                                             add="+")
+        except Exception:
+            self._dd_bind_id = None
+
+    def _on_dd_outside(self, event):
+        dd = getattr(self, "_age_dropdown", None)
+        if dd is None or not dd.winfo_exists():
+            return
+        try:
+            wpath = str(event.widget)
+            if wpath.startswith(str(dd)) or wpath.startswith(str(self._age_filter_btn)):
+                return
+        except Exception:
+            pass
+        self._close_age_dropdown()
+
+    def _close_age_dropdown(self):
+        if getattr(self, "_dd_bind_pending", None) is not None:
+            try:
+                self.after_cancel(self._dd_bind_pending)
+            except Exception:
+                pass
+            self._dd_bind_pending = None
+        if getattr(self, "_dd_bind_id", None) is not None:
+            try:
+                toplevel = self.winfo_toplevel()
+                toplevel.unbind("<Button-1>", self._dd_bind_id)
+            except Exception:
+                pass
+            self._dd_bind_id = None
+        dd = getattr(self, "_age_dropdown", None)
+        if dd is not None and dd.winfo_exists():
+            try:
+                dd.place_forget()
+                dd.destroy()
+            except Exception:
+                pass
+        self._age_dropdown = None
 
     def _open_category_wizard(self):
         if not self.current_tournament_id:
@@ -7513,6 +8051,7 @@ class App(ctk.CTk):
                 self.db.add_category(self.current_tournament_id, name, weight_val, hand, age)
 
             win.destroy()
+            self._rebuild_age_filter()
             self._refresh_categories()
 
         ctk.CTkButton(win, text="➕ Добавить категорию", height=36,
@@ -7531,6 +8070,10 @@ class App(ctk.CTk):
                     if query in c["name"].lower()
                     or query in str(c["max_weight"]).lower()
                     or query in c["hand"].lower()]
+        if self._cat_age_vars:
+            selected = [age for age, var in self._cat_age_vars.items() if var.get()]
+            if selected:
+                cats = [c for c in cats if c["age_category"] in selected]
         if not cats:
             ctk.CTkLabel(self.cat_list_frame,
                     text="Ничего не найдено." if query else "Нет весовых категорий. Добавьте через мастер.",
@@ -7551,10 +8094,20 @@ class App(ctk.CTk):
     def _delete_category(self, cid):
         if self._tournament_locked():
             return
-        if messagebox.askyesno("Удалить", "Удалить категорию и всех её участников?"):
-            self.db.delete_category(cid)
-            self._refresh_categories()
-            self._refresh_participants()
+        if not messagebox.askyesno("Удалить", "Удалить категорию и всех её участников?"):
+            return
+        entered = simpledialog.askstring(
+            "Подтверждение", "Введите пароль для удаления:", show="*", parent=self
+        )
+        if entered is None:
+            return
+        if entered != DELETE_PASSWORD:
+            messagebox.showerror("Неверный пароль", "Удаление отменено.")
+            return
+        self.db.delete_category(cid)
+        self._rebuild_age_filter()
+        self._refresh_categories()
+        self._refresh_participants()
 
     def _build_participants_tab(self):
         tab = self.notebook.tab("👥 Участники")
@@ -8326,9 +8879,13 @@ class App(ctk.CTk):
             ctk.CTkLabel(stats, text=f"Система: {fmt_bracket}",
                     font=ctk.CTkFont(size=12), text_color=stat_color).pack(side="left")
 
-            # Вся строка кликабельна — выбирает турнир.
+            # Вся строка кликабельна: 1 клик — выделить, 2 клика — открыть.
             def select(tid=tid):
                 self._select_tournament(tid)
+
+            def select_only(tid=tid):
+                self._select_only(tid)
+
             clickables = [row, head, stats]
             clickables += list(head.winfo_children()) + list(row.winfo_children())
             clickables += list(stats.winfo_children())
@@ -8351,19 +8908,37 @@ class App(ctk.CTk):
 
             for w in clickables:
                 try:
-                    w.bind("<Button-1>", lambda e, s=select: s(), add="+")
+                    w.bind("<Button-1>", lambda e, s=select_only: s(), add="+")
+                    w.bind("<Double-Button-1>", lambda e, s=select: s(), add="+")
                     w.bind("<Enter>", lambda e, s=set_hover: s(True), add="+")
                     w.bind("<Leave>", lambda e, s=set_hover: s(False), add="+")
                 except Exception:
                     pass
 
+    def _select_only(self, tid):
+        """Выделяет турнир в списке (1 клик), не открывая его.
+        Перерисовка списка откладывается, чтобы второй клик (двойного
+        клика) успел сработать до пересоздания виджетов."""
+        self.current_tournament_id = tid
+        if self._pending_select is not None:
+            self.after_cancel(self._pending_select)
+        self._pending_select = self.after(250, self._apply_select)
+
+    def _apply_select(self):
+        self._pending_select = None
+        self._refresh_tournament_list()
+
     def _select_tournament(self, tid):
+        if self._pending_select is not None:
+            self.after_cancel(self._pending_select)
+            self._pending_select = None
         self.current_tournament_id = tid
         t = self.db.get_tournament(tid)
         self.title_label.configure(
             text=f"🏆  {t['name']}  |  {t['date']}  |  {t['location'] or ''}")
         self._refresh_status_badge(t)
         self._refresh_tournament_list()
+        self._rebuild_age_filter()
         self._refresh_categories()
         self._refresh_participants()
         self._refresh_brackets_tab()
@@ -8635,10 +9210,11 @@ class App(ctk.CTk):
                 f"телефон) в этой же WiFi-сети, откройте:\nhttp://{lan_ip}:5000",
             )
 
-    def _delete_tournament(self):
-        if not self.current_tournament_id:
+    def _delete_tournament(self, tid=None):
+        tid = tid or self.current_tournament_id
+        if not tid:
             return
-        t = self.db.get_tournament(self.current_tournament_id)
+        t = self.db.get_tournament(tid)
         if not messagebox.askyesno("Удалить",
                     f"Удалить турнир «{t['name']}» и все данные?"):
             return
@@ -8652,8 +9228,11 @@ class App(ctk.CTk):
             messagebox.showerror("Неверный пароль", "Удаление отменено.")
             return
 
-        self.db.delete_tournament(self.current_tournament_id)
-        self._back_to_tournaments()
+        self.db.delete_tournament(tid)
+        if tid == self.current_tournament_id:
+            self._back_to_tournaments()
+        else:
+            self._refresh_tournament_list()
 
     def on_close(self):
         if messagebox.askyesno("Выход", "Закрыть программу?"):
@@ -8697,16 +9276,26 @@ class App(ctk.CTk):
         self.after(10000, self._auto_sync_tick)
 
     def _show_sync_toast(self, message):
+        """Показывает сообщение-«тост» как оверлей ВНУТРИ активного окна, а не
+        отдельным Toplevel. Отдельное окно на Windows заставляет ОС
+        переключать Z-порядок, и рабочее окно (сетка) уходит в задний фон."""
         import tkinter as tk
-        toast = tk.Toplevel(self)
-        toast.overrideredirect(True)
-        toast.configure(bg="#1a3a5a")
-        x = self.winfo_x() + self.winfo_width() // 2 - 150
-        y = self.winfo_y() + self.winfo_height() - 60
-        toast.geometry(f"300x36+{x}+{y}")
-        tk.Label(toast, text=message, bg="#1a3a5a", fg="#e0e0e0",
-                 font=("Segoe UI", 11)).pack(expand=True)
-        toast.after(3000, toast.destroy)
+        owner = _messagebox_owner() or self
+        try:
+            overlay = tk.Label(owner, text=message, bg="#1a3a5a", fg="#e0e0e0",
+                               font=("Segoe UI", 11), padx=12, pady=8,
+                               bd=1, relief="solid", highlightthickness=0)
+            overlay.place(relx=0.5, rely=0.97, anchor="s", relwidth=0.6, height=36)
+            overlay.lift()
+
+            def _close():
+                try:
+                    overlay.destroy()
+                except Exception:
+                    pass
+            overlay.after(3500, _close)
+        except Exception:
+            print(f"[toast] не удалось показать: {e}")
 
 
 # ════
