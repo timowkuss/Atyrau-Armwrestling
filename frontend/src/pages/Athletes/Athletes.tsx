@@ -70,7 +70,7 @@ export function Athletes() {
         <div className="relative overflow-hidden rounded-xl border border-steel-dim/15 bg-gradient-to-br from-petrol/30 to-ink-soft/60 p-4">
           <div className="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-brass/5 blur-2xl" />
           <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
-            <form onSubmit={submitName} className="flex flex-1 flex-col gap-1.5 min-w-[200px]">
+            <form onSubmit={submitName} className="flex w-full flex-1 flex-col gap-1.5 sm:min-w-[200px]">
               <label htmlFor="athlete-name" className="font-mono text-[11px] font-medium uppercase tracking-widest text-steel-dim">
                 Имя
               </label>
@@ -83,7 +83,7 @@ export function Athletes() {
               />
             </form>
 
-            <div className="flex flex-col gap-1.5">
+            <div className="flex w-full flex-col gap-1.5 sm:w-auto">
               <label htmlFor="athlete-gender" className="font-mono text-[11px] font-medium uppercase tracking-widest text-steel-dim">
                 Пол
               </label>
@@ -91,7 +91,7 @@ export function Athletes() {
                 id="athlete-gender"
                 value={gender ?? ''}
                 onChange={(e) => updateParam('gender', e.target.value || null)}
-                className="rounded-lg border border-steel-dim/20 bg-ink/80 px-3.5 py-2.5 text-sm text-bone backdrop-blur transition-colors focus:border-brass/50 focus:bg-ink focus:outline-none"
+                className="w-full rounded-lg border border-steel-dim/20 bg-ink/80 px-3.5 py-2.5 text-sm text-bone backdrop-blur transition-colors focus:border-brass/50 focus:bg-ink focus:outline-none"
               >
                 <option value="">Все</option>
                 <option value="male">Мужчины</option>
@@ -99,7 +99,7 @@ export function Athletes() {
               </select>
             </div>
 
-            <div className="flex flex-col gap-1.5">
+            <div className="flex w-full flex-col gap-1.5 sm:w-auto">
               <label htmlFor="athlete-rank" className="font-mono text-[11px] font-medium uppercase tracking-widest text-steel-dim">
                 Разряд
               </label>
@@ -107,7 +107,7 @@ export function Athletes() {
                 id="athlete-rank"
                 value={rank ?? ''}
                 onChange={(e) => updateParam('rank', e.target.value || null)}
-                className="rounded-lg border border-steel-dim/20 bg-ink/80 px-3.5 py-2.5 text-sm text-bone backdrop-blur transition-colors focus:border-brass/50 focus:bg-ink focus:outline-none"
+                className="w-full rounded-lg border border-steel-dim/20 bg-ink/80 px-3.5 py-2.5 text-sm text-bone backdrop-blur transition-colors focus:border-brass/50 focus:bg-ink focus:outline-none"
               >
                 <option value="">Все</option>
                 <option value="КМС">КМС</option>

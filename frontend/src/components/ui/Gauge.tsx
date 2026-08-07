@@ -53,7 +53,7 @@ export function Gauge({
 
   return (
     <div className="flex flex-col items-center gap-2" role="img" aria-label={`${label}: ${displayValue}`}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="h-auto max-w-full">
         <path d={trackD} fill="none" stroke="rgba(146,160,166,0.12)" strokeWidth={strokeWidth} strokeLinecap="round" />
         <path
           d={activeD}

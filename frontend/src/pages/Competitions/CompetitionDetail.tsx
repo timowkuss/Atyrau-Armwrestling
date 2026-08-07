@@ -61,8 +61,8 @@ function ParticipantList({ participants }: { participants: ParticipantOut[] }) {
           <ol className="mt-3 space-y-1.5">
             {members.map((m, i) => (
               <li key={m.athlete_id} className="flex items-baseline gap-2 text-sm">
-                <span className="shrink-0 w-5 text-right font-mono text-steel-dim">{i + 1}.</span>
-                <Link to={`/athletes/${m.athlete_id}`} className="truncate text-bone hover:text-brass">
+                <span className="w-5 shrink-0 text-right font-mono text-steel-dim">{i + 1}.</span>
+                <Link to={`/athletes/${m.athlete_id}`} className="min-w-0 flex-1 truncate text-bone hover:text-brass">
                   {m.athlete_name}
                 </Link>
               </li>
@@ -112,9 +112,9 @@ export function CompetitionDetail() {
       </Link>
 
       <div className="plate mt-4 rounded-[var(--radius-rivet)] p-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-y-2 gap-x-3">
           <p className="text-eyebrow text-rust">{formatDate(c.date)}</p>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {statusBadge(c.status)}
             {isLive && (
               <a
@@ -141,7 +141,7 @@ export function CompetitionDetail() {
             ))}
           </div>
         )}
-        {c.description && <p className="mt-4 max-w-2xl text-sm text-steel">{c.description}</p>}
+        {c.description && <p className="mt-4 max-w-2xl break-words text-sm text-steel">{c.description}</p>}
         {c.categories.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-2">
             {c.categories.map((cat) => (
@@ -196,17 +196,17 @@ export function CompetitionDetail() {
           <div key={category} className="mb-6">
             <h3 className="font-display text-sm text-brass">{category}</h3>
             <div className="overflow-x-auto">
-              <table className="mt-2 w-full min-w-[420px] border-collapse text-left text-sm">
+              <table className="mt-2 w-full min-w-[300px] border-collapse text-left text-sm">
                 <tbody>
                   {rows?.map((r, i) => (
                     <tr key={i} className="border-b border-steel-dim/15">
                       <td className="py-2 pr-4 font-mono text-bone">{r.place ?? '—'}</td>
                       <td className="py-2 pr-4">
-                        <Link to={`/athletes/${r.athlete_id}`} className="text-bone hover:text-brass">
+                        <Link to={`/athletes/${r.athlete_id}`} className="whitespace-nowrap text-bone hover:text-brass">
                           {r.athlete_name}
                         </Link>
                       </td>
-                      <td className="py-2 pr-4 text-steel">{r.club_name ?? '—'}</td>
+                      <td className="hidden py-2 pr-4 text-steel sm:table-cell">{r.club_name ?? '—'}</td>
                       <td className="py-2">
                         <MedalBadge medal={r.medal} />
                       </td>

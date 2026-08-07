@@ -24,7 +24,7 @@ const EMPTY_FORM: CoachInput = {
 }
 
 const inputClass =
-  'rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none'
+  'w-full sm:w-auto rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none'
 
 function isValidIin(value: string) {
   return /^\d{12}$/.test(value)
@@ -181,7 +181,7 @@ export function CoachesAdmin() {
                 value={form.iin}
                 onKeyDown={blockNonDigits}
                 onChange={(e) => setForm({ ...form, iin: e.target.value.replace(/\D/g, '').slice(0, 12) })}
-                className={`w-40 ${inputClass}`}
+                className={`w-full sm:w-40 ${inputClass}`}
               />
               {createIinConflict && (
                 <p className="text-xs text-red-400">
@@ -282,7 +282,7 @@ export function CoachesAdmin() {
                           value={editForm.iin ?? coach.iin ?? ''}
                           onKeyDown={blockNonDigits}
                           onChange={(e) => setEditForm({ ...editForm, iin: e.target.value.replace(/\D/g, '').slice(0, 12) })}
-                          className={`w-48 ${inputClass}`}
+                          className={`w-full sm:w-48 ${inputClass}`}
                         />
                         {editIinConflict && (
                           <p className="text-xs text-red-400">
@@ -373,8 +373,8 @@ export function CoachesAdmin() {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex min-w-0 items-center gap-3">
                       {coach.photo_path ? (
                         <img
                           src={cloudinaryThumb(coach.photo_path, 64) ?? undefined}
@@ -385,17 +385,17 @@ export function CoachesAdmin() {
                       ) : (
                         <div className="h-16 w-16 flex-shrink-0 rounded-2xl bg-ink border border-steel-dim" />
                       )}
-                      <div>
-                        <p className="font-display text-base text-bone">{coach.full_name}</p>
-                        <p className="font-mono text-xs text-steel">
+                      <div className="min-w-0">
+                        <p className="truncate font-display text-base text-bone">{coach.full_name}</p>
+                        <p className="truncate font-mono text-xs text-steel">
                           {coach.club_name ?? 'клуб не указан'} · {coach.city_name ?? 'город не указан'} ·{' '}
                           {coach.qualification ?? 'без звания'} · {coach.athletes_count} спортсменов
                         </p>
-                        <p className="font-mono text-xs text-steel-dim">ИИН: {coach.iin ?? '—'}</p>
-                        <p className="font-mono text-xs text-steel-dim">Телефон: {coach.phone ?? '—'}</p>
+                        <p className="truncate font-mono text-xs text-steel-dim">ИИН: {coach.iin ?? '—'}</p>
+                        <p className="truncate font-mono text-xs text-steel-dim">Телефон: {coach.phone ?? '—'}</p>
                       </div>
                     </div>
-                    <div className="flex flex-shrink-0 gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <button
                         onClick={() => {
                           setEditingId(coach.id)

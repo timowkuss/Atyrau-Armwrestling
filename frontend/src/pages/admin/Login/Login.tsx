@@ -32,7 +32,7 @@ export function AdminLogin() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-ink px-5">
-      <div className="plate w-full max-w-sm rounded-[var(--radius-rivet)] p-8">
+      <div className="plate w-full max-w-sm rounded-[var(--radius-rivet)] p-6 sm:p-8">
         <div className="flex items-center gap-3">
           <img src="/brand/logo-armsport.png" alt="Логотип федерации" className="h-10 w-auto" />
           <span className="font-display text-sm font-bold uppercase tracking-wide text-bone">

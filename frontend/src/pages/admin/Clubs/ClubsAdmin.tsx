@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { useAuth } from '@/features/auth/AuthContext'
 import {
   useAddClubMembers,
@@ -65,11 +65,11 @@ export function ClubsAdmin() {
     e.preventDefault()
     setFeedback(null)
     if (nameTaken) {
-      setFeedback({ kind: 'error', message: 'Клуб с таким названием уже существует.' })
+      setFeedback({ kind: 'error', message: 'РљР»СѓР± СЃ С‚Р°РєРёРј РЅР°Р·РІР°РЅРёРµРј СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚.' })
       return
     }
     if (!form.city_id) {
-      setFeedback({ kind: 'error', message: 'Укажите город/область клуба.' })
+      setFeedback({ kind: 'error', message: 'РЈРєР°Р¶РёС‚Рµ РіРѕСЂРѕРґ/РѕР±Р»Р°СЃС‚СЊ РєР»СѓР±Р°.' })
       return
     }
     try {
@@ -78,7 +78,7 @@ export function ClubsAdmin() {
         city_id: form.city_id || undefined,
         founded_date: form.founded_date || undefined,
       })
-      setFeedback({ kind: 'success', message: `Клуб «${form.name}» создан.` })
+      setFeedback({ kind: 'success', message: `РљР»СѓР± В«${form.name}В» СЃРѕР·РґР°РЅ.` })
       setForm(EMPTY_FORM)
       setShowCreate(false)
     } catch (err) {
@@ -90,7 +90,7 @@ export function ClubsAdmin() {
     setFeedback(null)
     try {
       await updateClub.mutateAsync({ id, payload: editForm })
-      setFeedback({ kind: 'success', message: 'Изменения сохранены.' })
+      setFeedback({ kind: 'success', message: 'РР·РјРµРЅРµРЅРёСЏ СЃРѕС…СЂР°РЅРµРЅС‹.' })
       setEditingId(null)
     } catch (err) {
       setFeedback({ kind: 'error', message: (err as Error).message })
@@ -98,11 +98,11 @@ export function ClubsAdmin() {
   }
 
   async function handleDelete(id: number, name: string) {
-    if (!confirm(`Удалить клуб «${name}»? Спортсмены и тренеры останутся без клуба.`)) return
+    if (!confirm(`РЈРґР°Р»РёС‚СЊ РєР»СѓР± В«${name}В»? РЎРїРѕСЂС‚СЃРјРµРЅС‹ Рё С‚СЂРµРЅРµСЂС‹ РѕСЃС‚Р°РЅСѓС‚СЃСЏ Р±РµР· РєР»СѓР±Р°.`)) return
     setFeedback(null)
     try {
       await deleteClub.mutateAsync(id)
-      setFeedback({ kind: 'success', message: `Клуб «${name}» удалён.` })
+      setFeedback({ kind: 'success', message: `РљР»СѓР± В«${name}В» СѓРґР°Р»С‘РЅ.` })
     } catch (err) {
       setFeedback({ kind: 'error', message: (err as Error).message })
     }
@@ -167,14 +167,14 @@ export function ClubsAdmin() {
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-eyebrow text-rust">Справочник федерации</p>
-          <h1 className="mt-2 font-display text-2xl text-bone">Клубы</h1>
+          <p className="text-eyebrow text-rust">РЎРїСЂР°РІРѕС‡РЅРёРє С„РµРґРµСЂР°С†РёРё</p>
+          <h1 className="mt-2 font-display text-2xl text-bone">РљР»СѓР±С‹</h1>
         </div>
         <button
           onClick={() => setShowCreate((v) => !v)}
           className="rounded-[var(--radius-rivet)] bg-rust px-4 py-2 text-sm font-semibold text-bone hover:bg-rust-dim"
         >
-          {showCreate ? 'Отмена' : '+ Добавить клуб'}
+          {showCreate ? 'РћС‚РјРµРЅР°' : '+ Р”РѕР±Р°РІРёС‚СЊ РєР»СѓР±'}
         </button>
       </div>
 
@@ -189,7 +189,7 @@ export function ClubsAdmin() {
           <div>
             <input
               required
-              placeholder="Название клуба *"
+              placeholder="РќР°Р·РІР°РЅРёРµ РєР»СѓР±Р° *"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               className={`w-full rounded-[var(--radius-rivet)] border bg-ink px-3 py-2 text-sm text-bone focus:outline-none ${
@@ -199,33 +199,33 @@ export function ClubsAdmin() {
               }`}
             />
             {nameTaken && (
-              <p className="mt-1 text-xs font-medium text-danger">Такой клуб уже существует</p>
+              <p className="mt-1 text-xs font-medium text-danger">РўР°РєРѕР№ РєР»СѓР± СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚</p>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <CityCombobox
               required
-              placeholder="Город / область *"
+              placeholder="Р“РѕСЂРѕРґ / РѕР±Р»Р°СЃС‚СЊ *"
               className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
               onChange={(cityId) => setForm({ ...form, city_id: cityId })}
             />
             <input
               type="date"
-              placeholder="Дата основания"
+              placeholder="Р”Р°С‚Р° РѕСЃРЅРѕРІР°РЅРёСЏ"
               value={form.founded_date ?? ''}
               onChange={(e) => setForm({ ...form, founded_date: e.target.value || undefined })}
-              className="w-44 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+              className="w-full sm:w-44 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
             />
           </div>
           <textarea
-            placeholder="Адрес зала"
+            placeholder="РђРґСЂРµСЃ Р·Р°Р»Р°"
             value={form.address ?? ''}
             onChange={(e) => setForm({ ...form, address: e.target.value })}
             rows={2}
             className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
           />
           <input
-            placeholder="Телефон 8(XXX)XXX-XX-XX"
+            placeholder="РўРµР»РµС„РѕРЅ 8(XXX)XXX-XX-XX"
             value={form.phone ?? '8('}
             onChange={(e) => setForm({ ...form, phone: formatPhoneChange(form.phone, e.target.value) })}
             onKeyDown={(e) => {
@@ -235,7 +235,7 @@ export function ClubsAdmin() {
             className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
           />
           <div>
-            <p className="mb-1 font-mono text-xs text-steel-dim">Логотип</p>
+            <p className="mb-1 font-mono text-xs text-steel-dim">Р›РѕРіРѕС‚РёРї</p>
             <PhotoUploadField
               value={form.logo_path}
               onChange={(url) => setForm({ ...form, logo_path: url })}
@@ -248,13 +248,13 @@ export function ClubsAdmin() {
             disabled={createClub.isPending}
             className="self-start rounded-[var(--radius-rivet)] bg-rust px-4 py-2 text-sm font-semibold text-bone hover:bg-rust-dim disabled:opacity-50"
           >
-            {createClub.isPending ? 'Сохранение…' : 'Создать'}
+            {createClub.isPending ? 'РЎРѕС…СЂР°РЅРµРЅРёРµвЂ¦' : 'РЎРѕР·РґР°С‚СЊ'}
           </button>
         </form>
       )}
 
       <div className="mt-6">
-        {clubs.isLoading && <LoadingState label="Загрузка клубов" />}
+        {clubs.isLoading && <LoadingState label="Р—Р°РіСЂСѓР·РєР° РєР»СѓР±РѕРІ" />}
         {clubs.isError && <ErrorState message={(clubs.error as Error).message} onRetry={() => clubs.refetch()} />}
         {clubs.data && (
           <ul className="flex flex-col gap-3">
@@ -270,20 +270,20 @@ export function ClubsAdmin() {
                     <div className="flex flex-wrap gap-3">
                       <CityCombobox
                         initialText={club.city_name ?? ''}
-                        placeholder="Город"
+                        placeholder="Р“РѕСЂРѕРґ"
                         className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
                         onChange={(cityId) => setEditForm({ ...editForm, city_id: cityId })}
                       />
                       <input
                         type="date"
-                        placeholder="Дата основания"
+                        placeholder="Р”Р°С‚Р° РѕСЃРЅРѕРІР°РЅРёСЏ"
                         defaultValue={club.founded_date ?? ''}
                         onChange={(e) => setEditForm({ ...editForm, founded_date: e.target.value || undefined })}
-                        className="w-44 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+                        className="w-full sm:w-44 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
                       />
                     </div>
                     <div>
-                      <p className="mb-1 font-mono text-xs text-steel-dim">Логотип</p>
+                      <p className="mb-1 font-mono text-xs text-steel-dim">Р›РѕРіРѕС‚РёРї</p>
                       <PhotoUploadField
                         value={editForm.logo_path}
                         fallbackPreview={club.logo_path}
@@ -293,13 +293,13 @@ export function ClubsAdmin() {
                       />
                     </div>
                     <input
-                      placeholder="Адрес зала"
+                      placeholder="РђРґСЂРµСЃ Р·Р°Р»Р°"
                       defaultValue={club.address ?? ''}
                       onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
                       className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
                     />
                     <input
-                      placeholder="Телефон 8(XXX)XXX-XX-XX"
+                      placeholder="РўРµР»РµС„РѕРЅ 8(XXX)XXX-XX-XX"
                       inputMode="tel"
                       value={formatPhone(editForm.phone ?? club.phone ?? '')}
                       onKeyDown={(e) => {
@@ -317,7 +317,7 @@ export function ClubsAdmin() {
                         disabled={updateClub.isPending}
                         className="rounded-[var(--radius-rivet)] bg-rust px-4 py-2 text-sm font-semibold text-bone hover:bg-rust-dim disabled:opacity-50"
                       >
-                        Сохранить
+                        РЎРѕС…СЂР°РЅРёС‚СЊ
                       </button>
                       <button
                         onClick={() => {
@@ -326,28 +326,28 @@ export function ClubsAdmin() {
                         }}
                         className="rounded-[var(--radius-rivet)] border border-steel-dim px-4 py-2 text-sm text-steel hover:text-bone"
                       >
-                        Отмена
+                        РћС‚РјРµРЅР°
                       </button>
                     </div>
                   </div>
                 ) : (
                   <>
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div className="flex min-w-0 items-center gap-3">
                         <LogoThumb url={club.logo_path} name={club.name} />
-                        <div>
-                          <p className="font-display text-base text-bone">{club.name}</p>
+                        <div className="min-w-0">
+                          <p className="truncate font-display text-base text-bone">{club.name}</p>
                           <p className="font-mono text-xs text-steel">
-                            {club.city_name ?? 'город не указан'} · {club.athletes_count} спортсменов · {club.coaches_count} тренеров · рейтинг {club.rating_points}
+                            {club.city_name ?? 'РіРѕСЂРѕРґ РЅРµ СѓРєР°Р·Р°РЅ'} В· {club.athletes_count} СЃРїРѕСЂС‚СЃРјРµРЅРѕРІ В· {club.coaches_count} С‚СЂРµРЅРµСЂРѕРІ В· СЂРµР№С‚РёРЅРі {club.rating_points}
                           </p>
-                          {club.phone && <p className="font-mono text-xs text-steel-dim">📞 {club.phone}</p>}
-                          {club.address && <p className="font-mono text-xs text-steel-dim">📍 {club.address}</p>}
+                          {club.phone && <p className="font-mono text-xs text-steel-dim">рџ“ћ {club.phone}</p>}
+                          {club.address && <p className="truncate font-mono text-xs text-steel-dim">рџ“Ќ {club.address}</p>}
                           {formatDate(club.founded_date) && (
-                            <p className="font-mono text-xs text-steel-dim">📅 осн. {formatDate(club.founded_date)}</p>
+                            <p className="font-mono text-xs text-steel-dim">рџ“… РѕСЃРЅ. {formatDate(club.founded_date)}</p>
                           )}
                         </div>
                       </div>
-                      <div className="flex flex-shrink-0 gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <button
                           onClick={() => {
                             setManageId(manageId === club.id ? null : club.id)
@@ -356,7 +356,7 @@ export function ClubsAdmin() {
                           }}
                           className="rounded-[var(--radius-rivet)] border border-steel-dim px-3 py-1.5 text-sm text-steel hover:border-brass hover:text-brass"
                         >
-                          {manageId === club.id ? 'Скрыть состав' : 'Состав'}
+                          {manageId === club.id ? 'РЎРєСЂС‹С‚СЊ СЃРѕСЃС‚Р°РІ' : 'РЎРѕСЃС‚Р°РІ'}
                         </button>
                         <button
                           onClick={() => {
@@ -365,14 +365,14 @@ export function ClubsAdmin() {
                           }}
                           className="rounded-[var(--radius-rivet)] border border-steel-dim px-3 py-1.5 text-sm text-steel hover:border-brass hover:text-brass"
                         >
-                          Изменить
+                          РР·РјРµРЅРёС‚СЊ
                         </button>
                         {canDelete && (
                           <button
                             onClick={() => handleDelete(club.id, club.name)}
                             className="rounded-[var(--radius-rivet)] border border-steel-dim px-3 py-1.5 text-sm text-steel hover:border-danger hover:text-danger"
                           >
-                            Удалить
+                            РЈРґР°Р»РёС‚СЊ
                           </button>
                         )}
                       </div>
@@ -380,14 +380,14 @@ export function ClubsAdmin() {
 
                     {manageId === club.id && (
                       <div className="mt-4 border-t border-steel-dim/15 pt-4">
-                        {detail.isLoading && <p className="font-mono text-xs text-steel-dim">Загрузка состава…</p>}
+                        {detail.isLoading && <p className="font-mono text-xs text-steel-dim">Р—Р°РіСЂСѓР·РєР° СЃРѕСЃС‚Р°РІР°вЂ¦</p>}
                         {detail.isError && (
                           <ErrorState message={(detail.error as Error).message} onRetry={() => detail.refetch()} />
                         )}
                         {detail.data && (
                           <div className="grid gap-4 md:grid-cols-2">
                             <div>
-                              <p className="text-eyebrow mb-2 text-brass">Спортсмены ({detail.data.athletes.length})</p>
+                              <p className="text-eyebrow mb-2 text-brass">РЎРїРѕСЂС‚СЃРјРµРЅС‹ ({detail.data.athletes.length})</p>
                               <ul className="flex flex-col gap-1.5">
                                 {detail.data.athletes.map((a) => (
                                   <li key={a.id} className="flex items-center justify-between gap-2 rounded-xl border border-steel-dim/15 bg-ink/50 px-3 py-1.5">
@@ -396,12 +396,12 @@ export function ClubsAdmin() {
                                       onClick={() => removeAthlete(a.id)}
                                       className="flex-shrink-0 font-mono text-xs text-steel hover:text-danger"
                                     >
-                                      убрать
+                                      СѓР±СЂР°С‚СЊ
                                     </button>
                                   </li>
                                 ))}
                                 {detail.data.athletes.length === 0 && (
-                                  <li className="font-mono text-xs text-steel-dim">Спортсменов пока нет</li>
+                                  <li className="font-mono text-xs text-steel-dim">РЎРїРѕСЂС‚СЃРјРµРЅРѕРІ РїРѕРєР° РЅРµС‚</li>
                                 )}
                               </ul>
                               <div className="mt-2 flex gap-2">
@@ -410,7 +410,7 @@ export function ClubsAdmin() {
                                   onChange={(e) => setNewAthleteId(e.target.value)}
                                   className="min-w-0 flex-1 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-1.5 text-sm text-bone focus:border-brass focus:outline-none"
                                 >
-                                  <option value="">— добавить спортсмена —</option>
+                                  <option value="">вЂ” РґРѕР±Р°РІРёС‚СЊ СЃРїРѕСЂС‚СЃРјРµРЅР° вЂ”</option>
                                   {freeAthletes.map((a) => (
                                     <option key={a.id} value={a.id}>{a.full_name}</option>
                                   ))}
@@ -424,12 +424,12 @@ export function ClubsAdmin() {
                                 </button>
                               </div>
                               {freeAthletes.length === 0 && (
-                                <p className="mt-1 font-mono text-xs text-steel-dim">Все спортсмены уже в клубах</p>
+                                <p className="mt-1 font-mono text-xs text-steel-dim">Р’СЃРµ СЃРїРѕСЂС‚СЃРјРµРЅС‹ СѓР¶Рµ РІ РєР»СѓР±Р°С…</p>
                               )}
                             </div>
 
                             <div>
-                              <p className="text-eyebrow mb-2 text-brass">Тренеры ({detail.data.coaches.length})</p>
+                              <p className="text-eyebrow mb-2 text-brass">РўСЂРµРЅРµСЂС‹ ({detail.data.coaches.length})</p>
                               <ul className="flex flex-col gap-1.5">
                                 {detail.data.coaches.map((c) => (
                                   <li key={c.id} className="flex items-center justify-between gap-2 rounded-xl border border-steel-dim/15 bg-ink/50 px-3 py-1.5">
@@ -438,12 +438,12 @@ export function ClubsAdmin() {
                                       onClick={() => removeCoach(c.id)}
                                       className="flex-shrink-0 font-mono text-xs text-steel hover:text-danger"
                                     >
-                                      убрать
+                                      СѓР±СЂР°С‚СЊ
                                     </button>
                                   </li>
                                 ))}
                                 {detail.data.coaches.length === 0 && (
-                                  <li className="font-mono text-xs text-steel-dim">Тренеров пока нет</li>
+                                  <li className="font-mono text-xs text-steel-dim">РўСЂРµРЅРµСЂРѕРІ РїРѕРєР° РЅРµС‚</li>
                                 )}
                               </ul>
                               <div className="mt-2 flex gap-2">
@@ -452,7 +452,7 @@ export function ClubsAdmin() {
                                   onChange={(e) => setNewCoachId(e.target.value)}
                                   className="min-w-0 flex-1 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-1.5 text-sm text-bone focus:border-brass focus:outline-none"
                                 >
-                                  <option value="">— добавить тренера —</option>
+                                  <option value="">вЂ” РґРѕР±Р°РІРёС‚СЊ С‚СЂРµРЅРµСЂР° вЂ”</option>
                                   {freeCoaches.map((c) => (
                                     <option key={c.id} value={c.id}>{c.full_name}</option>
                                   ))}
@@ -466,7 +466,7 @@ export function ClubsAdmin() {
                                 </button>
                               </div>
                               {freeCoaches.length === 0 && (
-                                <p className="mt-1 font-mono text-xs text-steel-dim">Все тренеры уже в клубах</p>
+                                <p className="mt-1 font-mono text-xs text-steel-dim">Р’СЃРµ С‚СЂРµРЅРµСЂС‹ СѓР¶Рµ РІ РєР»СѓР±Р°С…</p>
                               )}
                             </div>
                           </div>

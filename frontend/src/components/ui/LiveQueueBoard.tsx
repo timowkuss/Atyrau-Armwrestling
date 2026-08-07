@@ -25,7 +25,7 @@ function TableCard({ table }: { table: TableQueueOut }) {
       {table.current ? (
         <div className="mt-3">
           <p className="text-eyebrow text-brass">Сейчас борются</p>
-          <p className="mt-1 text-lg text-bone">
+          <p className="mt-1 break-words text-base text-bone sm:text-lg">
             {table.current.p1_name} <span className="text-steel">vs</span> {table.current.p2_name}
           </p>
           <p className="mt-1 font-mono text-xs text-steel">

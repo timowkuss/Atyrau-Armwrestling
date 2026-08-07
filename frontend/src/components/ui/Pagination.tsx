@@ -10,21 +10,25 @@ export function Pagination({ page, pageSize, total, onPageChange }: PaginationPr
   if (totalPages <= 1) return null
 
   return (
-    <nav className="mt-8 flex items-center justify-between gap-4" aria-label="Постраничная навигация">
+    <nav
+      className="mt-8 flex flex-wrap items-center justify-center gap-2 sm:justify-between sm:gap-4"
+      aria-label="Постраничная навигация"
+    >
       <button
         onClick={() => onPageChange(page - 1)}
         disabled={page <= 1}
-        className="rounded-[var(--radius-rivet)] border border-steel-dim px-4 py-2 text-sm text-bone transition-colors hover:border-brass hover:text-brass disabled:opacity-30 disabled:hover:border-steel-dim disabled:hover:text-bone"
+        className="rounded-[var(--radius-rivet)] border border-steel-dim px-3 py-2 text-sm text-bone transition-colors hover:border-brass hover:text-brass disabled:opacity-30 disabled:hover:border-steel-dim disabled:hover:text-bone sm:px-4"
       >
         ← Назад
       </button>
-      <span className="font-mono text-xs text-steel">
-        стр. {page} из {totalPages} · {total} всего
+      <span className="order-last w-full text-center font-mono text-xs text-steel sm:order-none sm:w-auto">
+        стр. {page} из {totalPages}
+        <span className="hidden sm:inline"> · {total} всего</span>
       </span>
       <button
         onClick={() => onPageChange(page + 1)}
         disabled={page >= totalPages}
-        className="rounded-[var(--radius-rivet)] border border-steel-dim px-4 py-2 text-sm text-bone transition-colors hover:border-brass hover:text-brass disabled:opacity-30 disabled:hover:border-steel-dim disabled:hover:text-bone"
+        className="rounded-[var(--radius-rivet)] border border-steel-dim px-3 py-2 text-sm text-bone transition-colors hover:border-brass hover:text-brass disabled:opacity-30 disabled:hover:border-steel-dim disabled:hover:text-bone sm:px-4"
       >
         Вперёд →
       </button>

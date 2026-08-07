@@ -119,21 +119,21 @@ export function NewsAdmin() {
               editingId === n.id ? (
                 <NewsEditRow key={n.id} id={n.id} onDone={() => setEditingId(null)} onFeedback={setFeedback} />
               ) : (
-                <li key={n.id} className="plate flex items-center justify-between gap-4 rounded-[var(--radius-rivet)] p-4">
-                  <div>
+                <li key={n.id} className="plate flex flex-wrap items-center justify-between gap-4 rounded-[var(--radius-rivet)] p-4">
+                  <div className="min-w-0">
                     <p className="flex items-center gap-2 font-display text-base text-bone">
-                      {n.title}
+                      <span className="truncate">{n.title}</span>
                       <span
-                        className={`text-eyebrow rounded-[var(--radius-rivet)] px-2 py-0.5 ${
+                        className={`text-eyebrow flex-shrink-0 rounded-[var(--radius-rivet)] px-2 py-0.5 ${
                           n.is_published ? 'bg-success/15 text-success' : 'bg-steel-dim/20 text-steel'
                         }`}
                       >
                         {n.is_published ? 'опубликовано' : 'черновик'}
                       </span>
                     </p>
-                    <p className="font-mono text-xs text-steel">/{n.slug}</p>
+                    <p className="truncate font-mono text-xs text-steel">/{n.slug}</p>
                   </div>
-                  <div className="flex flex-shrink-0 gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => setEditingId(n.id)}
                       className="rounded-[var(--radius-rivet)] border border-steel-dim px-3 py-1.5 text-sm text-steel hover:border-brass hover:text-brass"

@@ -84,10 +84,10 @@ export function AdminLayout() {
 
   return (
     <div className="flex min-h-screen bg-ink text-bone">
-      {/* Сайдбар — постоянно виден от md и выше */}
-      <aside className="hidden w-60 flex-shrink-0 flex-col border-r border-steel-dim/30 bg-ink-soft md:flex">
-        <SidebarContent />
-      </aside>
+        {/* Сайдбар — постоянно виден от md и выше */}
+        <aside className="hidden w-60 flex-shrink-0 flex-col overflow-y-auto border-r border-steel-dim/30 bg-ink-soft md:flex">
+          <SidebarContent />
+        </aside>
 
       {/* Мобильный off-canvas drawer */}
       {drawerOpen && (
@@ -97,7 +97,7 @@ export function AdminLayout() {
             onClick={() => setDrawerOpen(false)}
             aria-hidden="true"
           />
-          <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[80%] flex-col border-r border-steel-dim/30 bg-ink-soft">
+          <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[80%] flex-col overflow-y-auto border-r border-steel-dim/30 bg-ink-soft">
             <SidebarContent onNavigate={() => setDrawerOpen(false)} />
           </aside>
         </div>
@@ -105,11 +105,11 @@ export function AdminLayout() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Мобильная верхняя панель с кнопкой открытия меню */}
-        <div className="flex items-center gap-3 border-b border-steel-dim/30 bg-ink-soft px-4 py-3 md:hidden">
+        <div className="flex min-w-0 items-center gap-3 border-b border-steel-dim/30 bg-ink-soft px-4 py-3 md:hidden">
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
-            className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-rivet)] text-bone"
+            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[var(--radius-rivet)] text-bone"
             aria-label="Открыть меню"
             aria-expanded={drawerOpen}
           >
@@ -117,8 +117,8 @@ export function AdminLayout() {
               <path d="M4 6.5H20M4 12H20M4 17.5H20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
             </svg>
           </button>
-          <img src="/brand/logo-armsport.png" alt="Логотип федерации" className="h-8 w-auto" />
-          <p className="font-display text-sm font-bold uppercase tracking-wide text-bone">
+          <img src="/brand/logo-armsport.png" alt="Логотип федерации" className="h-8 w-auto flex-shrink-0" />
+          <p className="truncate font-display text-sm font-bold uppercase tracking-wide text-bone">
             Atyrau<span className="text-rust"> Admin</span>
           </p>
         </div>

@@ -158,7 +158,7 @@ export function CoachProfile() {
                 </div>
 
                 {c.bio && (
-                  <p className="mt-5 max-w-xl whitespace-pre-line leading-relaxed text-steel">{c.bio}</p>
+                  <p className="mt-5 max-w-xl break-words whitespace-pre-line leading-relaxed text-steel">{c.bio}</p>
                 )}
               </div>
             </div>

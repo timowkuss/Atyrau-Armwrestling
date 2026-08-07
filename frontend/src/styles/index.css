@@ -1,2 +1,9 @@
 @import "tailwindcss";
 @import "./tokens.css";
+
+@layer base {
+  html,
+  body {
+    overflow-x: clip;
+  }
+}

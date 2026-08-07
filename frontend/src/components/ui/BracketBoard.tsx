@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { BracketMatchOut } from '@/types/api'
 import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 
@@ -13,15 +13,28 @@ import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 // в BracketMatchOut просто нет.
 // ════════════════════════════════════════════════════════════════════════
 
-const BOX_W = 220
-const BOX_H = 64
-const H_GAP = 36
-const SLOT_H = BOX_H + 14
-const L_SLOT_H = BOX_H + 14
+// На мобильных — компактная геометрия: у́же боксы, меньший шаг, чтобы
+// вся сетка читалась при горизонтальной прокрутке.
+const COMPACT = { boxW: 150, hGap: 20, boxH: 52 }
+const FULL = { boxW: 220, hGap: 36, boxH: 64 }
 
 const COLOR_W = '#2a4a6a'
 const COLOR_L = '#7a3a1a'
 const COLOR_F = '#8a6a10'
+
+function useCompact(): boolean {
+  const [compact, setCompact] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)')
+    const onChange = () => setCompact(mq.matches)
+    onChange()
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  return compact
+}
+
+type Geometry = { boxW: number; hGap: number; boxH: number }
 
 function groupBy<T, K extends string>(items: T[], key: (item: T) => K): Record<K, T[]> {
   return items.reduce(
@@ -80,7 +93,10 @@ function roundsInOrder(matches: BracketMatchOut[] | undefined): BracketMatchOut[
   return names.map((rn) => [...byRound[rn]].sort((a, b) => a.match_order - b.match_order))
 }
 
-function layoutBracket(matches: BracketMatchOut[]): Layout {
+function layoutBracket(matches: BracketMatchOut[], g: Geometry): Layout {
+  const { boxW, hGap, boxH } = g
+  const slotH = boxH + 14
+  const lSlotH = boxH + 14
   const positioned: Positioned[] = []
   const lines: Line[] = []
   const byBracket = groupBy(matches, (m) => m.bracket)
@@ -93,8 +109,8 @@ function layoutBracket(matches: BracketMatchOut[]): Layout {
   const Y_W_START = 0
 
   const yPos = (matchIdx: number, roundIdx: number) => {
-    const step = SLOT_H * 2 ** roundIdx
-    const firstCenter = Y_W_START + (step - BOX_H) / 2
+    const step = slotH * 2 ** roundIdx
+    const firstCenter = Y_W_START + (step - boxH) / 2
     return firstCenter + matchIdx * step
   }
 
@@ -103,7 +119,7 @@ function layoutBracket(matches: BracketMatchOut[]): Layout {
   const wYPositions: number[][] = []
 
   wRounds.forEach((roundMatches, ri) => {
-    const x = X_START + ri * (BOX_W + H_GAP)
+    const x = X_START + ri * (boxW + hGap)
     const colYs: number[] = []
     roundMatches.forEach((m, mi) => {
       const y = yPos(mi, ri)
@@ -119,29 +135,29 @@ function layoutBracket(matches: BracketMatchOut[]): Layout {
     const colYs = wYPositions[ri]
     if (colYs.length < 2) return
     const x = wColX[ri]
-    const xMid = x + BOX_W + H_GAP / 2
-    const xNext = x + BOX_W + H_GAP
+    const xMid = x + boxW + hGap / 2
+    const xNext = x + boxW + hGap
     for (let p = 0; p < colYs.length; p += 2) {
       if (p + 1 >= colYs.length) continue
-      const y1 = colYs[p] + BOX_H / 2
-      const y2 = colYs[p + 1] + BOX_H / 2
+      const y1 = colYs[p] + boxH / 2
+      const y2 = colYs[p + 1] + boxH / 2
       const yMid = (y1 + y2) / 2
-      lines.push({ x1: x + BOX_W, y1, x2: xMid, y2: y1, color: COLOR_W })
-      lines.push({ x1: x + BOX_W, y1: y2, x2: xMid, y2, color: COLOR_W })
+      lines.push({ x1: x + boxW, y1, x2: xMid, y2: y1, color: COLOR_W })
+      lines.push({ x1: x + boxW, y1: y2, x2: xMid, y2, color: COLOR_W })
       lines.push({ x1: xMid, y1, x2: xMid, y2, color: COLOR_W })
       lines.push({ x1: xMid, y1: yMid, x2: xNext, y2: yMid, color: COLOR_W })
     }
   })
 
   let maxYW = Y_W_START
-  wYPositions.forEach((colYs) => colYs.forEach((y) => { maxYW = Math.max(maxYW, y + BOX_H) }))
+  wYPositions.forEach((colYs) => colYs.forEach((y) => { maxYW = Math.max(maxYW, y + boxH) }))
 
   // ── Финал — продолжение по X после последней колонки верхней сетки ──
-  const xFinal = X_START + wRounds.length * (BOX_W + H_GAP)
+  const xFinal = X_START + wRounds.length * (boxW + hGap)
   const yFinal = Y_W_START
 
   fRounds.forEach((roundMatches, fi) => {
-    const xThis = xFinal + fi * (BOX_W + H_GAP)
+    const xThis = xFinal + fi * (boxW + hGap)
     roundMatches.forEach((m) => {
       const isReset = (m.round_name ?? '').toLowerCase().includes('переигровка')
       if (isReset && !(m.p1_name && m.p2_name) && m.status !== 'done') return
@@ -150,11 +166,11 @@ function layoutBracket(matches: BracketMatchOut[]): Layout {
   })
 
   if (fRounds.length > 0 && wColX.length > 0) {
-    const xPrev = wColX[wColX.length - 1] + BOX_W
-    const xMid = xPrev + H_GAP / 2
+    const xPrev = wColX[wColX.length - 1] + boxW
+    const xMid = xPrev + hGap / 2
     const lastCol = wYPositions[wYPositions.length - 1]
-    const yWf = lastCol && lastCol.length > 0 ? lastCol[0] + BOX_H / 2 : yFinal + BOX_H / 2
-    const yF = yFinal + BOX_H / 2
+    const yWf = lastCol && lastCol.length > 0 ? lastCol[0] + boxH / 2 : yFinal + boxH / 2
+    const yF = yFinal + boxH / 2
     lines.push({ x1: xPrev, y1: yWf, x2: xMid, y2: yWf, color: COLOR_F })
     lines.push({ x1: xMid, y1: yWf, x2: xMid, y2: yF, color: COLOR_F })
     lines.push({ x1: xMid, y1: yF, x2: xFinal, y2: yF, color: COLOR_F })
@@ -165,10 +181,10 @@ function layoutBracket(matches: BracketMatchOut[]): Layout {
   const lColPositions: { x: number; ys: number[] }[] = []
 
   lRounds.forEach((roundMatches, ri) => {
-    const x = X_START + (ri + 1) * (BOX_W + H_GAP)
+    const x = X_START + (ri + 1) * (boxW + hGap)
     const stepMult = 2 ** Math.floor(ri / 2)
-    const step = L_SLOT_H * stepMult
-    const firstOffset = (step - L_SLOT_H) / 2
+    const step = lSlotH * stepMult
+    const firstOffset = (step - lSlotH) / 2
     const colYs: number[] = []
     roundMatches.forEach((m, mi) => {
       const y = Y_L_START + firstOffset + mi * step
@@ -181,29 +197,29 @@ function layoutBracket(matches: BracketMatchOut[]): Layout {
   for (let ri = 0; ri < lColPositions.length - 1; ri++) {
     const { x: xCur, ys: ysCur } = lColPositions[ri]
     const { x: xNxt, ys: ysNxt } = lColPositions[ri + 1]
-    const xOut = xCur + BOX_W
-    const xMid = xOut + H_GAP / 2
+    const xOut = xCur + boxW
+    const xMid = xOut + hGap / 2
     const xIn = xNxt
     const isMerging = ysNxt.length < ysCur.length
 
     if (isMerging) {
       for (let p = 0; p < ysCur.length; p += 2) {
         if (p + 1 < ysCur.length) {
-          const y1 = ysCur[p] + BOX_H / 2
-          const y2 = ysCur[p + 1] + BOX_H / 2
+          const y1 = ysCur[p] + boxH / 2
+          const y2 = ysCur[p + 1] + boxH / 2
           const targetIdx = Math.floor(p / 2)
           if (targetIdx < ysNxt.length) {
-            const yTarget = ysNxt[targetIdx] + BOX_H / 2
+            const yTarget = ysNxt[targetIdx] + boxH / 2
             lines.push({ x1: xOut, y1, x2: xMid, y2: y1, color: COLOR_L })
             lines.push({ x1: xOut, y1: y2, x2: xMid, y2, color: COLOR_L })
             lines.push({ x1: xMid, y1, x2: xMid, y2, color: COLOR_L })
             lines.push({ x1: xMid, y1: yTarget, x2: xIn, y2: yTarget, color: COLOR_L })
           }
         } else {
-          const y1 = ysCur[p] + BOX_H / 2
+          const y1 = ysCur[p] + boxH / 2
           const targetIdx = Math.floor(p / 2)
           if (targetIdx < ysNxt.length) {
-            const yTarget = ysNxt[targetIdx] + BOX_H / 2
+            const yTarget = ysNxt[targetIdx] + boxH / 2
             lines.push({ x1: xOut, y1, x2: xMid, y2: y1, color: COLOR_L })
             lines.push({ x1: xMid, y1, x2: xMid, y2: yTarget, color: COLOR_L })
             lines.push({ x1: xMid, y1: yTarget, x2: xIn, y2: yTarget, color: COLOR_L })
@@ -213,8 +229,8 @@ function layoutBracket(matches: BracketMatchOut[]): Layout {
     } else {
       ysCur.forEach((yCur, mi) => {
         if (mi < ysNxt.length) {
-          const yFrom = yCur + BOX_H / 2
-          const yTo = ysNxt[mi] + BOX_H / 2
+          const yFrom = yCur + boxH / 2
+          const yTo = ysNxt[mi] + boxH / 2
           lines.push({ x1: xOut, y1: yFrom, x2: xMid, y2: yFrom, color: COLOR_L })
           lines.push({ x1: xMid, y1: yFrom, x2: xMid, y2: yTo, color: COLOR_L })
           lines.push({ x1: xMid, y1: yTo, x2: xIn, y2: yTo, color: COLOR_L })
@@ -223,20 +239,20 @@ function layoutBracket(matches: BracketMatchOut[]): Layout {
     }
   }
 
-  let width = xFinal + fRounds.length * (BOX_W + H_GAP) + 40
+  let width = xFinal + fRounds.length * (boxW + hGap) + 40
   let height = maxYW + 40
   let lowerLabel: Layout['lowerLabel'] = null
 
   if (lColPositions.length > 0) {
     lowerLabel = { x: X_START, y: Y_L_START - 22 }
-    const xLEnd = X_START + (lColPositions.length + 1) * (BOX_W + H_GAP) + 40
+    const xLEnd = X_START + (lColPositions.length + 1) * (boxW + hGap) + 40
     width = Math.max(width, xLEnd)
     let maxLY = Y_L_START
     lRounds.forEach((roundMatches, ri) => {
       const stepMult = 2 ** Math.floor(ri / 2)
-      const step = L_SLOT_H * stepMult
-      const firstOffset = (step - L_SLOT_H) / 2
-      const bottom = Y_L_START + firstOffset + (roundMatches.length - 1) * step + BOX_H
+      const step = lSlotH * stepMult
+      const firstOffset = (step - lSlotH) / 2
+      const bottom = Y_L_START + firstOffset + (roundMatches.length - 1) * step + boxH
       maxLY = Math.max(maxLY, bottom)
     })
     height = maxLY + 40
@@ -270,8 +286,8 @@ function initials(name: string): string {
 function RowLabel({ name, photo, isBye }: { name: string | null; photo: string | null; isBye: boolean }) {
   const src = cloudinaryThumb(photo, 48)
   return (
-    <span className="flex min-w-0 items-center gap-2">
-      <span className="h-7 w-7 shrink-0 overflow-hidden rounded-md bg-steel-dim/20 ring-1 ring-steel-dim/30">
+    <span className="flex min-w-0 items-center gap-1.5">
+      <span className="h-6 w-6 shrink-0 overflow-hidden rounded-md bg-steel-dim/20 ring-1 ring-steel-dim/30">
         {src && name ? (
           <img src={src} alt={name} className="h-full w-full object-cover" loading="lazy" referrerPolicy="no-referrer" />
         ) : (
@@ -280,7 +296,7 @@ function RowLabel({ name, photo, isBye }: { name: string | null; photo: string |
           </span>
         )}
       </span>
-      <span className="truncate">{slotLabel(name, isBye)}</span>
+      <span className="min-w-0 flex-1 truncate">{slotLabel(name, isBye)}</span>
     </span>
   )
 }
@@ -291,13 +307,16 @@ function MatchBox({
   y,
   isCurrent,
   isNext,
+  g,
 }: {
   match: BracketMatchOut
   x: number
   y: number
   isCurrent: boolean
   isNext: boolean
+  g: Geometry
 }) {
+  const { boxW, boxH } = g
   const isByeMatch = match.status === 'bye'
   const hasWinner = match.winner_name != null
   const p1Won = hasWinner && match.winner_name === match.p1_name
@@ -320,24 +339,24 @@ function MatchBox({
 
   return (
     <div
-      className={`absolute flex flex-col justify-center rounded-[var(--radius-rivet)] px-3 py-1.5 ${boxClass}`}
+      className={`absolute flex flex-col justify-center rounded-[var(--radius-rivet)] px-2 py-1 ${boxClass}`}
       style={{
         left: x,
         top: y,
-        width: BOX_W,
-        height: BOX_H,
+        width: boxW,
+        height: boxH,
         boxShadow: isCurrent ? '0 0 0 4px rgba(52,211,153,0.15)' : undefined,
       }}
     >
-      <div className="flex items-center justify-between gap-2">
-        <div className={`min-w-0 truncate text-xs leading-tight ${rowClass(p1Won, hasWinner && p2Won, match.p1_name)}`}>
+      <div className="flex items-center justify-between gap-1.5">
+        <div className={`min-w-0 truncate text-[11px] leading-tight sm:text-xs ${rowClass(p1Won, hasWinner && p2Won, match.p1_name)}`}>
           <RowLabel name={match.p1_name} photo={match.p1_photo} isBye={isByeMatch} />
         </div>
-        {isCurrent && <span className="shrink-0 text-[9px] uppercase tracking-wider text-emerald-400">сейчас</span>}
-        {isNext && <span className="shrink-0 text-[9px] uppercase tracking-wider text-amber-400">далее</span>}
+        {isCurrent && <span className="shrink-0 text-[8px] uppercase tracking-wider text-emerald-400">сейчас</span>}
+        {isNext && <span className="shrink-0 text-[8px] uppercase tracking-wider text-amber-400">далее</span>}
       </div>
       <div className="my-0.5 h-px bg-steel-dim/15" />
-      <div className={`min-w-0 truncate text-xs leading-tight ${rowClass(p2Won, hasWinner && p1Won, match.p2_name)}`}>
+      <div className={`min-w-0 truncate text-[11px] leading-tight sm:text-xs ${rowClass(p2Won, hasWinner && p1Won, match.p2_name)}`}>
         <RowLabel name={match.p2_name} photo={match.p2_photo} isBye={isByeMatch} />
       </div>
     </div>
@@ -357,7 +376,9 @@ function getCurrentAndNext(matches: BracketMatchOut[]): { currentId: number | nu
 }
 
 function BracketTree({ matches }: { matches: BracketMatchOut[] }) {
-  const layout = useMemo(() => layoutBracket(matches), [matches])
+  const compact = useCompact()
+  const g = compact ? COMPACT : FULL
+  const layout = useMemo(() => layoutBracket(matches, g), [matches, g])
   // Считаем на полном списке матчей руки (все секции сразу) — как в
   // десктопе, где current/next общие для категории+руки, а не свои
   // для каждой секции сетки.
@@ -365,7 +386,7 @@ function BracketTree({ matches }: { matches: BracketMatchOut[] }) {
   if (layout.positioned.length === 0) return null
 
   return (
-    <div className="overflow-x-auto pb-3">
+    <div className="overflow-x-auto overscroll-x-contain pb-3">
       <div className="relative" style={{ width: layout.width, height: layout.height, minWidth: layout.width }}>
         <svg className="absolute inset-0" width={layout.width} height={layout.height}>
           {layout.lines.map((l, i) => (
@@ -386,6 +407,7 @@ function BracketTree({ matches }: { matches: BracketMatchOut[] }) {
             match={match}
             x={x}
             y={y}
+            g={g}
             isCurrent={match.id === currentId}
             isNext={match.id === nextId}
           />
@@ -407,12 +429,12 @@ function CategoryBracket({ matches }: { matches: BracketMatchOut[] }) {
 
   return (
     <div>
-      <div className="mb-5 flex gap-2">
+      <div className="mb-5 flex flex-wrap gap-2">
         {hands.map((hand) => (
           <button
             key={hand}
             onClick={() => setActive(hand)}
-            className={`text-eyebrow rounded-[var(--radius-rivet)] border px-3 py-1.5 transition-colors ${
+            className={`text-eyebrow whitespace-nowrap rounded-[var(--radius-rivet)] border px-3 py-1.5 transition-colors ${
               hand === current
                 ? 'border-brass bg-brass/15 text-brass'
                 : 'border-steel-dim/40 text-steel hover:border-steel-dim hover:text-bone'

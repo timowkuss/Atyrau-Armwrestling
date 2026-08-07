@@ -65,20 +65,20 @@ export function ClubCard({ club }: { club: ClubListItem }) {
       </div>
 
       <div className="mt-5 grid grid-cols-2 divide-x divide-steel-dim/15 border-t border-steel-dim/15 pt-4">
-        <div className="flex items-center gap-3 pr-4">
-          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-petrol-2/50 text-steel transition-colors group-hover:bg-petrol-2/70">
+        <div className="flex items-center gap-2 pr-2 sm:gap-3 sm:pr-4">
+          <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-petrol-2/50 text-steel transition-colors group-hover:bg-petrol-2/70 sm:h-9 sm:w-9">
             <svg width="16" height="16" viewBox="0 0 14 14" fill="none">
               <circle cx="7" cy="5" r="2.6" stroke="currentColor" strokeWidth="1.2"/>
               <path d="M2 12.5c0-2.8 2.2-5 5-5s5 2.2 5 5" stroke="currentColor" strokeWidth="1.2"/>
             </svg>
           </span>
           <span>
-            <span className="block font-display text-xl font-bold leading-none text-bone">{club.athletes_count}</span>
-            <span className="mt-1 block font-mono text-[10px] font-medium uppercase tracking-wider text-steel-dim">спортсмены</span>
+            <span className="block font-display text-lg font-bold leading-none text-bone sm:text-xl">{club.athletes_count}</span>
+            <span className="mt-1 block font-mono text-[9px] font-medium uppercase tracking-wider text-steel-dim sm:text-[10px]">спортсмены</span>
           </span>
         </div>
-        <div className="flex items-center gap-3 pl-4">
-          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-petrol-2/50 text-steel transition-colors group-hover:bg-petrol-2/70">
+        <div className="flex items-center gap-2 pl-2 sm:gap-3 sm:pl-4">
+          <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-petrol-2/50 text-steel transition-colors group-hover:bg-petrol-2/70 sm:h-9 sm:w-9">
             <svg width="16" height="16" viewBox="0 0 14 14" fill="none">
               <path d="M7 8.5c2.2 0 4 1.8 4 4" stroke="currentColor" strokeWidth="1.2"/>
               <path d="M7 8.5c-2.2 0-4 1.8-4 4" stroke="currentColor" strokeWidth="1.2"/>
@@ -87,8 +87,8 @@ export function ClubCard({ club }: { club: ClubListItem }) {
             </svg>
           </span>
           <span>
-            <span className="block font-display text-xl font-bold leading-none text-bone">{club.coaches_count}</span>
-            <span className="mt-1 block font-mono text-[10px] font-medium uppercase tracking-wider text-steel-dim">тренеры</span>
+            <span className="block font-display text-lg font-bold leading-none text-bone sm:text-xl">{club.coaches_count}</span>
+            <span className="mt-1 block font-mono text-[9px] font-medium uppercase tracking-wider text-steel-dim sm:text-[10px]">тренеры</span>
           </span>
         </div>
       </div>

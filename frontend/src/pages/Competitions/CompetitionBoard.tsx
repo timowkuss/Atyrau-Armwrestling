@@ -26,21 +26,21 @@ function initials(name: string): string {
 function FighterChip({ name, photo, compact, reverse }: { name: string; photo: string | null; compact?: boolean; reverse?: boolean }) {
   const src = cloudinaryThumb(photo, compact ? 96 : 192)
   return (
-    <div className={`flex items-center gap-2.5 ${reverse ? 'flex-row-reverse' : 'flex-row'}`}>
+    <div className={`flex min-w-0 items-center gap-2 ${reverse ? 'flex-row-reverse' : 'flex-row'}`}>
       <div
         className={`shrink-0 overflow-hidden bg-steel-dim/20 ring-1 ring-steel-dim/30 ${
-          compact ? 'h-12 w-12 rounded-lg' : 'h-20 w-20 rounded-xl sm:h-28 sm:w-28'
+          compact ? 'h-10 w-10 rounded-lg sm:h-12 sm:w-12' : 'h-16 w-16 rounded-xl sm:h-28 sm:w-28'
         }`}
       >
         {src ? (
           <img src={src} alt={name} className="h-full w-full object-cover" loading="lazy" referrerPolicy="no-referrer" />
         ) : (
-          <span className={`flex h-full w-full items-center justify-center font-mono text-bone ${compact ? 'text-base' : 'text-2xl sm:text-4xl'}`}>
+          <span className={`flex h-full w-full items-center justify-center font-mono text-bone ${compact ? 'text-sm sm:text-base' : 'text-lg sm:text-4xl'}`}>
             {initials(name)}
           </span>
         )}
       </div>
-      <span className={`text-bone ${compact ? 'text-sm' : 'text-base sm:text-xl'}`}>{name}</span>
+      <span className={`min-w-0 flex-1 truncate text-bone ${compact ? 'text-xs sm:text-sm' : 'text-sm sm:text-xl'}`}>{name}</span>
     </div>
   )
 }
@@ -53,12 +53,12 @@ function PairBlock({ pair, label, compact }: { pair: QueuePairOut; label?: strin
       {displayRound && (
         <p className="font-mono text-[9px] uppercase tracking-wider text-brass">{displayRound}</p>
       )}
-      <div className="flex items-center justify-center gap-4 sm:gap-6">
-        <div className={`${compact ? 'max-w-[42%]' : 'max-w-[44%]'}`}>
+      <div className="flex w-full items-center justify-center gap-2 sm:gap-6">
+        <div className={`${compact ? 'max-w-[40%] sm:max-w-[42%]' : 'max-w-[40%] sm:max-w-[44%]'}`}>
           <FighterChip name={pair.p1_name} photo={pair.p1_photo} compact={compact} />
         </div>
-        <span className={`font-mono text-steel font-normal shrink-0 ${compact ? 'text-sm' : 'text-2xl sm:text-3xl'}`}>vs</span>
-        <div className={`${compact ? 'max-w-[42%]' : 'max-w-[44%]'}`}>
+        <span className={`font-mono shrink-0 text-steel font-normal ${compact ? 'text-sm' : 'text-xl sm:text-3xl'}`}>vs</span>
+        <div className={`${compact ? 'max-w-[40%] sm:max-w-[42%]' : 'max-w-[40%] sm:max-w-[44%]'}`}>
           <FighterChip name={pair.p2_name} photo={pair.p2_photo} compact={compact} reverse />
         </div>
       </div>
@@ -131,7 +131,7 @@ function QueueBlock({ table, tableCount }: { table: TableQueueOut; tableCount: n
             return (
               <p key={e.athlete_name} className={`flex items-center gap-1.5 text-left font-mono text-steel-dim ${elimSize}`}>
                 <span className="inline-block w-5 shrink-0 text-right">{e.place}.</span>
-                <span className="truncate text-bone">{e.athlete_name}</span>
+                <span className="min-w-0 flex-1 truncate text-bone">{e.athlete_name}</span>
                 {e.wins > 0 || e.losses > 0 ? (
                   <span className="ml-1 shrink-0 text-steel-dim/50">{e.wins}-{e.losses}</span>
                 ) : null}
@@ -155,8 +155,6 @@ function CategoryFilter({
   onToggle: (name: string) => void
   onSelectAll: (select: boolean) => void
 }) {
-  if (categories.length === 0) return null
-
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -175,6 +173,8 @@ function CategoryFilter({
       document.removeEventListener('keydown', onKeyDown)
     }
   }, [open])
+
+  if (categories.length === 0) return null
 
   const allSelected = categories.every((c) => selected.has(c.name))
   const someSelected = categories.some((c) => selected.has(c.name))
@@ -195,7 +195,7 @@ function CategoryFilter({
       </button>
 
       {open && (
-        <div className="absolute top-full z-20 mt-1.5 w-72 rounded-md border border-steel-dim/30 bg-ink shadow-xl shadow-black/50">
+        <div className="absolute left-1/2 top-full z-20 mt-1.5 w-72 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-md border border-steel-dim/30 bg-ink shadow-xl shadow-black/50">
           <button
             onClick={() => onSelectAll(!allSelected)}
             className="flex w-full items-center gap-2 px-3 py-2 font-mono text-xs text-steel transition-colors hover:bg-steel-dim/10"
@@ -272,7 +272,7 @@ export function CompetitionBoard() {
     : tables.length === 2
       ? 'grid-cols-1 sm:grid-cols-2'
       : tables.length <= 4
-        ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2'
+        ? 'grid-cols-1 sm:grid-cols-2'
         : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
 
   return (

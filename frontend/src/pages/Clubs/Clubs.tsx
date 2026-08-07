@@ -73,7 +73,7 @@ export function Clubs() {
         <div className="relative overflow-hidden rounded-xl border border-steel-dim/15 bg-gradient-to-br from-petrol/30 to-ink-soft/60 p-4">
           <div className="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-brass/5 blur-2xl" />
           <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
-            <div className="flex min-w-[200px] flex-1 flex-col gap-1.5">
+            <div className="flex w-full min-w-0 flex-1 flex-col gap-1.5 sm:min-w-[200px]">
               <label htmlFor="club-name" className="font-mono text-[11px] font-medium uppercase tracking-widest text-steel-dim">
                 Название
               </label>
@@ -83,11 +83,11 @@ export function Clubs() {
                 onChange={(e) => setNameInput(e.target.value)}
                 placeholder="Поиск по названию…"
                 autoComplete="off"
-                className="rounded-lg border border-steel-dim/20 bg-ink/80 px-3.5 py-2.5 text-sm text-bone placeholder:text-steel-dim/50 backdrop-blur transition-colors focus:border-brass/50 focus:bg-ink focus:outline-none"
+                className="w-full rounded-lg border border-steel-dim/20 bg-ink/80 px-3.5 py-2.5 text-sm text-bone placeholder:text-steel-dim/50 backdrop-blur transition-colors focus:border-brass/50 focus:bg-ink focus:outline-none"
               />
             </div>
 
-            <div className="flex min-w-[180px] flex-col gap-1.5">
+            <div className="flex w-full min-w-0 flex-col gap-1.5 sm:w-auto sm:min-w-[180px]">
               <label htmlFor="club-city" className="font-mono text-[11px] font-medium uppercase tracking-widest text-steel-dim">
                 Город / область
               </label>
@@ -95,7 +95,7 @@ export function Clubs() {
                 id="club-city"
                 value={cityId ?? ''}
                 onChange={(e) => updateParam('city', e.target.value || null)}
-                className="rounded-lg border border-steel-dim/20 bg-ink/80 px-3.5 py-2.5 text-sm text-bone backdrop-blur transition-colors focus:border-brass/50 focus:bg-ink focus:outline-none"
+                className="w-full rounded-lg border border-steel-dim/20 bg-ink/80 px-3.5 py-2.5 text-sm text-bone backdrop-blur transition-colors focus:border-brass/50 focus:bg-ink focus:outline-none"
               >
                 <option value="">Все города</option>
                 {cities?.map((c) => (

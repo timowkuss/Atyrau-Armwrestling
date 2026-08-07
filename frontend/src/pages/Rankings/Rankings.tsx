@@ -37,12 +37,12 @@ export function Rankings() {
         </h1>
       </div>
 
-      <div className="mt-8 flex justify-center gap-2">
+      <div className="mt-8 flex flex-wrap justify-center gap-2">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`text-eyebrow rounded-xl px-4 py-2 transition-all duration-300 ${
+            className={`text-eyebrow whitespace-nowrap rounded-xl px-4 py-2 transition-all duration-300 ${
               tab === t.key
                 ? 'bg-gradient-to-br from-petrol/80 to-petrol-2/60 text-bone shadow-[0_4px_20px_-4px_rgba(18,54,59,0.4)]'
                 : 'border border-steel-dim/20 text-steel-dim hover:border-steel-dim/40 hover:text-steel'
@@ -69,12 +69,12 @@ export function Rankings() {
                   <path d="M11 11l3.5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
                 </svg>
               </div>
-              <div className="flex gap-1.5 rounded-xl border border-steel-dim/15 bg-ink/40 p-1">
+              <div className="flex flex-wrap gap-1.5 rounded-xl border border-steel-dim/15 bg-ink/40 p-1">
                 {handOptions.map((o) => (
                   <button
                     key={o.value}
                     onClick={() => setHand(o.value)}
-                    className={`rounded-lg px-3.5 py-1.5 font-mono text-xs font-medium transition-all duration-200 ${
+                    className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 font-mono text-xs font-medium transition-all duration-200 ${
                       hand === o.value
                         ? 'bg-petrol text-bone shadow-sm'
                         : 'text-steel-dim hover:text-steel'

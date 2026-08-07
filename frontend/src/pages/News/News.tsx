@@ -9,7 +9,7 @@ export function News() {
   const { data, isLoading, isError, error, refetch } = useNewsList(page)
 
   return (
-    <div className="mx-auto max-w-4xl px-5 py-12">
+    <div className="mx-auto max-w-4xl px-5 py-8 sm:py-12">
       <p className="text-eyebrow text-rust">Федерация армрестлинга Атырау</p>
       <h1 className="mt-2 font-display text-3xl text-bone">Новости</h1>
 

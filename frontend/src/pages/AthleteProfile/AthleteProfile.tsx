@@ -98,8 +98,8 @@ export function AthleteProfile() {
                 </div>
 
                 {/* Пол · город                рейтинг */}
-                <div className="mt-4 flex items-start justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-sm text-steel">
+                <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-2 font-mono text-sm text-steel">
                     <span className="inline-flex items-center gap-2">
                       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-steel-dim">
                         <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.2"/>
@@ -216,10 +216,10 @@ export function AthleteProfile() {
               <EloRating eloLeft={stats.elo_left} eloRight={stats.elo_right} eloCombined={stats.elo_combined} />
             </div>
 
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="group relative overflow-hidden rounded-xl border border-steel-dim/15 bg-gradient-to-br from-petrol/40 to-ink-soft/60 p-5 transition-all duration-300 hover:border-brass/30 hover:shadow-[0_0_30px_-6px_rgba(201,162,39,0.15)]">
                 <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-brass/5 blur-2xl transition-all duration-500 group-hover:bg-brass/10" />
-                <Gauge value={stats.win_rate * 100} label="Побед" sublabel={`${stats.total_wins}–${stats.total_losses}`} size={120} />
+                <Gauge value={stats.win_rate * 100} label="Побед" sublabel={`${stats.total_wins}–${stats.total_losses}`} size={96} />
               </div>
 
               <div className="group relative overflow-hidden rounded-xl border border-steel-dim/15 bg-gradient-to-br from-petrol/40 to-ink-soft/60 p-5 transition-all duration-300 hover:border-brass/30 hover:shadow-[0_0_30px_-6px_rgba(201,162,39,0.15)]">
@@ -234,11 +234,11 @@ export function AthleteProfile() {
                 <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-brass/5 blur-2xl transition-all duration-500 group-hover:bg-brass/10" />
                 <div className="flex h-full flex-col items-center justify-center gap-1 pt-4">
                   <div className="flex items-center gap-2">
-                    <span className="font-display text-2xl font-bold text-brass">{stats.gold_count}</span>
+                    <span className="font-display text-xl font-bold text-brass sm:text-2xl">{stats.gold_count}</span>
                     <span className="text-steel-dim">·</span>
-                    <span className="font-display text-2xl font-bold text-steel">{stats.silver_count}</span>
+                    <span className="font-display text-xl font-bold text-steel sm:text-2xl">{stats.silver_count}</span>
                     <span className="text-steel-dim">·</span>
-                    <span className="font-display text-2xl font-bold text-rust">{stats.bronze_count}</span>
+                    <span className="font-display text-xl font-bold text-rust sm:text-2xl">{stats.bronze_count}</span>
                   </div>
                   <span className="text-eyebrow text-steel">медали</span>
                 </div>
@@ -247,7 +247,7 @@ export function AthleteProfile() {
               <div className="group relative overflow-hidden rounded-xl border border-steel-dim/15 bg-gradient-to-br from-petrol/40 to-ink-soft/60 p-5 transition-all duration-300 hover:border-brass/30 hover:shadow-[0_0_30px_-6px_rgba(201,162,39,0.15)]">
                 <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-brass/5 blur-2xl transition-all duration-500 group-hover:bg-brass/10" />
                 <div className="flex h-full flex-col items-center justify-center gap-2 pt-2">
-                  <div className="flex w-full justify-around font-mono text-sm">
+                  <div className="flex w-full justify-around font-mono text-xs sm:text-sm">
                     <div className="flex flex-col items-center gap-0.5">
                       <span className="text-eyebrow text-steel-dim">L</span>
                       <span className="font-medium text-bone">{stats.left_hand_wins}–{stats.left_hand_losses}</span>

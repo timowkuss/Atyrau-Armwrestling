@@ -194,8 +194,8 @@ export function ClubProfile() {
 
               {/* Инфо */}
               <div className="flex-1 pt-1">
-                <div className="flex items-start justify-between gap-4">
-                  <h1 className="font-display text-3xl font-bold leading-tight text-bone sm:text-4xl lg:text-5xl">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <h1 className="min-w-0 flex-1 font-display text-3xl font-bold leading-tight text-bone sm:text-4xl lg:text-5xl">
                     {c.name}
                   </h1>
                   <span className="flex flex-shrink-0 flex-col items-end gap-1">
@@ -257,7 +257,7 @@ export function ClubProfile() {
                 </div>
 
                 {c.description && (
-                  <p className="mt-5 max-w-xl whitespace-pre-line leading-relaxed text-steel">{c.description}</p>
+                  <p className="mt-5 max-w-xl break-words whitespace-pre-line leading-relaxed text-steel">{c.description}</p>
                 )}
               </div>
             </div>

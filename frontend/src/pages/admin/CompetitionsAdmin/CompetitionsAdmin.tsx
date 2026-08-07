@@ -35,10 +35,10 @@ export function CompetitionsAdmin() {
           <ul className="flex flex-col gap-3">
             {competitions.data.map((c) => (
               <li key={c.id} className="plate rounded-[var(--radius-rivet)] p-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="font-display text-base text-bone">{c.name}</p>
-                    <p className="font-mono text-xs text-steel">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="truncate font-display text-base text-bone">{c.name}</p>
+                    <p className="truncate font-mono text-xs text-steel">
                       {new Date(c.date).toLocaleDateString('ru-RU')} · {c.location_city_name ?? 'город не указан'} ·{' '}
                       <span className={c.status === 'published' ? 'text-success' : 'text-steel'}>{c.status}</span>
                     </p>
@@ -143,13 +143,13 @@ function CompetitionEditPanel({
             placeholder="URL афиши"
             value={form.poster_path ?? ''}
             onChange={(e) => setForm({ ...form, poster_path: e.target.value })}
-            className="flex-1 min-w-[200px] rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+            className="w-full flex-1 min-w-0 sm:min-w-[200px] rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
           />
           <input
             placeholder="URL регламента"
             value={form.regulations_doc_path ?? ''}
             onChange={(e) => setForm({ ...form, regulations_doc_path: e.target.value })}
-            className="flex-1 min-w-[200px] rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+            className="w-full flex-1 min-w-0 sm:min-w-[200px] rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
           />
           <CityCombobox
             initialText={initial.location_city_name ?? ''}
@@ -181,7 +181,7 @@ function CompetitionEditPanel({
           placeholder="URL файла"
           value={docForm.file_path}
           onChange={(e) => setDocForm({ ...docForm, file_path: e.target.value })}
-          className="flex-1 min-w-[160px] rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-2 py-1.5 text-xs text-bone focus:border-brass focus:outline-none"
+          className="w-full flex-1 min-w-0 sm:min-w-[160px] rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-2 py-1.5 text-xs text-bone focus:border-brass focus:outline-none"
         />
         <select
           value={docForm.doc_type ?? ''}

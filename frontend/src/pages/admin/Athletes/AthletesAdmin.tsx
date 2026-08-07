@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { useAuth } from '@/features/auth/AuthContext'
 import { useAdminClubsList } from '@/features/admin/useClubsAdmin'
 import { useAdminCoachesList } from '@/features/admin/useCoachesAdmin'
@@ -21,10 +21,10 @@ import type { AthleteInput, AthleteStatisticsUpdateInput, Gender } from '@/types
 
 const EMPTY_FORM: AthleteInput = { full_name: '', gender: 'male', phone: '8(' }
 
-const RANKS = ['КМС', 'МС', 'МСМК', 'ЗМС', 'Без звания']
+const RANKS = ['РљРњРЎ', 'РњРЎ', 'РњРЎРњРљ', 'Р—РњРЎ', 'Р‘РµР· Р·РІР°РЅРёСЏ']
 
-// В базе ФИО хранится одной строкой; на форме — отдельными полями
-// «Фамилия» и «Имя» (assembles в "Фамилия Имя").
+// Р’ Р±Р°Р·Рµ Р¤РРћ С…СЂР°РЅРёС‚СЃСЏ РѕРґРЅРѕР№ СЃС‚СЂРѕРєРѕР№; РЅР° С„РѕСЂРјРµ вЂ” РѕС‚РґРµР»СЊРЅС‹РјРё РїРѕР»СЏРјРё
+// В«Р¤Р°РјРёР»РёСЏВ» Рё В«РРјСЏВ» (assembles РІ "Р¤Р°РјРёР»РёСЏ РРјСЏ").
 function splitName(value: string): { first: string; last: string } {
   const parts = value.trim().split(/\s+/).filter(Boolean)
   if (parts.length === 1) return { first: parts[0], last: '' }
@@ -47,23 +47,23 @@ function NameFields({
     <div className="flex flex-wrap gap-3">
       <input
         required
-        placeholder="Фамилия"
+        placeholder="Р¤Р°РјРёР»РёСЏ"
         value={last}
         onChange={(e) => {
           setLast(e.target.value)
           emit(e.target.value, first)
         }}
-        className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+        className="w-full sm:w-auto rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
       />
       <input
         required
-        placeholder="Имя"
+        placeholder="РРјСЏ"
         value={first}
         onChange={(e) => {
           setFirst(e.target.value)
           emit(last, e.target.value)
         }}
-        className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+        className="w-full sm:w-auto rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
       />
       {extra}
     </div>
@@ -104,12 +104,12 @@ export function AthletesAdmin() {
     e.preventDefault()
     setFeedback(null)
     if (createIinConflict) {
-      setFeedback({ kind: 'error', message: `Спортсмен с таким ИИН уже существует: ${createIinConflict.full_name}` })
+      setFeedback({ kind: 'error', message: `РЎРїРѕСЂС‚СЃРјРµРЅ СЃ С‚Р°РєРёРј РРРќ СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚: ${createIinConflict.full_name}` })
       return
     }
     try {
       await createAthlete.mutateAsync(form)
-      setFeedback({ kind: 'success', message: `Спортсмен «${form.full_name}» добавлен.` })
+      setFeedback({ kind: 'success', message: `РЎРїРѕСЂС‚СЃРјРµРЅ В«${form.full_name}В» РґРѕР±Р°РІР»РµРЅ.` })
       setForm(EMPTY_FORM)
       setShowCreate(false)
     } catch (err) {
@@ -120,12 +120,12 @@ export function AthletesAdmin() {
   async function handleUpdate(id: number) {
     setFeedback(null)
     if (editIinConflict) {
-      setFeedback({ kind: 'error', message: `Спортсмен с таким ИИН уже существует: ${editIinConflict.full_name}` })
+      setFeedback({ kind: 'error', message: `РЎРїРѕСЂС‚СЃРјРµРЅ СЃ С‚Р°РєРёРј РРРќ СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚: ${editIinConflict.full_name}` })
       return
     }
     try {
       await updateAthlete.mutateAsync({ id, payload: editForm })
-      setFeedback({ kind: 'success', message: 'Изменения сохранены.' })
+      setFeedback({ kind: 'success', message: 'РР·РјРµРЅРµРЅРёСЏ СЃРѕС…СЂР°РЅРµРЅС‹.' })
       setEditingId(null)
     } catch (err) {
       setFeedback({ kind: 'error', message: (err as Error).message })
@@ -136,24 +136,24 @@ export function AthletesAdmin() {
     setFeedback(null)
     try {
       await updateAthlete.mutateAsync({ id, payload: { is_hidden: hide } })
-      setFeedback({ kind: 'success', message: `«${name}» ${hide ? 'скрыт с сайта' : 'снова виден на сайте'}.` })
+      setFeedback({ kind: 'success', message: `В«${name}В» ${hide ? 'СЃРєСЂС‹С‚ СЃ СЃР°Р№С‚Р°' : 'СЃРЅРѕРІР° РІРёРґРµРЅ РЅР° СЃР°Р№С‚Рµ'}.` })
     } catch (err) {
       setFeedback({ kind: 'error', message: (err as Error).message })
     }
   }
 
   async function handleDelete(id: number, name: string) {
-    if (!confirm(`Удалить спортсмена «${name}»? Это действие нельзя отменить.`)) return
+    if (!confirm(`РЈРґР°Р»РёС‚СЊ СЃРїРѕСЂС‚СЃРјРµРЅР° В«${name}В»? Р­С‚Рѕ РґРµР№СЃС‚РІРёРµ РЅРµР»СЊР·СЏ РѕС‚РјРµРЅРёС‚СЊ.`)) return
     setFeedback(null)
     try {
       const res = await deleteAthlete.mutateAsync(id)
       if (res?.status === 'hidden') {
         setFeedback({
           kind: 'success',
-          message: `«${name}» скрыт: есть история участий — он убран с сайта и с десктопов, записи сохранены.`,
+          message: `В«${name}В» СЃРєСЂС‹С‚: РµСЃС‚СЊ РёСЃС‚РѕСЂРёСЏ СѓС‡Р°СЃС‚РёР№ вЂ” РѕРЅ СѓР±СЂР°РЅ СЃ СЃР°Р№С‚Р° Рё СЃ РґРµСЃРєС‚РѕРїРѕРІ, Р·Р°РїРёСЃРё СЃРѕС…СЂР°РЅРµРЅС‹.`,
         })
       } else {
-        setFeedback({ kind: 'success', message: `«${name}» удалён.` })
+        setFeedback({ kind: 'success', message: `В«${name}В» СѓРґР°Р»С‘РЅ.` })
       }
     } catch (err) {
       setFeedback({ kind: 'error', message: (err as Error).message })
@@ -162,16 +162,16 @@ export function AthletesAdmin() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-eyebrow text-rust">Единая база федерации</p>
-          <h1 className="mt-2 font-display text-2xl text-bone">Спортсмены</h1>
+          <p className="text-eyebrow text-rust">Р•РґРёРЅР°СЏ Р±Р°Р·Р° С„РµРґРµСЂР°С†РёРё</p>
+          <h1 className="mt-2 font-display text-2xl text-bone">РЎРїРѕСЂС‚СЃРјРµРЅС‹</h1>
         </div>
         <button
           onClick={() => setShowCreate((v) => !v)}
           className="rounded-[var(--radius-rivet)] bg-rust px-4 py-2 text-sm font-semibold text-bone hover:bg-rust-dim"
         >
-          {showCreate ? 'Отмена' : '+ Добавить спортсмена'}
+          {showCreate ? 'РћС‚РјРµРЅР°' : '+ Р”РѕР±Р°РІРёС‚СЊ СЃРїРѕСЂС‚СЃРјРµРЅР°'}
         </button>
       </div>
 
@@ -191,18 +191,18 @@ export function AthletesAdmin() {
               <div className="flex flex-col gap-1">
                 <input
                   required
-                  placeholder="ИИН (12 цифр)"
+                  placeholder="РРРќ (12 С†РёС„СЂ)"
                   inputMode="numeric"
                   maxLength={12}
                   pattern="\d{12}"
                   value={form.iin ?? ''}
                   onKeyDown={blockNonDigits}
                   onChange={(e) => setForm({ ...form, iin: e.target.value.replace(/\D/g, '').slice(0, 12) || undefined })}
-                  className="w-40 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+                  className="w-full sm:w-40 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
                 />
                 {createIinConflict && (
                   <p className="text-xs text-red-400">
-                    Спортсмен с таким ИИН уже существует: {createIinConflict.full_name}
+                    РЎРїРѕСЂС‚СЃРјРµРЅ СЃ С‚Р°РєРёРј РРРќ СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚: {createIinConflict.full_name}
                   </p>
                 )}
               </div>
@@ -212,23 +212,23 @@ export function AthletesAdmin() {
             <select
               value={form.gender}
               onChange={(e) => setForm({ ...form, gender: e.target.value as Gender })}
-              className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+              className="w-full sm:w-auto rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
             >
-              <option value="male">Мужчины</option>
-              <option value="female">Женщины</option>
+              <option value="male">РњСѓР¶С‡РёРЅС‹</option>
+              <option value="female">Р–РµРЅС‰РёРЅС‹</option>
             </select>
             <input
               type="date"
               value={form.birth_date ?? ''}
               onChange={(e) => setForm({ ...form, birth_date: e.target.value || undefined })}
-              className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+              className="w-full sm:w-auto rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
             />
             <select
               value={form.rank ?? ''}
               onChange={(e) => setForm({ ...form, rank: e.target.value || undefined })}
-              className="w-36 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+              className="w-full sm:w-36 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
             >
-              <option value="">Разряд — не указан</option>
+              <option value="">Р Р°Р·СЂСЏРґ вЂ” РЅРµ СѓРєР°Р·Р°РЅ</option>
               {RANKS.map((r) => (
                 <option key={r} value={r}>
                   {r}
@@ -236,7 +236,7 @@ export function AthletesAdmin() {
               ))}
             </select>
             <input
-              placeholder="Телефон 8(XXX)XXX-XX-XX"
+              placeholder="РўРµР»РµС„РѕРЅ 8(XXX)XXX-XX-XX"
               inputMode="tel"
               value={form.phone ?? '8('}
               onKeyDown={(e) => {
@@ -244,16 +244,16 @@ export function AthletesAdmin() {
                 blockNonDigits(e)
               }}
               onChange={(e) => setForm({ ...form, phone: formatPhoneChange(form.phone, e.target.value) })}
-              className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+              className="w-full sm:w-auto rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
             />
           </div>
           <div className="flex flex-wrap gap-3">
             <select
               value={form.club_id ?? ''}
               onChange={(e) => setForm({ ...form, club_id: e.target.value ? Number(e.target.value) : undefined })}
-              className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+              className="w-full sm:w-auto rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
             >
-              <option value="">Клуб — не указан</option>
+              <option value="">РљР»СѓР± вЂ” РЅРµ СѓРєР°Р·Р°РЅ</option>
               {clubs.data?.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -261,8 +261,8 @@ export function AthletesAdmin() {
               ))}
             </select>
             <CityCombobox
-              placeholder="Город"
-              className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+              placeholder="Р“РѕСЂРѕРґ"
+              className="w-full sm:w-auto rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
               onChange={(cityId) => setForm({ ...form, city_id: cityId })}
             />
           </div>
@@ -277,7 +277,7 @@ export function AthletesAdmin() {
             disabled={createAthlete.isPending}
             className="self-start rounded-[var(--radius-rivet)] bg-rust px-4 py-2 text-sm font-semibold text-bone hover:bg-rust-dim disabled:opacity-50"
           >
-            {createAthlete.isPending ? 'Сохранение…' : 'Создать'}
+            {createAthlete.isPending ? 'РЎРѕС…СЂР°РЅРµРЅРёРµвЂ¦' : 'РЎРѕР·РґР°С‚СЊ'}
           </button>
         </form>
       )}
@@ -285,12 +285,12 @@ export function AthletesAdmin() {
       <input
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        placeholder="Поиск по имени…"
+        placeholder="РџРѕРёСЃРє РїРѕ РёРјРµРЅРёвЂ¦"
         className="mt-6 w-full max-w-sm rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone placeholder:text-steel-dim focus:border-brass focus:outline-none"
       />
 
       <div className="mt-4">
-        {athletes.isLoading && <LoadingState label="Загрузка спортсменов" />}
+        {athletes.isLoading && <LoadingState label="Р—Р°РіСЂСѓР·РєР° СЃРїРѕСЂС‚СЃРјРµРЅРѕРІ" />}
         {athletes.isError && <ErrorState message={(athletes.error as Error).message} onRetry={() => athletes.refetch()} />}
         {athletes.data && (
           <>
@@ -308,7 +308,7 @@ export function AthletesAdmin() {
                       extra={
                         <div className="flex flex-col gap-1">
                           <input
-                            placeholder="ИИН: оставить прежний"
+                            placeholder="РРРќ: РѕСЃС‚Р°РІРёС‚СЊ РїСЂРµР¶РЅРёР№"
                             inputMode="numeric"
                             maxLength={12}
                             value={editForm.iin ?? a.iin ?? ''}
@@ -319,11 +319,11 @@ export function AthletesAdmin() {
                                 iin: e.target.value.replace(/\D/g, '').slice(0, 12),
                               })
                             }
-                            className="w-48 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+                            className="w-full sm:w-48 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
                           />
                           {editIinConflict && (
                             <p className="text-xs text-red-400">
-                              Спортсмен с таким ИИН уже существует: {editIinConflict.full_name}
+                              РЎРїРѕСЂС‚СЃРјРµРЅ СЃ С‚Р°РєРёРј РРРќ СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚: {editIinConflict.full_name}
                             </p>
                           )}
                         </div>
@@ -335,9 +335,9 @@ export function AthletesAdmin() {
                         onChange={(e) => {
                           setEditForm({ ...editForm, rank: e.target.value || undefined })
                         }}
-                        className="w-36 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+                        className="w-full sm:w-36 rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
                       >
-                        <option value="">Разряд: оставить «{a.rank ?? 'не указан'}»</option>
+                        <option value="">Р Р°Р·СЂСЏРґ: РѕСЃС‚Р°РІРёС‚СЊ В«{a.rank ?? 'РЅРµ СѓРєР°Р·Р°РЅ'}В»</option>
                         {RANKS.map((r) => (
                           <option key={r} value={r}>
                             {r}
@@ -345,7 +345,7 @@ export function AthletesAdmin() {
                         ))}
                       </select>
                       <input
-                        placeholder="Телефон 8(XXX)XXX-XX-XX"
+                        placeholder="РўРµР»РµС„РѕРЅ 8(XXX)XXX-XX-XX"
                         inputMode="tel"
                         value={formatPhone(editForm.phone ?? a.phone ?? '')}
                         onKeyDown={(e) => {
@@ -358,7 +358,7 @@ export function AthletesAdmin() {
                             phone: formatPhoneChange(editForm.phone ?? a.phone ?? '', e.target.value),
                           })
                         }
-                        className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+                        className="w-full sm:w-auto rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
                       />
                       <select
                         defaultValue=""
@@ -369,10 +369,10 @@ export function AthletesAdmin() {
                             club_id: v === 'none' ? null : v ? Number(v) : undefined,
                           })
                         }}
-                        className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+                        className="w-full sm:w-auto rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
                       >
-                        <option value="">Клуб: оставить «{a.club_name ?? 'не указан'}»</option>
-                        <option value="none">Без клуба</option>
+                        <option value="">РљР»СѓР±: РѕСЃС‚Р°РІРёС‚СЊ В«{a.club_name ?? 'РЅРµ СѓРєР°Р·Р°РЅ'}В»</option>
+                        <option value="none">Р‘РµР· РєР»СѓР±Р°</option>
                         {clubs.data?.map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.name}
@@ -388,10 +388,10 @@ export function AthletesAdmin() {
                             coach_id: v === '' ? undefined : v === 'none' ? null : Number(v),
                           })
                         }}
-                        className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+                        className="w-full sm:w-auto rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
                       >
-                        <option value="">Тренер: оставить «{a.coach_name ?? 'не указан'}»</option>
-                        <option value="none">Без тренера (убрать)</option>
+                        <option value="">РўСЂРµРЅРµСЂ: РѕСЃС‚Р°РІРёС‚СЊ В«{a.coach_name ?? 'РЅРµ СѓРєР°Р·Р°РЅ'}В»</option>
+                        <option value="none">Р‘РµР· С‚СЂРµРЅРµСЂР° (СѓР±СЂР°С‚СЊ)</option>
                         {coaches.data?.items.map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.full_name}
@@ -400,8 +400,8 @@ export function AthletesAdmin() {
                       </select>
                       <CityCombobox
                         initialText={a.city_name ?? ''}
-                        placeholder="Город"
-                        className="rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
+                        placeholder="Р“РѕСЂРѕРґ"
+                        className="w-full sm:w-auto rounded-[var(--radius-rivet)] border border-steel-dim bg-ink px-3 py-2 text-sm text-bone focus:border-brass focus:outline-none"
                         onChange={(cityId) => setEditForm({ ...editForm, city_id: cityId })}
                       />
                     </div>
@@ -418,7 +418,7 @@ export function AthletesAdmin() {
                         disabled={updateAthlete.isPending}
                         className="rounded-[var(--radius-rivet)] bg-rust px-4 py-2 text-sm font-semibold text-bone hover:bg-rust-dim disabled:opacity-50"
                       >
-                        Сохранить
+                        РЎРѕС…СЂР°РЅРёС‚СЊ
                       </button>
                       <button
                         onClick={() => {
@@ -427,14 +427,14 @@ export function AthletesAdmin() {
                         }}
                         className="rounded-[var(--radius-rivet)] border border-steel-dim px-4 py-2 text-sm text-steel hover:text-bone"
                       >
-                        Отмена
+                        РћС‚РјРµРЅР°
                       </button>
                     </div>
                   </div>
                 ) : (
                   <>
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div className="flex min-w-0 items-center gap-3">
                         {a.photo_path ? (
                           <img
                             src={cloudinaryThumb(a.photo_path, 64) ?? undefined}
@@ -445,26 +445,26 @@ export function AthletesAdmin() {
                         ) : (
                           <div className="h-16 w-16 flex-shrink-0 rounded-2xl bg-ink border border-steel-dim" />
                         )}
-                        <div>
+                        <div className="min-w-0">
                           <p className="flex items-center gap-2 font-display text-base text-bone">
-                            {a.full_name}
+                            <span className="truncate">{a.full_name}</span>
                             {a.is_hidden && (
-                              <span className="text-eyebrow rounded-[var(--radius-rivet)] bg-danger/15 px-2 py-0.5 text-danger">
-                                скрыт
+                              <span className="text-eyebrow flex-shrink-0 rounded-[var(--radius-rivet)] bg-danger/15 px-2 py-0.5 text-danger">
+                                СЃРєСЂС‹С‚
                               </span>
                             )}
                           </p>
-                          <p className="font-mono text-xs text-steel">
-                            {a.club_name ?? 'клуб не указан'} · {a.coach_name ?? 'без тренера'} · {a.rank ?? 'без разряда'}
+                          <p className="truncate font-mono text-xs text-steel">
+                            {a.club_name ?? 'РєР»СѓР± РЅРµ СѓРєР°Р·Р°РЅ'} В· {a.coach_name ?? 'Р±РµР· С‚СЂРµРЅРµСЂР°'} В· {a.rank ?? 'Р±РµР· СЂР°Р·СЂСЏРґР°'}
                           </p>
                         </div>
                       </div>
-                      <div className="flex flex-shrink-0 flex-wrap justify-end gap-2">
+                      <div className="flex flex-wrap justify-end gap-2">
                         <button
                           onClick={() => setStatsOpenId(statsOpenId === a.id ? null : a.id)}
                           className="rounded-[var(--radius-rivet)] border border-steel-dim px-3 py-1.5 text-sm text-steel hover:border-brass hover:text-brass"
                         >
-                          Статистика
+                          РЎС‚Р°С‚РёСЃС‚РёРєР°
                         </button>
                         <button
                           onClick={() => {
@@ -473,20 +473,20 @@ export function AthletesAdmin() {
                           }}
                           className="rounded-[var(--radius-rivet)] border border-steel-dim px-3 py-1.5 text-sm text-steel hover:border-brass hover:text-brass"
                         >
-                          Изменить
+                          РР·РјРµРЅРёС‚СЊ
                         </button>
                         <button
                           onClick={() => handleToggleHidden(a.id, a.full_name, !a.is_hidden)}
                           className="rounded-[var(--radius-rivet)] border border-steel-dim px-3 py-1.5 text-sm text-steel hover:border-brass hover:text-brass"
                         >
-                          {a.is_hidden ? 'Показать' : 'Скрыть'}
+                          {a.is_hidden ? 'РџРѕРєР°Р·Р°С‚СЊ' : 'РЎРєСЂС‹С‚СЊ'}
                         </button>
                         {canDelete && (
                           <button
                             onClick={() => handleDelete(a.id, a.full_name)}
                             className="rounded-[var(--radius-rivet)] border border-steel-dim px-3 py-1.5 text-sm text-steel hover:border-danger hover:text-danger"
                           >
-                            Удалить
+                            РЈРґР°Р»РёС‚СЊ
                           </button>
                         )}
                       </div>
@@ -501,7 +501,7 @@ export function AthletesAdmin() {
             {athletes.data.filter((a) => a.is_hidden).length > 0 && (
               <div className="mt-6">
                 <h2 className="text-eyebrow text-amber">
-                  Скрытые — удалённые с историей участий ({athletes.data.filter((a) => a.is_hidden).length})
+                  РЎРєСЂС‹С‚С‹Рµ вЂ” СѓРґР°Р»С‘РЅРЅС‹Рµ СЃ РёСЃС‚РѕСЂРёРµР№ СѓС‡Р°СЃС‚РёР№ ({athletes.data.filter((a) => a.is_hidden).length})
                 </h2>
                 <div className="mt-3 flex gap-4 overflow-x-auto pb-2">
                   {athletes.data
@@ -522,7 +522,7 @@ export function AthletesAdmin() {
                           <div className="min-w-0">
                             <p className="truncate font-display text-sm text-bone">{a.full_name}</p>
                             <p className="mt-1 truncate font-mono text-xs text-steel">
-                              {a.club_name ?? 'без клуба'}
+                              {a.club_name ?? 'Р±РµР· РєР»СѓР±Р°'}
                             </p>
                           </div>
                         </div>
@@ -531,14 +531,14 @@ export function AthletesAdmin() {
                             onClick={() => handleToggleHidden(a.id, a.full_name, false)}
                             className="flex-1 rounded-[var(--radius-rivet)] border border-steel-dim px-2 py-1.5 text-xs text-steel hover:border-brass hover:text-brass"
                           >
-                            Показать
+                            РџРѕРєР°Р·Р°С‚СЊ
                           </button>
                           {canDelete && (
                             <button
                               onClick={() => handleDelete(a.id, a.full_name)}
                               className="flex-1 rounded-[var(--radius-rivet)] border border-steel-dim px-2 py-1.5 text-xs text-steel hover:border-danger hover:text-danger"
                             >
-                              Удалить
+                              РЈРґР°Р»РёС‚СЊ
                             </button>
                           )}
                         </div>
@@ -565,7 +565,7 @@ function StatisticsPanel({ athleteId }: { athleteId: number }) {
     setFeedback(null)
     try {
       await updateStats.mutateAsync({ id: athleteId, payload: form })
-      setFeedback({ kind: 'success', message: 'Статистика обновлена вручную (is_manual_override = true).' })
+      setFeedback({ kind: 'success', message: 'РЎС‚Р°С‚РёСЃС‚РёРєР° РѕР±РЅРѕРІР»РµРЅР° РІСЂСѓС‡РЅСѓСЋ (is_manual_override = true).' })
       setForm({})
     } catch (err) {
       setFeedback({ kind: 'error', message: (err as Error).message })
@@ -576,13 +576,13 @@ function StatisticsPanel({ athleteId }: { athleteId: number }) {
     setFeedback(null)
     try {
       await recalc.mutateAsync(athleteId)
-      setFeedback({ kind: 'success', message: 'Защита от пересчёта снята — статистику обновит следующая публикация турнира.' })
+      setFeedback({ kind: 'success', message: 'Р—Р°С‰РёС‚Р° РѕС‚ РїРµСЂРµСЃС‡С‘С‚Р° СЃРЅСЏС‚Р° вЂ” СЃС‚Р°С‚РёСЃС‚РёРєСѓ РѕР±РЅРѕРІРёС‚ СЃР»РµРґСѓСЋС‰Р°СЏ РїСѓР±Р»РёРєР°С†РёСЏ С‚СѓСЂРЅРёСЂР°.' })
     } catch (err) {
       setFeedback({ kind: 'error', message: (err as Error).message })
     }
   }
 
-  if (stats.isLoading) return <div className="mt-3">{<LoadingState label="Загрузка статистики" />}</div>
+  if (stats.isLoading) return <div className="mt-3">{<LoadingState label="Р—Р°РіСЂСѓР·РєР° СЃС‚Р°С‚РёСЃС‚РёРєРё" />}</div>
   if (stats.isError) return <div className="mt-3">{<ErrorState message={(stats.error as Error).message} onRetry={() => stats.refetch()} />}</div>
   if (!stats.data) return null
 
@@ -592,29 +592,29 @@ function StatisticsPanel({ athleteId }: { athleteId: number }) {
     <div className="mt-4 border-t border-steel-dim/30 pt-4">
       {s.is_manual_override && (
         <p className="text-eyebrow mb-3 text-brass">
-          Правлено вручную{s.overridden_at ? ` · ${new Date(s.overridden_at).toLocaleString('ru-RU')}` : ''} — защищено от автопересчёта
+          РџСЂР°РІР»РµРЅРѕ РІСЂСѓС‡РЅСѓСЋ{s.overridden_at ? ` В· ${new Date(s.overridden_at).toLocaleString('ru-RU')}` : ''} вЂ” Р·Р°С‰РёС‰РµРЅРѕ РѕС‚ Р°РІС‚РѕРїРµСЂРµСЃС‡С‘С‚Р°
         </p>
       )}
       <div className="grid grid-cols-2 gap-3 font-mono text-xs text-steel sm:grid-cols-4">
-        <span>Турниров: {s.total_competitions}</span>
-        <span>Побед: {s.total_wins}</span>
-        <span>Поражений: {s.total_losses}</span>
+        <span>РўСѓСЂРЅРёСЂРѕРІ: {s.total_competitions}</span>
+        <span>РџРѕР±РµРґ: {s.total_wins}</span>
+        <span>РџРѕСЂР°Р¶РµРЅРёР№: {s.total_losses}</span>
         <span>Win-rate: {(s.win_rate * 100).toFixed(0)}%</span>
-        <span>Золото: {s.gold_count}</span>
-        <span>Серебро: {s.silver_count}</span>
-        <span>Бронза: {s.bronze_count}</span>
+        <span>Р—РѕР»РѕС‚Рѕ: {s.gold_count}</span>
+        <span>РЎРµСЂРµР±СЂРѕ: {s.silver_count}</span>
+        <span>Р‘СЂРѕРЅР·Р°: {s.bronze_count}</span>
       </div>
 
-      <p className="text-eyebrow mt-4 text-steel">Ручная правка (например, сетевой сбой на площадке задвоил матч)</p>
+      <p className="text-eyebrow mt-4 text-steel">Р СѓС‡РЅР°СЏ РїСЂР°РІРєР° (РЅР°РїСЂРёРјРµСЂ, СЃРµС‚РµРІРѕР№ СЃР±РѕР№ РЅР° РїР»РѕС‰Р°РґРєРµ Р·Р°РґРІРѕРёР» РјР°С‚С‡)</p>
       <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
         {(
           [
-            ['total_wins', 'Победы'],
-            ['total_losses', 'Поражения'],
-            ['gold_count', 'Золото'],
-            ['silver_count', 'Серебро'],
-            ['bronze_count', 'Бронза'],
-            ['total_competitions', 'Турниров'],
+            ['total_wins', 'РџРѕР±РµРґС‹'],
+            ['total_losses', 'РџРѕСЂР°Р¶РµРЅРёСЏ'],
+            ['gold_count', 'Р—РѕР»РѕС‚Рѕ'],
+            ['silver_count', 'РЎРµСЂРµР±СЂРѕ'],
+            ['bronze_count', 'Р‘СЂРѕРЅР·Р°'],
+            ['total_competitions', 'РўСѓСЂРЅРёСЂРѕРІ'],
           ] as const
         ).map(([field, label]) => (
           <input
@@ -632,7 +632,7 @@ function StatisticsPanel({ athleteId }: { athleteId: number }) {
           disabled={updateStats.isPending || Object.keys(form).length === 0}
           className="rounded-[var(--radius-rivet)] bg-rust px-4 py-1.5 text-sm font-semibold text-bone hover:bg-rust-dim disabled:opacity-50"
         >
-          Сохранить правку
+          РЎРѕС…СЂР°РЅРёС‚СЊ РїСЂР°РІРєСѓ
         </button>
         {s.is_manual_override && (
           <button
@@ -640,7 +640,7 @@ function StatisticsPanel({ athleteId }: { athleteId: number }) {
             disabled={recalc.isPending}
             className="rounded-[var(--radius-rivet)] border border-steel-dim px-4 py-1.5 text-sm text-steel hover:border-brass hover:text-brass"
           >
-            Снять защиту (пересчитать заново)
+            РЎРЅСЏС‚СЊ Р·Р°С‰РёС‚Сѓ (РїРµСЂРµСЃС‡РёС‚Р°С‚СЊ Р·Р°РЅРѕРІРѕ)
           </button>
         )}
       </div>

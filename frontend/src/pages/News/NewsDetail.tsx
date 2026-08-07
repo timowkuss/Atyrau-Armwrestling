@@ -15,7 +15,7 @@ export function NewsDetail() {
     )
 
   return (
-    <div className="mx-auto max-w-2xl px-5 py-12">
+    <div className="mx-auto max-w-2xl px-5 py-8 sm:py-12">
       <Link to="/news" className="text-sm text-steel hover:text-brass">
         ← ко всем новостям
       </Link>
@@ -23,7 +23,9 @@ export function NewsDetail() {
         <p className="text-eyebrow mt-4 text-rust">{new Date(data.published_at).toLocaleDateString('ru-RU')}</p>
       )}
       <h1 className="mt-2 font-display text-2xl text-bone sm:text-3xl">{data.title}</h1>
-      {data.content && <p className="mt-6 whitespace-pre-wrap text-steel">{data.content}</p>}
+      {data.content && (
+        <p className="mt-6 whitespace-pre-wrap break-words text-steel">{data.content}</p>
+      )}
     </div>
   )
 }

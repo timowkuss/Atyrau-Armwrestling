@@ -31,8 +31,8 @@ export function CompetitionCard({ competition }: { competition: CompetitionListI
       <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-brass/5 blur-3xl transition-all duration-500 group-hover:bg-brass/10" />
 
       <div className="flex flex-1 flex-col">
-        <div className="flex items-start justify-between gap-2">
-          <span className="font-mono text-[11px] font-medium uppercase tracking-wider text-rust/80">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <span className="min-w-0 font-mono text-[11px] font-medium uppercase tracking-wider text-rust/80">
             {formatDate(competition.date)}
           </span>
           {statusBadge(competition.status)}

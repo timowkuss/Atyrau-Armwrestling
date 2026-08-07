@@ -74,7 +74,7 @@ export function Coaches() {
                 e.preventDefault()
                 updateParam('name', nameInput.trim() || null)
               }}
-              className="flex flex-1 flex-col gap-1.5 min-w-[200px]"
+              className="flex w-full flex-1 flex-col gap-1.5 sm:min-w-[200px]"
             >
               <label htmlFor="coach-name" className="font-mono text-[11px] font-medium uppercase tracking-widest text-steel-dim">
                 Имя
