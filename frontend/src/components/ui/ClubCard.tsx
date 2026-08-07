@@ -26,7 +26,7 @@ export function ClubCard({ club }: { club: ClubListItem }) {
             <img
               src={cloudinaryLogo(club.logo_path, 128) ?? club.logo_path}
               alt=""
-              className="h-full w-full object-contain p-2 transition-transform duration-500 group-hover:scale-105"
+              className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-105"
               loading="lazy"
             />
           ) : (

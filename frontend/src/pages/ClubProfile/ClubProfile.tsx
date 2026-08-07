@@ -184,7 +184,7 @@ export function ClubProfile() {
                     <img
                       src={cloudinaryLogo(c.logo_path, 224) ?? c.logo_path}
                       alt=""
-                      className="h-full w-full object-contain p-3 transition-transform duration-700 group-hover:scale-105"
+                      className="h-full w-full object-contain transition-transform duration-700 group-hover:scale-105"
                     />
                   ) : (
                     <span className="font-display text-3xl text-steel-dim sm:text-4xl">{initials(c.name)}</span>

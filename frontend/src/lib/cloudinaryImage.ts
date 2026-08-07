@@ -22,8 +22,9 @@ export function cloudinaryThumb(url: string | null | undefined, size: number): s
 /**
  * Трансформация для ЛОГОТИПОВ: в отличие от cloudinaryThumb (квадратный
  * c_fill + фокус на лицо — режет широкие логотипы), вписывает картинку
- * целиком без кадрирования (c_fit) и с прозрачным фоном. Квадратная рамка
- * остаётся — на сайте логотип отрисован в объект-контейнере.
+ * целиком без кадрирования (c_fit). Прозрачный фон (b_transparent) вместо
+ * принудительной заливки — чтобы у широких логотипов не оставалось тёмных
+ * «полос» по бокам в квадратной рамке.
  */
 export function cloudinaryLogo(url: string | null | undefined, size: number): string | null {
   if (!url) return null
@@ -31,6 +32,6 @@ export function cloudinaryLogo(url: string | null | undefined, size: number): st
   const idx = url.indexOf(marker)
   if (idx === -1) return url
   const px = Math.round(size * 2)
-  const transform = `c_fit,w_${px},h_${px},q_auto:best,f_auto,b_rgb:0d1117`
+  const transform = `c_fit,w_${px},h_${px},q_auto:best,f_auto,b_transparent`
   return url.slice(0, idx + marker.length) + transform + '/' + url.slice(idx + marker.length)
 }
