@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { useCompetition, useCompetitionQueue } from '@/features/competitions/useCompetitions'
 import type { TableQueueOut, QueuePairOut } from '@/types/api'
@@ -151,30 +151,85 @@ function QueueBlock({ table, tableCount }: { table: TableQueueOut; tableCount: n
 
 function CategoryFilter({
   categories,
-  value,
-  onSelect,
+  selected,
+  onToggle,
+  onSelectAll,
 }: {
   categories: { id: number; name: string }[]
-  value: string | null
-  onSelect: (name: string | null) => void
+  selected: Set<string>
+  onToggle: (name: string) => void
+  onSelectAll: (select: boolean) => void
 }) {
   if (categories.length === 0) return null
 
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+
+  const allSelected = categories.every((c) => selected.has(c.name))
+  const someSelected = categories.some((c) => selected.has(c.name))
+  const label = !someSelected
+    ? 'Все категории'
+    : selected.size === 1
+      ? [...selected][0]
+      : `Выбрано: ${selected.size}`
+
   return (
-    <div className="mt-4 flex items-center justify-center gap-2">
-      <label className="font-mono text-[10px] uppercase tracking-wider text-steel-dim">Категория</label>
-      <select
-        value={value ?? ''}
-        onChange={(e) => onSelect(e.target.value === '' ? null : e.target.value)}
-        className="rounded-md border border-steel-dim/30 bg-ink px-3 py-1.5 font-mono text-sm text-bone outline-none transition-colors hover:border-steel-dim focus:border-emerald-400"
+    <div ref={rootRef} className="relative mt-4 flex justify-center">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 rounded-md border border-steel-dim/30 bg-ink px-3 py-1.5 font-mono text-sm text-bone transition-colors hover:border-steel-dim focus:border-emerald-400 focus:outline-none"
       >
-        <option value="">Все категории</option>
-        {categories.map((c) => (
-          <option key={c.id} value={c.name}>
-            {c.name}
-          </option>
-        ))}
-      </select>
+        <span className="max-w-56 truncate">{label}</span>
+        <span className={`text-steel-dim transition-transform ${open ? 'rotate-180' : ''}`}>▾</span>
+      </button>
+
+      {open && (
+        <div className="absolute top-full z-20 mt-1.5 w-72 rounded-md border border-steel-dim/30 bg-ink shadow-xl shadow-black/50">
+          <button
+            onClick={() => onSelectAll(!allSelected)}
+            className="flex w-full items-center gap-2 px-3 py-2 font-mono text-xs text-steel transition-colors hover:bg-steel-dim/10"
+          >
+            <span className={`flex h-4 w-4 items-center justify-center rounded border ${allSelected ? 'border-emerald-400 bg-emerald-400/20' : 'border-steel-dim/40'}`}>
+              {allSelected && <span className="text-[10px] text-emerald-400">✓</span>}
+            </span>
+            {allSelected ? 'Снять все' : 'Выбрать все'}
+          </button>
+          <div className="h-px bg-steel-dim/15" />
+          <div className="max-h-64 overflow-y-auto py-1">
+            {categories.map((c) => {
+              const active = selected.has(c.name)
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => onToggle(c.name)}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-bone transition-colors hover:bg-steel-dim/10"
+                >
+                  <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${active ? 'border-emerald-400 bg-emerald-400/20' : 'border-steel-dim/40'}`}>
+                    {active && <span className="text-[10px] text-emerald-400">✓</span>}
+                  </span>
+                  <span className="truncate">{c.name}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -193,10 +248,20 @@ export function CompetitionBoard() {
     return new Set(raw.split(',').map((s) => decodeURIComponent(s)).filter(Boolean))
   }, [searchParams])
 
-  const selectCategory = (name: string | null) => {
+  const toggleCategory = (name: string) => {
+    const next = new Set(selectedNames)
+    if (next.has(name)) next.delete(name)
+    else next.add(name)
     const params = new URLSearchParams(searchParams)
-    if (!name) params.delete('categories')
-    else params.set('categories', encodeURIComponent(name))
+    if (next.size === 0) params.delete('categories')
+    else params.set('categories', [...next].map(encodeURIComponent).join(','))
+    setSearchParams(params, { replace: true })
+  }
+
+  const selectAllCategories = (select: boolean) => {
+    const params = new URLSearchParams(searchParams)
+    if (select) params.set('categories', competition.data?.categories.map((c) => encodeURIComponent(c.name)).join(',') ?? '')
+    else params.delete('categories')
     setSearchParams(params, { replace: true })
   }
 
@@ -224,8 +289,9 @@ export function CompetitionBoard() {
 
         <CategoryFilter
           categories={competition.data?.categories ?? []}
-          value={selectedNames.size === 1 ? [...selectedNames][0] : null}
-          onSelect={selectCategory}
+          selected={selectedNames}
+          onToggle={toggleCategory}
+          onSelectAll={selectAllCategories}
         />
 
         {queue.isLoading && (
