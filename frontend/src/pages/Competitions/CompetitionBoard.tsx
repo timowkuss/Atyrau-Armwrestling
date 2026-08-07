@@ -151,43 +151,30 @@ function QueueBlock({ table, tableCount }: { table: TableQueueOut; tableCount: n
 
 function CategoryFilter({
   categories,
-  selected,
-  onToggle,
-  onClear,
+  value,
+  onSelect,
 }: {
   categories: { id: number; name: string }[]
-  selected: Set<string>
-  onToggle: (name: string) => void
-  onClear: () => void
+  value: string | null
+  onSelect: (name: string | null) => void
 }) {
   if (categories.length === 0) return null
 
   return (
-    <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
-      {categories.map((c) => {
-        const active = selected.has(c.name)
-        return (
-          <button
-            key={c.id}
-            onClick={() => onToggle(c.name)}
-            className={`rounded-full border px-2.5 py-0.5 font-mono text-[10px] transition-colors ${
-              active
-                ? 'border-emerald-400 bg-emerald-400/10 text-emerald-400'
-                : 'border-steel-dim/30 text-steel-dim hover:text-steel'
-            }`}
-          >
+    <div className="mt-4 flex items-center justify-center gap-2">
+      <label className="font-mono text-[10px] uppercase tracking-wider text-steel-dim">Категория</label>
+      <select
+        value={value ?? ''}
+        onChange={(e) => onSelect(e.target.value === '' ? null : e.target.value)}
+        className="rounded-md border border-steel-dim/30 bg-ink px-3 py-1.5 font-mono text-sm text-bone outline-none transition-colors hover:border-steel-dim focus:border-emerald-400"
+      >
+        <option value="">Все категории</option>
+        {categories.map((c) => (
+          <option key={c.id} value={c.name}>
             {c.name}
-          </button>
-        )
-      })}
-      {selected.size > 0 && (
-        <button
-          onClick={onClear}
-          className="rounded-full border border-steel-dim/30 px-2.5 py-0.5 font-mono text-[10px] text-steel-dim hover:text-steel"
-        >
-          все
-        </button>
-      )}
+          </option>
+        ))}
+      </select>
     </div>
   )
 }
@@ -206,19 +193,10 @@ export function CompetitionBoard() {
     return new Set(raw.split(',').map((s) => decodeURIComponent(s)).filter(Boolean))
   }, [searchParams])
 
-  const toggleCategory = (name: string) => {
-    const next = new Set(selectedNames)
-    if (next.has(name)) next.delete(name)
-    else next.add(name)
+  const selectCategory = (name: string | null) => {
     const params = new URLSearchParams(searchParams)
-    if (next.size === 0) params.delete('categories')
-    else params.set('categories', [...next].map(encodeURIComponent).join(','))
-    setSearchParams(params, { replace: true })
-  }
-
-  const clearCategories = () => {
-    const params = new URLSearchParams(searchParams)
-    params.delete('categories')
+    if (!name) params.delete('categories')
+    else params.set('categories', encodeURIComponent(name))
     setSearchParams(params, { replace: true })
   }
 
@@ -246,9 +224,8 @@ export function CompetitionBoard() {
 
         <CategoryFilter
           categories={competition.data?.categories ?? []}
-          selected={selectedNames}
-          onToggle={toggleCategory}
-          onClear={clearCategories}
+          value={selectedNames.size === 1 ? [...selectedNames][0] : null}
+          onSelect={selectCategory}
         />
 
         {queue.isLoading && (
