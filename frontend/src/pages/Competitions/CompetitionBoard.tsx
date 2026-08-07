@@ -24,23 +24,23 @@ function initials(name: string): string {
 }
 
 function FighterChip({ name, photo, compact }: { name: string; photo: string | null; compact?: boolean }) {
-  const src = cloudinaryThumb(photo, 40)
+  const src = cloudinaryThumb(photo, compact ? 96 : 192)
   return (
-    <div className={`flex items-center gap-1.5 ${compact ? 'flex-row' : 'flex-col sm:flex-row'}`}>
+    <div className={`flex items-center gap-2.5 ${compact ? 'flex-row' : 'flex-col sm:flex-row'}`}>
       <div
-        className={`shrink-0 rounded-full bg-steel-dim/20 overflow-hidden ring-1 ring-steel-dim/30 ${
-          compact ? 'h-5 w-5' : 'h-9 w-9 sm:h-12 sm:w-12'
+        className={`shrink-0 overflow-hidden bg-steel-dim/20 ring-1 ring-steel-dim/30 ${
+          compact ? 'h-12 w-12 rounded-lg' : 'h-20 w-20 rounded-xl sm:h-28 sm:w-28'
         }`}
       >
         {src ? (
           <img src={src} alt={name} className="h-full w-full object-cover" loading="lazy" referrerPolicy="no-referrer" />
         ) : (
-          <span className={`flex h-full w-full items-center justify-center font-mono text-bone ${compact ? 'text-[7px]' : 'text-xs sm:text-sm'}`}>
+          <span className={`flex h-full w-full items-center justify-center font-mono text-bone ${compact ? 'text-base' : 'text-2xl sm:text-4xl'}`}>
             {initials(name)}
           </span>
         )}
       </div>
-      <span className="text-bone">{name}</span>
+      <span className={`text-bone ${compact ? 'text-sm' : 'text-base sm:text-xl'}`}>{name}</span>
     </div>
   )
 }
@@ -53,12 +53,12 @@ function PairBlock({ pair, label, compact }: { pair: QueuePairOut; label?: strin
       {displayRound && (
         <p className="font-mono text-[9px] uppercase tracking-wider text-brass">{displayRound}</p>
       )}
-      <div className="flex items-center justify-center gap-3 sm:gap-4">
-        <div className={`flex flex-col items-center ${compact ? 'max-w-[40%]' : 'max-w-[38%]'} text-center`}>
+      <div className="flex items-center justify-center gap-4 sm:gap-6">
+        <div className={`flex flex-col items-center ${compact ? 'max-w-[42%]' : 'max-w-[44%]'} text-center`}>
           <FighterChip name={pair.p1_name} photo={pair.p1_photo} compact={compact} />
         </div>
-        <span className={`font-mono text-steel font-normal shrink-0 ${compact ? 'text-sm' : 'text-xl sm:text-2xl'}`}>vs</span>
-        <div className={`flex flex-col items-center ${compact ? 'max-w-[40%]' : 'max-w-[38%]'} text-center`}>
+        <span className={`font-mono text-steel font-normal shrink-0 ${compact ? 'text-sm' : 'text-2xl sm:text-3xl'}`}>vs</span>
+        <div className={`flex flex-col items-center ${compact ? 'max-w-[42%]' : 'max-w-[44%]'} text-center`}>
           <FighterChip name={pair.p2_name} photo={pair.p2_photo} compact={compact} />
         </div>
       </div>
@@ -131,9 +131,9 @@ function QueueBlock({ table, tableCount }: { table: TableQueueOut; tableCount: n
             return (
               <p key={e.athlete_name} className={`flex items-center gap-1.5 text-left font-mono text-steel-dim ${elimSize}`}>
                 <span className="inline-block w-5 shrink-0 text-right">{e.place}.</span>
-                <span className="h-3.5 w-3.5 shrink-0 overflow-hidden rounded-full bg-steel-dim/20 ring-1 ring-steel-dim/30">
-                  {cloudinaryThumb(e.photo_path, 14) ? (
-                    <img src={cloudinaryThumb(e.photo_path, 14)!} alt="" className="h-full w-full object-cover" loading="lazy" referrerPolicy="no-referrer" />
+                <span className="h-5 w-5 shrink-0 overflow-hidden rounded-md bg-steel-dim/20 ring-1 ring-steel-dim/30">
+                  {cloudinaryThumb(e.photo_path, 40) ? (
+                    <img src={cloudinaryThumb(e.photo_path, 40)!} alt="" className="h-full w-full object-cover" loading="lazy" referrerPolicy="no-referrer" />
                   ) : null}
                 </span>
                 <span className="truncate text-bone">{e.athlete_name}</span>

@@ -13,8 +13,8 @@ import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 // в BracketMatchOut просто нет.
 // ════════════════════════════════════════════════════════════════════════
 
-const BOX_W = 210
-const BOX_H = 58
+const BOX_W = 220
+const BOX_H = 64
 const H_GAP = 36
 const SLOT_H = BOX_H + 14
 const L_SLOT_H = BOX_H + 14
@@ -268,14 +268,14 @@ function initials(name: string): string {
 }
 
 function RowLabel({ name, photo, isBye }: { name: string | null; photo: string | null; isBye: boolean }) {
-  const src = cloudinaryThumb(photo, 16)
+  const src = cloudinaryThumb(photo, 48)
   return (
-    <span className="flex min-w-0 items-center gap-1.5">
-      <span className="h-4 w-4 shrink-0 overflow-hidden rounded-full bg-steel-dim/20 ring-1 ring-steel-dim/30">
+    <span className="flex min-w-0 items-center gap-2">
+      <span className="h-7 w-7 shrink-0 overflow-hidden rounded-md bg-steel-dim/20 ring-1 ring-steel-dim/30">
         {src && name ? (
           <img src={src} alt={name} className="h-full w-full object-cover" loading="lazy" referrerPolicy="no-referrer" />
         ) : (
-          <span className="flex h-full w-full items-center justify-center text-[6px] font-mono text-bone/70">
+          <span className="flex h-full w-full items-center justify-center text-[10px] font-mono text-bone/70">
             {name ? initials(name) : '—'}
           </span>
         )}
