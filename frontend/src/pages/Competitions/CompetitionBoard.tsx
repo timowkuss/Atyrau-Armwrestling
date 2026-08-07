@@ -131,11 +131,6 @@ function QueueBlock({ table, tableCount }: { table: TableQueueOut; tableCount: n
             return (
               <p key={e.athlete_name} className={`flex items-center gap-1.5 text-left font-mono text-steel-dim ${elimSize}`}>
                 <span className="inline-block w-5 shrink-0 text-right">{e.place}.</span>
-                <span className="h-5 w-5 shrink-0 overflow-hidden rounded-md bg-steel-dim/20 ring-1 ring-steel-dim/30">
-                  {cloudinaryThumb(e.photo_path, 40) ? (
-                    <img src={cloudinaryThumb(e.photo_path, 40)!} alt="" className="h-full w-full object-cover" loading="lazy" referrerPolicy="no-referrer" />
-                  ) : null}
-                </span>
                 <span className="truncate text-bone">{e.athlete_name}</span>
                 {e.wins > 0 || e.losses > 0 ? (
                   <span className="ml-1 shrink-0 text-steel-dim/50">{e.wins}-{e.losses}</span>

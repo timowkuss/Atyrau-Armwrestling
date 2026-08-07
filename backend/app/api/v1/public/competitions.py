@@ -390,7 +390,10 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
         eliminated = []
         if max_losses == 1:
             # Single elimination: УНИКАЛЬНЫЕ места по порядку выбывания.
-            # Первый выбывший в своём раунде занимает нижнее место диапазона.
+            # Показываем ТОЛЬКО выбывших (есть >=1 поражение) + чемпиона (1 место),
+            # когда гранд-финал сыгран. Ещё играющие в выдачу не попадают —
+            # им нельзя заранее присваивать места (иначе победитель первого
+            # же матча сразу висит на 1-м месте, хотя турнир не завершён).
             # Для 8 участников (3 раунда): 1/4 -> 5,6,7,8; полуфинал -> 3,4;
             # финал -> 2; чемпион -> 1. Кто раньше проиграл в раунде
             # (по порядку матча) — тот ниже.
@@ -400,28 +403,16 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
             for s in stats.values():
                 if s["losses"] >= 1:
                     by_round.setdefault(s["last_loss_stage"], []).append(s)
-            occupied: set[int] = set()
-            if champion is not None:
-                occupied.add(1)
             placed: dict[int, int] = {}
             for st, lst in by_round.items():
                 lst.sort(key=lambda s: (s["last_loss_order"], s["pid"]))
                 max_place = 2 ** (se_rounds - st) if se_rounds else 0
                 for i, s in enumerate(lst):
-                    place = max_place - i
-                    placed[s["pid"]] = place
-                    occupied.add(place)
-            # Ещё не выбывшие — свободные места сверху (по победам)
-            not_out = [s for s in stats.values()
-                       if s["losses"] < 1 and s["pid"] != champion]
-            not_out.sort(key=lambda s: (-s["wins"], s["pid"]))
-            free_place = 1
-            for s in not_out:
-                while free_place in occupied:
-                    free_place += 1
-                placed[s["pid"]] = free_place
-                occupied.add(free_place)
-            ordered = sorted(stats.values(), key=lambda s: placed[s["pid"]])
+                    placed[s["pid"]] = max_place - i
+            if champion is not None:
+                placed[champion] = 1
+            ordered = [s for s in stats.values() if s["pid"] in placed]
+            ordered.sort(key=lambda s: placed[s["pid"]])
             for s in ordered:
                 p = all_participants_by_id.get(s["pid"])
                 name = p.athlete.full_name if p else UNKNOWN
