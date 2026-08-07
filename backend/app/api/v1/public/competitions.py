@@ -291,7 +291,11 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
     while changed:
         changed = False
         for mid, (m, _) in pending_by_id.items():
-            if mid in stale_ids or m.is_bye or m.status == "bye":
+            if mid in stale_ids:
+                continue
+            if m.is_bye or m.status == "bye":
+                stale_ids.add(mid)
+                changed = True
                 continue
             for slot, pid in ((1, m.p1_id), (2, m.p2_id)):
                 if pid is not None:
