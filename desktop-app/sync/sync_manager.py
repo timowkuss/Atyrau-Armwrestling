@@ -709,13 +709,22 @@ class SyncManager:
 
         return self._try("create_participant", payload, go)
 
-    def on_participant_updated(self, pid, name, weight, club, category_id, hand, age_category):
-        # Обновление профиля участника ПОСЛЕ регистрации (например, поправили
-        # вес) намеренно не синхронизируется в этой версии — центральная
-        # competition_participants хранит "снимок" на момент регистрации.
-        # Полноценный PATCH можно добавить по необходимости; пока это
-        # осознанное упрощение Этапа 6, не баг.
-        pass
+    def on_participant_updated(self, tid, pid, name, weight, club, category_id, hand, age_category):
+        """Обновление «снимка» участника после регистрации (перевзвешивание).
+        Синхронизирует вес на сайт — он участвует в тай-брейке двоеборья."""
+        remote_competition_id = self.state.map_get("competition", tid)
+        remote_participant_id = self.state.map_get("participant", pid)
+        if remote_competition_id is None or remote_participant_id is None:
+            return None
+        payload = {"tid": tid, "pid": pid, "weight": weight, "club": club}
+
+        def go():
+            self.api.update_participant(
+                remote_competition_id, remote_participant_id,
+                weight_at_event=weight, club_at_event=club)
+            return remote_participant_id
+
+        return self._try("update_participant", payload, go)
     
     def on_participant_deleted(self, pid, photo_url=None):
         # 0. отдельное фото участника в Cloudinary (загруженное под турнир)
@@ -910,6 +919,22 @@ class SyncManager:
                 return remote_match_id
 
             self._try("update_match", payload, go)
+
+    # ── ручные места двоеборья ─────────────────────────────────
+    # Полный снимок (замена) отправляется, когда жюри выбрало победителя
+    # «спорной» группы в окне «Итоги двоеборья». overrides — список
+    # {"category_id": remote, "participant_id": remote, "manual_rank": int}.
+    def on_dvoeborie_overrides_changed(self, tid, overrides):
+        remote_competition_id = self.state.map_get("competition", tid)
+        if remote_competition_id is None:
+            return None
+        payload = {"tid": tid, "overrides": overrides}
+
+        def go():
+            self.api.sync_dvoeborie_overrides(remote_competition_id, overrides)
+            return remote_competition_id
+
+        return self._try("sync_dvoeborie_overrides", payload, go)
 
     # ── публикация ───────────────────────────────────────────────
     def publish_tournament(self, tid) -> tuple[bool, str]:
@@ -1433,6 +1458,26 @@ class SyncManager:
                         print(f"[sync] update_match mid={payload['mid']}: 404 — матч удалён на сервере, пропускаем")
                         return True
                     raise
+                return True
+
+            if operation == "sync_dvoeborie_overrides":
+                remote_competition_id = self.state.map_get("competition", payload["tid"])
+                if remote_competition_id is None:
+                    # create_competition ещё не прошёл — вернёмся позже.
+                    return None
+                self.api.sync_dvoeborie_overrides(
+                    remote_competition_id, payload["overrides"])
+                return True
+
+            if operation == "update_participant":
+                remote_competition_id = self.state.map_get("competition", payload["tid"])
+                remote_participant_id = self.state.map_get("participant", payload["pid"])
+                if remote_competition_id is None or remote_participant_id is None:
+                    return None
+                self.api.update_participant(
+                    remote_competition_id, remote_participant_id,
+                    weight_at_event=payload.get("weight"),
+                    club_at_event=payload.get("club"))
                 return True
 
         except ApiClientError as e:

@@ -27,3 +27,6 @@ sync_config.json
 # Кэш и локальные загрузки фото — бинарные данные, не код
 photo_cache/
 photos/
+*.db-wal
+*.db-shm
+

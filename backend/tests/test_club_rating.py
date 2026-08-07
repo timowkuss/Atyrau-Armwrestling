@@ -26,6 +26,7 @@ from app.db.models.categories import Category
 from app.db.models.club_rating import ClubRating, ClubRatingHistory
 from app.db.models.clubs import Club
 from app.db.models.competitions import Competition, CompetitionParticipant
+from app.db.models.dvoeborie_override import DvoeborieOverride
 from app.db.models.matches import Match
 from app.db.models.results import Result
 from app.db.models.statistics import AthleteStatistic
@@ -288,6 +289,85 @@ class ClubRatingServiceTest(unittest.TestCase):
         # история: 5 + (-10) = -5, но аккумулятор зажимает в 0.
         # Пересчёт из истории так же даёт 0.
         self.assertEqual(cr.recalc_club_rating_from_history(self.db, self.club_a.id), 0)
+
+
+class DvoeborieTiebreakTest(unittest.TestCase):
+    """Тай-брейк двоеборья: при равных очках выше спортсмен с меньшим весом;
+    при равных очках И весе место делится, если жюри не выбрало победителя
+    (DvoeborieOverride.manual_rank)."""
+
+    def setUp(self):
+        self.db = _make_session()
+        self.comp = Competition(name="Ч", date=date(2026, 1, 15), status="completed")
+        self.db.add(self.comp)
+        self.db.flush()
+        self.cat = Category(competition_id=self.comp.id, name="55 кг", hand="Обе")
+        self.db.add(self.cat)
+        self.db.flush()
+        self.a = self._part("А", weight=55.0)
+        self.b = self._part("Б", weight=44.0)
+
+    def _part(self, name, weight):
+        athlete = Athlete(full_name=name)
+        self.db.add(athlete)
+        self.db.flush()
+        self.db.add(AthleteStatistic(athlete_id=athlete.id))
+        p = CompetitionParticipant(
+            competition_id=self.comp.id, category_id=self.cat.id,
+            athlete_id=athlete.id, weight_at_event=weight,
+        )
+        self.db.add(p)
+        self.db.flush()
+        return p
+
+    def _final(self, hand, winner, loser):
+        self.db.add(Match(
+            competition_id=self.comp.id, category_id=self.cat.id, hand=hand,
+            bracket="winners", stage=0, match_order=0, status="done",
+            p1_id=winner.id, p2_id=loser.id, winner_id=winner.id,
+        ))
+        self.db.flush()
+
+    def _standings(self):
+        return cr._category_standings(self.db, self.comp, self.cat)
+
+    def test_lighter_weight_wins_tie(self):
+        # правая: А 1-е, Б 2-е; левая: Б 1-е, А 2-е → у обоих по 17 очков.
+        self._final("Правая", self.a, self.b)
+        self._final("Левая", self.b, self.a)
+        self.db.commit()
+        rows = {r["participant_id"]: r for r in self._standings()}
+        # вес: Б(44) легче А(55) → Б выше
+        self.assertEqual(rows[self.b.id]["place"], 1)
+        self.assertEqual(rows[self.a.id]["place"], 2)
+
+    def test_equal_weight_shares_place(self):
+        self.a.weight_at_event = 44.0
+        self.db.commit()
+        self._final("Правая", self.a, self.b)
+        self._final("Левая", self.b, self.a)
+        self.db.commit()
+        rows = {r["participant_id"]: r for r in self._standings()}
+        self.assertEqual(rows[self.a.id]["place"], rows[self.b.id]["place"])
+        self.assertEqual(rows[self.a.id]["place"], 1)
+
+    def test_manual_override_breaks_tie(self):
+        self.a.weight_at_event = 44.0
+        self.db.commit()
+        self._final("Правая", self.a, self.b)
+        self._final("Левая", self.b, self.a)
+        self.db.add(DvoeborieOverride(
+            competition_id=self.comp.id, category_id=self.cat.id,
+            participant_id=self.a.id, manual_rank=1,
+        ))
+        self.db.commit()
+        rows = {r["participant_id"]: r for r in self._standings()}
+        # жюри выбрало А победителем → А 1-е, Б 2-е
+        self.assertEqual(rows[self.a.id]["place"], 1)
+        self.assertEqual(rows[self.b.id]["place"], 2)
+
+    def tearDown(self):
+        self.db.close()
 
 
 if __name__ == "__main__":

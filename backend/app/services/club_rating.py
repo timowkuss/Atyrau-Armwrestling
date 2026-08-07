@@ -33,6 +33,7 @@ from app.db.models.categories import Category
 from app.db.models.club_rating import ClubRating, ClubRatingHistory
 from app.db.models.clubs import Club
 from app.db.models.competitions import Competition, CompetitionParticipant
+from app.db.models.dvoeborie_override import DvoeborieOverride
 from app.db.models.matches import Match
 from app.db.models.results import Result
 
@@ -323,7 +324,8 @@ def _category_standings(db: Session, competition: Competition, category: Categor
 
     Место на каждой руке переводится в очки двоеборья (DVOEBORIE_POINTS),
     очки суммируются, по убыванию суммы строится расстановка — ровно как
-    compute_dvoeborie_standings в десктопе. Равные суммы получают одно
+    compute_dvoeborie_standings в десктопе. Тай-брейк при равных очках —
+    меньший вес (weight_at_event); равные очки И равный вес дают одно
     и то же место (спортивная конкурентная расстановка).
     """
     hands = {m.hand for m in db.query(Match).filter(
@@ -338,6 +340,22 @@ def _category_standings(db: Session, competition: Competition, category: Categor
     right_map = {s["participant_id"]: s["place"] for s in right}
     left_map = {s["participant_id"]: s["place"] for s in left}
 
+    weights = {
+        p.id: p.weight_at_event
+        for p in db.query(CompetitionParticipant).filter(
+            CompetitionParticipant.competition_id == competition.id,
+            CompetitionParticipant.category_id == category.id,
+        ).all()
+    }
+
+    manual_ranks = {
+        o.participant_id: o.manual_rank
+        for o in db.query(DvoeborieOverride).filter(
+            DvoeborieOverride.competition_id == competition.id,
+            DvoeborieOverride.category_id == category.id,
+        ).all()
+    }
+
     pids = set(right_map) | set(left_map)
     rows = []
     for pid in pids:
@@ -346,21 +364,50 @@ def _category_standings(db: Session, competition: Competition, category: Categor
         r_pts = DVOEBORIE_POINTS.get(r_place, 0) if r_place else 0
         l_pts = DVOEBORIE_POINTS.get(l_place, 0) if l_place else 0
         rows.append(
-            {"participant_id": pid, "total_points": r_pts + l_pts, "place": 0}
+            {"participant_id": pid, "total_points": r_pts + l_pts,
+             "weight": weights.get(pid), "manual_rank": manual_ranks.get(pid),
+             "place": 0}
         )
 
     def best_place(row: dict) -> int:
         places = [x for x in (right_map.get(row["participant_id"]), left_map.get(row["participant_id"])) if x]
         return min(places) if places else 9999
 
-    rows.sort(key=lambda r: (-r["total_points"], best_place(r), r["participant_id"]))
+    def weight_key(w):
+        return w if w is not None else float("inf")
 
+    # Тай-брейк как в десктопе: больше очков — выше, при равных очках —
+    # меньший вес; затем лучшее место на руке, затем id.
+    rows.sort(key=lambda r: (-r["total_points"], weight_key(r["weight"]),
+                             best_place(r), r["participant_id"]))
+
+    # Внутри «спорной» группы (одинаковые очки и вес) выбранный жюри
+    # победитель (manual_rank) поднимается в начало группы.
+    if manual_ranks:
+        ordered = []
+        i = 0
+        n = len(rows)
+        while i < n:
+            j = i
+            while (j < n and rows[j]["total_points"] == rows[i]["total_points"]
+                   and weight_key(rows[j]["weight"]) == weight_key(rows[i]["weight"])):
+                j += 1
+            group = rows[i:j]
+            group.sort(key=lambda r: (r["manual_rank"] if r["manual_rank"] is not None else 1 << 30,
+                                      best_place(r), r["participant_id"]))
+            ordered.extend(group)
+            i = j
+        rows = ordered
+
+    # Равные очки И равный вес делят одно место; спортсмен с manual_rank
+    # внутри группы получает своё отдельное (более высокое) место.
     place = 0
-    prev_points = None
+    prev_key = None
     for i, row in enumerate(rows):
-        if row["total_points"] != prev_points:
+        key = (row["total_points"], weight_key(row["weight"]), row["manual_rank"])
+        if key != prev_key:
             place = i + 1
-            prev_points = row["total_points"]
+            prev_key = key
         row["place"] = place
     return rows
 

@@ -224,7 +224,8 @@ def _category_standings(conn, tournament_id, category):
 
     Место на каждой руке переводится в очки двоеборья, очки суммируются,
     по убыванию суммы строится расстановка (как compute_dvoeborie_standings
-    в GUI). Равные суммы получают одно и то же место.
+    в GUI). Тай-брейк при равных очках — меньший вес; при равных очках
+    И весе спортсмены делят одно место.
     """
     rows_ = conn.execute(
         "SELECT DISTINCT hand FROM matches WHERE tournament_id=? AND category_id=? "
@@ -240,6 +241,14 @@ def _category_standings(conn, tournament_id, category):
     right_map = {s["participant_id"]: s["place"] for s in right}
     left_map = {s["participant_id"]: s["place"] for s in left}
 
+    weights = {
+        r["id"]: r["weight"]
+        for r in conn.execute(
+            "SELECT id, weight FROM participants WHERE tournament_id=? AND category_id=?",
+            (tournament_id, category["id"]),
+        ).fetchall()
+    }
+
     pids = set(right_map) | set(left_map)
     if not pids:
         return []
@@ -250,20 +259,26 @@ def _category_standings(conn, tournament_id, category):
         l_place = left_map.get(pid)
         r_pts = DVOEBORIE_POINTS.get(r_place, 0) if r_place else 0
         l_pts = DVOEBORIE_POINTS.get(l_place, 0) if l_place else 0
-        rows.append({"participant_id": pid, "total_points": r_pts + l_pts, "place": 0})
+        rows.append({"participant_id": pid, "total_points": r_pts + l_pts,
+                     "weight": weights.get(pid), "place": 0})
 
     def best_place(row):
         places = [x for x in (right_map.get(row["participant_id"]), left_map.get(row["participant_id"])) if x]
         return min(places) if places else 9999
 
-    rows.sort(key=lambda r: (-r["total_points"], best_place(r), r["participant_id"]))
+    def weight_key(w):
+        return w if w is not None else float("inf")
+
+    rows.sort(key=lambda r: (-r["total_points"], weight_key(r["weight"]),
+                             best_place(r), r["participant_id"]))
 
     place = 0
-    prev_points = None
+    prev_key = None
     for i, row in enumerate(rows):
-        if row["total_points"] != prev_points:
+        key = (row["total_points"], weight_key(row["weight"]))
+        if key != prev_key:
             place = i + 1
-            prev_points = row["total_points"]
+            prev_key = key
         row["place"] = place
     return rows
 

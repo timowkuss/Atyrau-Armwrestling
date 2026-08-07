@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.api.v1.deps import require_desktop_sync
 from app.db.models.categories import Category
 from app.db.models.competitions import Competition, CompetitionParticipant
+from app.db.models.dvoeborie_override import DvoeborieOverride
 from app.db.models.geo import City
 from app.db.session import get_db
 from app.schemas.sync import (
@@ -110,6 +111,42 @@ def create_participant(
     return {"id": participant.id}
 
 
+class ParticipantSyncUpdate(BaseModel):
+    weight_at_event: float | None = None
+    club_at_event: str | None = None
+
+
+@router.patch("/{competition_id}/participants/{participant_id}")
+def update_participant(
+    competition_id: int,
+    participant_id: int,
+    payload: ParticipantSyncUpdate,
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_desktop_sync),
+):
+    """Обновляет «снимок» участника после регистрации — в первую очередь
+    вес после контрольного взвешивания (влияет на тай-брейк двоеборья)."""
+    competition = db.query(Competition).filter(Competition.id == competition_id).first()
+    if competition is None:
+        raise HTTPException(status_code=404, detail="Соревнование не найдено")
+    participant = (
+        db.query(CompetitionParticipant)
+        .filter(
+            CompetitionParticipant.id == participant_id,
+            CompetitionParticipant.competition_id == competition_id,
+        )
+        .first()
+    )
+    if participant is None:
+        raise HTTPException(status_code=404, detail="Участник не найден")
+    if payload.weight_at_event is not None:
+        participant.weight_at_event = payload.weight_at_event
+    if payload.club_at_event is not None:
+        participant.club_at_event = payload.club_at_event
+    db.commit()
+    return {"status": "ok", "id": participant.id}
+
+
 @router.post("/{competition_id}/publish")
 def publish_competition(
     competition_id: int,
@@ -125,6 +162,44 @@ def publish_competition(
     competition.published_at = datetime.now(timezone.utc)
     db.commit()
     return {"status": "published"}
+
+
+class DvoeborieOverrideItem(BaseModel):
+    category_id: int
+    participant_id: int
+    manual_rank: int
+
+
+class DvoeborieOverridesSync(BaseModel):
+    overrides: list[DvoeborieOverrideItem]
+
+
+@router.post("/{competition_id}/dvoeborie-overrides", status_code=200)
+def sync_dvoeborie_overrides(
+    competition_id: int,
+    payload: DvoeborieOverridesSync,
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_desktop_sync),
+):
+    """Заменяет ручные места двоеборья турнира (полный снимок из десктопа)."""
+    competition = db.query(Competition).filter(Competition.id == competition_id).first()
+    if competition is None:
+        raise HTTPException(status_code=404, detail="Соревнование не найдено")
+
+    db.query(DvoeborieOverride).filter(
+        DvoeborieOverride.competition_id == competition_id
+    ).delete(synchronize_session=False)
+    for item in payload.overrides:
+        db.add(
+            DvoeborieOverride(
+                competition_id=competition_id,
+                category_id=item.category_id,
+                participant_id=item.participant_id,
+                manual_rank=item.manual_rank,
+            )
+        )
+    db.commit()
+    return {"status": "ok", "count": len(payload.overrides)}
 
 
 class StatusUpdate(BaseModel):

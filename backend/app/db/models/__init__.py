@@ -8,6 +8,7 @@ from app.db.models.coaches import Coach  # noqa: F401
 from app.db.models.athletes import Athlete  # noqa: F401
 from app.db.models.categories import AgeCategory, WeightCategory, Category  # noqa: F401
 from app.db.models.competitions import Competition, CompetitionParticipant  # noqa: F401
+from app.db.models.dvoeborie_override import DvoeborieOverride  # noqa: F401
 from app.db.models.matches import Match  # noqa: F401
 from app.db.models.results import Result  # noqa: F401
 from app.db.models.statistics import AthleteStatistic  # noqa: F401

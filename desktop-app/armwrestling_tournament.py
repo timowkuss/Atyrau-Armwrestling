@@ -1136,6 +1136,36 @@ iin TEXT,                        -- ИИН, 12 цифр
         self.conn.execute("DELETE FROM participants WHERE id=?", (pid,))
         self.conn.commit()
 
+    def get_dvoeborie_overrides(self, tournament_id, category_id):
+        """Ручные места жюри в двоеборье: {pid: manual_rank}."""
+        rows = self.conn.execute(
+            "SELECT pid, manual_rank FROM dvoeborie_overrides "
+            "WHERE tournament_id=? AND category_id=?",
+            (tournament_id, category_id)).fetchall()
+        return {r["pid"]: r["manual_rank"] for r in rows}
+
+    def set_dvoeborie_override(self, tournament_id, category_id, pid, manual_rank):
+        self.conn.execute(
+            "INSERT INTO dvoeborie_overrides (tournament_id, category_id, pid, manual_rank) "
+            "VALUES (?,?,?,?) "
+            "ON CONFLICT(tournament_id, category_id, pid) "
+            "DO UPDATE SET manual_rank=excluded.manual_rank",
+            (tournament_id, category_id, pid, manual_rank))
+        self.conn.commit()
+
+    def clear_dvoeborie_overrides(self, tournament_id, category_id, pids=None):
+        if pids:
+            qmarks = ",".join("?" * len(pids))
+            self.conn.execute(
+                "DELETE FROM dvoeborie_overrides "
+                "WHERE tournament_id=? AND category_id=? AND pid IN (" + qmarks + ")",
+                (tournament_id, category_id, *pids))
+        else:
+            self.conn.execute(
+                "DELETE FROM dvoeborie_overrides WHERE tournament_id=? AND category_id=?",
+                (tournament_id, category_id))
+        self.conn.commit()
+
     def get_participant_by_barcode(self, barcode_value):
         """Ищет участника по значению штрихкода."""
         pid = parse_barcode_value(barcode_value)
@@ -1293,9 +1323,16 @@ def _synced_update_participant(self, pid, name, weight, club, category_id, hand,
                                 photo_path, age_category="Senior", athlete_id=None):
     _original_update_participant(self, pid, name, weight, club, category_id,
                                   hand, photo_path, age_category, athlete_id)
+    tid = None
+    try:
+        row = self.conn.execute(
+            "SELECT tournament_id FROM participants WHERE id=?", (pid,)).fetchone()
+        tid = row["tournament_id"] if row else None
+    except Exception:
+        tid = None
     try:
         sync_manager.dispatch_async(lambda: sync_manager.on_participant_updated(
-            pid, name, weight, club, category_id, hand, age_category))
+            tid, pid, name, weight, club, category_id, hand, age_category))
     except Exception as e:
         print(f"[sync] update_participant: {e}")
 
@@ -3438,8 +3475,14 @@ def compute_dvoeborie_standings(db, engine, category):
     оказываются внизу списка — т.е. полная расстановка мест "снизу вверх"
     получается сама собой, без отдельной ручной сортировки выбывших.
 
+    Тай-брейк при равных очках — меньший вес (после контрольного взвешивания).
+    При равных очках И весе спортсмены делят одно место, если жюри не задало
+    ручное место (dvoeborie_overrides.manual_rank) — тогда выбранный спортсмен
+    поднимается в начало «спорной» группы и получает отдельное (более высокое)
+    место, остальные в группе делят следующее.
+
     Возвращает список словарей, отсортированный по итоговому месту:
-        pid, name, club, right_place, right_points,
+        pid, name, club, weight, right_place, right_points,
         left_place, left_points, total_points, place
     """
     right = _standings_with_place(engine, category["id"], "Правая")
@@ -3447,6 +3490,12 @@ def compute_dvoeborie_standings(db, engine, category):
 
     right_map = {s["pid"]: s for s in right}
     left_map = {s["pid"]: s for s in left}
+
+    overrides = {}
+    try:
+        overrides = db.get_dvoeborie_overrides(category["tournament_id"], category["id"])
+    except Exception:
+        overrides = {}
 
     pids = set(right_map) | set(left_map)
     rows = []
@@ -3464,31 +3513,53 @@ def compute_dvoeborie_standings(db, engine, category):
             "pid": pid,
             "name": p["name"],
             "club": p["club"] if "club" in p.keys() and p["club"] else "—",
+            "weight": p["weight"] if "weight" in p.keys() else None,
             "right_place": r_place,
             "left_place": l_place,
             "right_points": r_pts,
             "left_points": l_pts,
             "total_points": r_pts + l_pts,
-            "weight": p["weight"],
         })
 
     def best_place(row):
         places = [x for x in (row["right_place"], row["left_place"]) if x]
         return min(places) if places else 9999
 
-    # Больше очков — выше; при равенстве очков — у кого было лучшее место
+    def weight_key(w):
+        return w if w is not None else float("inf")
+
+    # Больше очков — выше; при равных очках — меньше вес; затем лучшее место
     # на какой-либо руке; иначе — по имени (стабильность порядка).
-    rows.sort(key=lambda r: (-r["total_points"], r["weight"], best_place(r), r["name"]))
+    rows.sort(key=lambda r: (-r["total_points"], weight_key(r["weight"]),
+                             best_place(r), r["name"]))
 
+    # Внутри «спорных» групп (одинаковые очки и вес) выбранный жюри
+    # победитель (manual_rank) поднимается в начало группы.
+    if overrides:
+        ordered = []
+        i = 0
+        n = len(rows)
+        while i < n:
+            j = i
+            while (j < n and rows[j]["total_points"] == rows[i]["total_points"]
+                   and weight_key(rows[j]["weight"]) == weight_key(rows[i]["weight"])):
+                j += 1
+            group = rows[i:j]
+            group.sort(key=lambda r: (overrides.get(r["pid"], 1 << 30),
+                                      best_place(r), r["name"]))
+            ordered.extend(group)
+            i = j
+        rows = ordered
 
-    # Итоговое место: спортивная (конкурентная) расстановка —
-    # равные суммы очков получают одно и то же место.
+    # Итоговое место: равные очки и вес делят одно место; спортсмен с
+    # manual_rank внутри группы получает своё отдельное (более высокое) место.
     place = 0
-    prev_points = None
+    prev_key = None
     for i, row in enumerate(rows):
-        if row["total_points"] != prev_points:
+        key = (row["total_points"], weight_key(row["weight"]), overrides.get(row["pid"]))
+        if key != prev_key:
             place = i + 1
-            prev_points = row["total_points"]
+            prev_key = key
         row["place"] = place
     return rows
 
@@ -4748,14 +4819,14 @@ class CombinedResultsWindow(ctk.CTkToplevel):
         rules.pack(fill="x")
         rules.pack_propagate(False)
         ctk.CTkLabel(rules,
-                    text="Очки: 1 место — 10 | 2 — 7 | 3 — 5 | 4 — 4 | 5 — 3 | 6 — 2 | 7 — 1 | 8 и ниже — 0",
+                    text="Очки: 1 место — 10 | 2 — 7 | 3 — 5 | 4 — 4 | 5 — 3 | 6 — 2 | 7 — 1 | 8 и ниже — 0   ·   при равных очках выше тот, у кого меньше вес; при равных очках и весе место делится, пока жюри не выберет победителя",
                     text_color="#aabbcc", font=ctk.CTkFont(size=11)
                     ).pack(padx=20, pady=8, anchor="w")
 
         header = ctk.CTkFrame(self, fg_color="#1a2535")
         header.pack(fill="x", padx=10, pady=(10, 0))
-        headers = ["Место", "Спортсмен", "Клуб", "Правая рука", "Левая рука", "Итого очков"]
-        widths = [70, 240, 160, 160, 160, 110]
+        headers = ["Место", "Спортсмен", "Клуб", "Вес", "Правая рука", "Левая рука", "Итого очков"]
+        widths = [70, 210, 130, 70, 150, 150, 100]
         for i, (h, w) in enumerate(zip(headers, widths)):
             ctk.CTkLabel(header, text=h, font=ctk.CTkFont(size=12, weight="bold"),
                     width=w, anchor="w").grid(row=0, column=i, padx=6, pady=8, sticky="w")
@@ -4782,17 +4853,19 @@ class CombinedResultsWindow(ctk.CTkToplevel):
 
         medals = {1: "🥇", 2: "🥈", 3: "🥉"}
         PLACE_COLORS = {1: "#5a4610", 2: "#3d3f45", 3: "#4a2e15"}   # золото / серебро / бронза
-        widths = [70, 240, 160, 160, 160, 110]
+        widths = [70, 210, 130, 70, 150, 150, 100]
         for row in rows:
             place = row["place"]
             fg = PLACE_COLORS.get(place, "#1a2a3a")
             fr = ctk.CTkFrame(self.result_scroll, fg_color=fg, corner_radius=8)
             fr.pack(fill="x", padx=5, pady=3)
             medal = medals.get(place, f"#{place}")
+            weight_txt = f"{row['weight']:.1f}" if row.get("weight") is not None else "—"
             values = [
                 medal,
                 row["name"],
                 row["club"],
+                weight_txt,
                 self._fmt_hand(row["right_place"], row["right_points"]),
                 self._fmt_hand(row["left_place"], row["left_points"]),
                 str(row["total_points"]),
@@ -4801,6 +4874,83 @@ class CombinedResultsWindow(ctk.CTkToplevel):
                 ctk.CTkLabel(fr, text=str(val), width=w, anchor="w",
                     font=ctk.CTkFont(size=13, weight="bold" if place <= 3 else "normal")
                     ).grid(row=0, column=i, padx=6, pady=8, sticky="w")
+
+        # Панели «спора»: при одинаковых очках И весе жюри может вручную
+        # выбрать победителя (или сбросить выбор).
+        self._render_tie_bars(rows)
+
+    def _render_tie_bars(self, rows):
+        ties = []
+        i = 0
+        n = len(rows)
+        while i < n:
+            place = rows[i]["place"]
+            j = i
+            while j < n and rows[j]["place"] == place:
+                j += 1
+            group = rows[i:j]
+            if len(group) > 1:
+                ties.append(group)
+            i = j
+        for group in ties:
+            place = group[0]["place"]
+            fr = ctk.CTkFrame(self.result_scroll, fg_color="#2a2035", corner_radius=8)
+            fr.pack(fill="x", padx=5, pady=(0, 3))
+            ctk.CTkLabel(fr, text=f"Спор за {place}-е место (равные очки и вес):",
+                    text_color="#cbb0e0", font=ctk.CTkFont(size=12, weight="bold")
+                    ).pack(side="left", padx=10, pady=6)
+            for row in group:
+                ctk.CTkButton(fr, text=f"🏆 {row['name']}",
+                        height=28, fg_color="#5a3a10", hover_color="#7a5a20",
+                        command=lambda r=row: self._pick_tie_winner(place, group, r["pid"])
+                        ).pack(side="left", padx=4, pady=6)
+            ctk.CTkButton(fr, text="↩️ Сбросить",
+                    height=28, fg_color="#333a44", hover_color="#4a5566",
+                    command=lambda g=group: self._clear_tie_overrides(g)
+                    ).pack(side="left", padx=10, pady=6)
+
+    def _pick_tie_winner(self, place, group, winner_pid):
+        others = [r["pid"] for r in group if r["pid"] != winner_pid]
+        self.db.clear_dvoeborie_overrides(self.tournament_id, self.category["id"], others)
+        self.db.set_dvoeborie_override(self.tournament_id, self.category["id"], winner_pid, place)
+        self._push_overrides_sync()
+        self._refresh()
+
+    def _clear_tie_overrides(self, group):
+        self.db.clear_dvoeborie_overrides(self.tournament_id, self.category["id"],
+                                          [r["pid"] for r in group])
+        self._push_overrides_sync()
+        self._refresh()
+
+    def _push_overrides_sync(self):
+        """Отправляет на сайт полный снимок ручных мест двоеборья категории
+        (замена). Если участник/категория ещё не синхронизированы — ждём
+        следующего изменения."""
+        try:
+            from sync.sync_manager import sync_manager
+        except Exception:
+            return
+        if not getattr(sync_manager, "enabled", False):
+            return
+        local = self.db.get_dvoeborie_overrides(
+            self.tournament_id, self.category["id"])
+        if not local:
+            overrides = []
+        else:
+            remote_cat = sync_manager.state.map_get("category", self.category["id"])
+            overrides = []
+            for pid, manual_rank in local.items():
+                remote_pid = sync_manager.state.map_get("participant", pid)
+                if remote_cat is None or remote_pid is None:
+                    return
+                overrides.append({
+                    "category_id": remote_cat,
+                    "participant_id": remote_pid,
+                    "manual_rank": manual_rank,
+                })
+        sync_manager.dispatch_async(
+            lambda: sync_manager.on_dvoeborie_overrides_changed(
+                self.tournament_id, overrides))
 
     def _export_pdf(self):
         if not REPORTLAB_AVAILABLE:
@@ -4838,22 +4988,25 @@ class CombinedResultsWindow(ctk.CTkToplevel):
             f"Весовая категория: {self.category['name']}",
             ParagraphStyle("Cat", parent=styles["Normal"], fontName="Arial", fontSize=12, spaceAfter=8, alignment=1)))
         story.append(Paragraph(
-            "Очки: 1 место — 10, 2 — 7, 3 — 5, 4 — 4, 5 — 3, 6 — 2, 7 — 1, 8 место и ниже — 0.",
+            "Очки: 1 место — 10, 2 — 7, 3 — 5, 4 — 4, 5 — 3, 6 — 2, 7 — 1, 8 место и ниже — 0. "
+            "При равных очках выше спортсмен с меньшим весом; при равных очках и весе место делится "
+            "(по решению жюри может быть выбран победитель).",
             ParagraphStyle("Rules", parent=styles["Normal"], fontName="Arial", fontSize=9,
                     textColor=colors.grey, spaceAfter=10, alignment=1)))
         story.append(Spacer(1, 0.3 * cm))
 
-        data = [["Место", "Спортсмен", "Клуб", "Правая рука", "Левая рука", "Итого очков"]]
+        data = [["Место", "Спортсмен", "Клуб", "Вес", "Правая рука", "Левая рука", "Итого очков"]]
         for row in rows:
             def fmt(place, points):
                 return f"{place} место ({points})" if place else "— (0)"
+            weight_txt = f"{row['weight']:.1f}" if row.get("weight") is not None else "—"
             data.append([
-                str(row["place"]), row["name"], row["club"],
+                str(row["place"]), row["name"], row["club"], weight_txt,
                 fmt(row["right_place"], row["right_points"]),
                 fmt(row["left_place"], row["left_points"]),
                 str(row["total_points"]),
             ])
-        col_widths = [1.8 * cm, 4.8 * cm, 3.2 * cm, 3.4 * cm, 3.4 * cm, 2.4 * cm]
+        col_widths = [1.6 * cm, 4.4 * cm, 2.9 * cm, 1.4 * cm, 3.1 * cm, 3.1 * cm, 2.2 * cm]
         table = Table(data, colWidths=col_widths, repeatRows=1)
         table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a3a5c")),

@@ -246,6 +246,15 @@ class SyncApiClient:
     def delete_participant(self, remote_id):
         return self._request("DELETE", f"/participants/{remote_id}")
 
+    def update_participant(self, remote_competition_id, remote_participant_id,
+                           weight_at_event=None, club_at_event=None):
+        """PATCH «снимка» участника — в первую очередь вес после контрольного
+        взвешивания (тай-брейк двоеборья)."""
+        return self._request(
+            "PATCH", f"/competitions/{remote_competition_id}/participants/{remote_participant_id}",
+            json_body={"weight_at_event": weight_at_event, "club_at_event": club_at_event},
+        )
+
     def delete_photo(self, url):
         """Удаляет файл Cloudinary по его URL (десктоп сам это делать не
         может — нет API secret; бэкенд вызывает delete_cloudinary_photo)."""
@@ -253,6 +262,14 @@ class SyncApiClient:
 
     def publish_competition(self, remote_competition_id):
         return self._request("POST", f"/competitions/{remote_competition_id}/publish")
+
+    def sync_dvoeborie_overrides(self, remote_competition_id, overrides):
+        """Отправляет полный снимок ручных мест двоеборья турнира:
+        overrides = [{"category_id": ..., "participant_id": ..., "manual_rank": ...}]."""
+        return self._request(
+            "POST", f"/competitions/{remote_competition_id}/dvoeborie-overrides",
+            json_body={"overrides": overrides},
+        )
 
     def update_competition_status(self, remote_competition_id, status):
         return self._request("PATCH", f"/competitions/{remote_competition_id}/status",
