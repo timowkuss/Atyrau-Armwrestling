@@ -76,16 +76,21 @@ function QueueBlock({ table, tableCount }: { table: TableQueueOut; tableCount: n
 
   return (
     <div className={`flex flex-col border border-steel-dim/20 bg-black/20 ${isSingle ? 'p-6 sm:p-10' : 'p-3 sm:p-4'}`}>
-      <div className="text-center mb-3">
-        <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-steel-dim">
-          Стол {table.table_number}
-        </p>
-        <p className={`font-display font-bold uppercase leading-tight text-emerald-400 ${isSingle ? 'text-2xl sm:text-4xl' : 'text-lg sm:text-2xl'}`}>
-          {categoryLabel}
-        </p>
-        <span className={`mt-1 inline-block rounded-md border border-brass/40 bg-brass/10 font-display font-bold uppercase tracking-[0.2em] text-brass ${isSingle ? 'px-4 py-0.5 text-sm sm:text-lg' : 'px-2.5 py-0.5 text-[11px]'}`}>
-          {handLabel} рука
-        </span>
+      <div className="text-center mb-2">
+        {isComplete ? (
+          <p className={`font-display font-bold uppercase tracking-[0.25em] text-emerald-400 ${isSingle ? 'text-2xl sm:text-3xl' : 'text-lg sm:text-xl'}`}>
+            {categoryLabel} <span className="text-steel-dim">|</span> {handLabel}
+          </p>
+        ) : (
+          <>
+            <p className={`font-display font-bold uppercase tracking-[0.25em] text-emerald-400 ${isSingle ? 'text-2xl sm:text-3xl' : 'text-lg sm:text-xl'}`}>
+              Стол {table.table_number}
+            </p>
+            <p className="font-mono text-xs sm:text-sm text-bone mt-0.5">
+              {categoryLabel} | {handLabel} рука
+            </p>
+          </>
+        )}
       </div>
 
       {hasMatch ? (
