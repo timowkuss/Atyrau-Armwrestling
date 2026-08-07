@@ -193,7 +193,9 @@ def get_competition_bracket(competition_id: int, db: Session = Depends(get_db)):
                 match_order=match.match_order,
                 stage=match.stage,
                 p1_name=p1.athlete.full_name if p1 else None,
+                p1_photo=p1.athlete.photo_path if p1 else None,
                 p2_name=p2.athlete.full_name if p2 else None,
+                p2_photo=p2.athlete.photo_path if p2 else None,
                 winner_name=winner.athlete.full_name if winner else None,
                 status=match.status,
             )
@@ -298,7 +300,9 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
             hand=match.hand,
             round_name=match.round_name,
             p1_name=p1_name,
+            p1_photo=p1.athlete.photo_path if p1 else None,
             p2_name=p2_name,
+            p2_photo=p2.athlete.photo_path if p2 else None,
         )
         tables.setdefault(match.table_number, []).append(pair)
 
@@ -426,6 +430,7 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
                     place=placed[s["pid"]],
                     wins=s["wins"],
                     losses=s["losses"],
+                    photo_path=p.athlete.photo_path if p else None,
                 ))
         else:
             # Сортируем: чемпион первым, потом по числу поражений, затем по победам
@@ -447,6 +452,7 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
                         place=i + 1,
                         wins=s["wins"],
                         losses=s["losses"],
+                        photo_path=p.athlete.photo_path if p else None,
                     ))
 
         eliminated_by_key[(cat_id, hand)] = eliminated
@@ -478,11 +484,13 @@ def get_competition_participants(competition_id: int, db: Session = Depends(get_
         athlete_id: int
         athlete_name: str
         category_name: str
+        photo_path: str | None
 
     rows = (
         db.query(
             CompetitionParticipant.athlete_id,
             Athlete.full_name.label("athlete_name"),
+            Athlete.photo_path.label("photo_path"),
             Category.name.label("category_name"),
         )
         .join(Athlete, CompetitionParticipant.athlete_id == Athlete.id)
@@ -496,6 +504,7 @@ def get_competition_participants(competition_id: int, db: Session = Depends(get_
             athlete_id=r.athlete_id,
             athlete_name=r.athlete_name,
             category_name=r.category_name,
+            photo_path=r.photo_path,
         )
         for r in rows
     ]

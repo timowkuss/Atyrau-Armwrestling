@@ -146,7 +146,9 @@ export interface BracketMatchOut {
   match_order: number
   stage: number
   p1_name: string | null
+  p1_photo: string | null
   p2_name: string | null
+  p2_photo: string | null
   winner_name: string | null
   status: string
 }
@@ -157,7 +159,9 @@ export interface QueuePairOut {
   hand: string
   round_name: string | null
   p1_name: string
+  p1_photo: string | null
   p2_name: string
+  p2_photo: string | null
 }
 
 export interface EliminatedOut {
@@ -165,6 +169,7 @@ export interface EliminatedOut {
   place: number
   wins: number
   losses: number
+  photo_path: string | null
 }
 
 export interface TableQueueOut {
@@ -180,6 +185,7 @@ export interface ParticipantOut {
   athlete_id: number
   athlete_name: string
   category_name: string
+  photo_path: string | null
 }
 
 export interface CompetitionListParams {

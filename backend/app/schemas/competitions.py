@@ -54,7 +54,9 @@ class BracketMatchOut(BaseModel):
     match_order: int
     stage: int
     p1_name: str | None
+    p1_photo: str | None
     p2_name: str | None
+    p2_photo: str | None
     winner_name: str | None
     status: str
 
@@ -65,7 +67,9 @@ class QueuePairOut(BaseModel):
     hand: str
     round_name: str | None
     p1_name: str
+    p1_photo: str | None
     p2_name: str
+    p2_photo: str | None
 
 
 class EliminatedOut(BaseModel):
@@ -73,6 +77,7 @@ class EliminatedOut(BaseModel):
     place: int
     wins: int
     losses: int
+    photo_path: str | None
 
 
 class TableQueueOut(BaseModel):

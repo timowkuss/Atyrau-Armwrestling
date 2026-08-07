@@ -2,19 +2,7 @@ import { useMemo } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { useCompetition, useCompetitionQueue } from '@/features/competitions/useCompetitions'
 import type { TableQueueOut, QueuePairOut } from '@/types/api'
-
-function pairFontSize(totalLen: number, tableCount: number, compact: boolean = false): string {
-  const w = tableCount <= 1 ? totalLen : totalLen * (tableCount <= 2 ? 1.7 : tableCount <= 3 ? 2.2 : 2.8)
-  const offset = compact ? 20 : 0
-  const v = w + offset
-  if (v <= 14) return 'text-4xl sm:text-5xl md:text-6xl'
-  if (v <= 20) return 'text-3xl sm:text-4xl md:text-5xl'
-  if (v <= 28) return 'text-2xl sm:text-3xl md:text-4xl'
-  if (v <= 36) return 'text-xl sm:text-2xl md:text-3xl'
-  if (v <= 48) return 'text-base sm:text-lg md:text-xl'
-  if (v <= 60) return 'text-sm sm:text-base md:text-lg'
-  return 'text-xs sm:text-sm md:text-base'
-}
+import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 
 function tabloRoundName(roundName: string | null): string | null {
   if (!roundName) return null
@@ -25,9 +13,39 @@ function tabloRoundName(roundName: string | null): string | null {
   return null
 }
 
-function PairBlock({ pair, label, tableCount, compact }: { pair: QueuePairOut; label?: string; tableCount: number; compact?: boolean }) {
-  const totalLen = pair.p1_name.length + pair.p2_name.length
-  const size = pairFontSize(totalLen, tableCount, compact)
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase()
+}
+
+function FighterChip({ name, photo, compact }: { name: string; photo: string | null; compact?: boolean }) {
+  const src = cloudinaryThumb(photo, 40)
+  return (
+    <div className={`flex items-center gap-1.5 ${compact ? 'flex-row' : 'flex-col sm:flex-row'}`}>
+      <div
+        className={`shrink-0 rounded-full bg-steel-dim/20 overflow-hidden ring-1 ring-steel-dim/30 ${
+          compact ? 'h-5 w-5' : 'h-9 w-9 sm:h-12 sm:w-12'
+        }`}
+      >
+        {src ? (
+          <img src={src} alt={name} className="h-full w-full object-cover" loading="lazy" referrerPolicy="no-referrer" />
+        ) : (
+          <span className={`flex h-full w-full items-center justify-center font-mono text-bone ${compact ? 'text-[7px]' : 'text-xs sm:text-sm'}`}>
+            {initials(name)}
+          </span>
+        )}
+      </div>
+      <span className="text-bone">{name}</span>
+    </div>
+  )
+}
+
+function PairBlock({ pair, label, compact }: { pair: QueuePairOut; label?: string; compact?: boolean }) {
   const displayRound = tabloRoundName(pair.round_name)
   return (
     <div className="flex flex-col items-center gap-0.5">
@@ -35,11 +53,15 @@ function PairBlock({ pair, label, tableCount, compact }: { pair: QueuePairOut; l
       {displayRound && (
         <p className="font-mono text-[9px] uppercase tracking-wider text-brass">{displayRound}</p>
       )}
-      <p className={`font-display font-bold leading-tight text-bone whitespace-nowrap ${size}`}>
-        {pair.p1_name}
-        <span className="mx-1.5 font-mono text-steel font-normal">vs</span>
-        {pair.p2_name}
-      </p>
+      <div className="flex items-center justify-center gap-3 sm:gap-4">
+        <div className={`flex flex-col items-center ${compact ? 'max-w-[40%]' : 'max-w-[38%]'} text-center`}>
+          <FighterChip name={pair.p1_name} photo={pair.p1_photo} compact={compact} />
+        </div>
+        <span className={`font-mono text-steel font-normal shrink-0 ${compact ? 'text-sm' : 'text-xl sm:text-2xl'}`}>vs</span>
+        <div className={`flex flex-col items-center ${compact ? 'max-w-[40%]' : 'max-w-[38%]'} text-center`}>
+          <FighterChip name={pair.p2_name} photo={pair.p2_photo} compact={compact} />
+        </div>
+      </div>
     </div>
   )
 }
@@ -73,7 +95,7 @@ function QueueBlock({ table, tableCount }: { table: TableQueueOut; tableCount: n
 
       {hasMatch ? (
         <div className={`border-b border-steel-dim/10 ${isSingle ? 'py-6' : 'py-2'}`}>
-          <PairBlock pair={table.current!} label="сейчас" tableCount={tableCount} />
+          <PairBlock pair={table.current!} label="сейчас" />
         </div>
       ) : isComplete ? (
         <div className={`border-b border-steel-dim/10 ${isSingle ? 'py-6' : 'py-2'}`}>
@@ -88,7 +110,7 @@ function QueueBlock({ table, tableCount }: { table: TableQueueOut; tableCount: n
       {table.next.length > 0 ? (
         <div className={`border-b border-steel-dim/10 ${isSingle ? 'py-4 space-y-3' : 'py-2 space-y-2'}`}>
           {table.next.map((pair, i) => (
-            <PairBlock key={pair.match_id} pair={pair} label={i === 0 ? 'далее' : undefined} tableCount={tableCount} compact />
+            <PairBlock key={pair.match_id} pair={pair} label={i === 0 ? 'далее' : undefined} compact />
           ))}
         </div>
       ) : hasMatch ? (
@@ -107,13 +129,18 @@ function QueueBlock({ table, tableCount }: { table: TableQueueOut; tableCount: n
               : table.eliminated.length >= 16 ? 'text-[9px]'
                 : 'text-[11px]'
             return (
-              <p key={e.athlete_name} className={`text-left font-mono text-steel-dim ${elimSize}`}>
-                <span className="inline-block w-5 text-right">{e.place}.</span>{' '}
-                <span className="text-bone">{e.athlete_name}</span>
-              {e.wins > 0 || e.losses > 0 ? (
-                <span className="ml-1 text-steel-dim/50">{e.wins}-{e.losses}</span>
-              ) : null}
-            </p>
+              <p key={e.athlete_name} className={`flex items-center gap-1.5 text-left font-mono text-steel-dim ${elimSize}`}>
+                <span className="inline-block w-5 shrink-0 text-right">{e.place}.</span>
+                <span className="h-3.5 w-3.5 shrink-0 overflow-hidden rounded-full bg-steel-dim/20 ring-1 ring-steel-dim/30">
+                  {cloudinaryThumb(e.photo_path, 14) ? (
+                    <img src={cloudinaryThumb(e.photo_path, 14)!} alt="" className="h-full w-full object-cover" loading="lazy" referrerPolicy="no-referrer" />
+                  ) : null}
+                </span>
+                <span className="truncate text-bone">{e.athlete_name}</span>
+                {e.wins > 0 || e.losses > 0 ? (
+                  <span className="ml-1 shrink-0 text-steel-dim/50">{e.wins}-{e.losses}</span>
+                ) : null}
+              </p>
             )
           })}
         </div>

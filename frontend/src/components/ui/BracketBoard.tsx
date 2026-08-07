@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { BracketMatchOut } from '@/types/api'
+import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 
 // ════════════════════════════════════════════════════════════════════════
 // Раскладка сетки — порт алгоритма BracketWindow._draw_bracket из
@@ -12,8 +13,8 @@ import type { BracketMatchOut } from '@/types/api'
 // в BracketMatchOut просто нет.
 // ════════════════════════════════════════════════════════════════════════
 
-const BOX_W = 200
-const BOX_H = 52
+const BOX_W = 210
+const BOX_H = 58
 const H_GAP = 36
 const SLOT_H = BOX_H + 14
 const L_SLOT_H = BOX_H + 14
@@ -256,6 +257,34 @@ function slotLabel(name: string | null, isByeMatch: boolean): string {
   return isByeMatch ? 'BYE' : '— ожидание —'
 }
 
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase()
+}
+
+function RowLabel({ name, photo, isBye }: { name: string | null; photo: string | null; isBye: boolean }) {
+  const src = cloudinaryThumb(photo, 16)
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <span className="h-4 w-4 shrink-0 overflow-hidden rounded-full bg-steel-dim/20 ring-1 ring-steel-dim/30">
+        {src && name ? (
+          <img src={src} alt={name} className="h-full w-full object-cover" loading="lazy" referrerPolicy="no-referrer" />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center text-[6px] font-mono text-bone/70">
+            {name ? initials(name) : '—'}
+          </span>
+        )}
+      </span>
+      <span className="truncate">{slotLabel(name, isBye)}</span>
+    </span>
+  )
+}
+
 function MatchBox({
   match,
   x,
@@ -301,16 +330,16 @@ function MatchBox({
       }}
     >
       <div className="flex items-center justify-between gap-2">
-        <p className={`truncate text-xs leading-tight ${rowClass(p1Won, hasWinner && p2Won, match.p1_name)}`}>
-          {slotLabel(match.p1_name, isByeMatch)}
-        </p>
+        <div className={`min-w-0 truncate text-xs leading-tight ${rowClass(p1Won, hasWinner && p2Won, match.p1_name)}`}>
+          <RowLabel name={match.p1_name} photo={match.p1_photo} isBye={isByeMatch} />
+        </div>
         {isCurrent && <span className="shrink-0 text-[9px] uppercase tracking-wider text-emerald-400">сейчас</span>}
         {isNext && <span className="shrink-0 text-[9px] uppercase tracking-wider text-amber-400">далее</span>}
       </div>
       <div className="my-0.5 h-px bg-steel-dim/15" />
-      <p className={`truncate text-xs leading-tight ${rowClass(p2Won, hasWinner && p1Won, match.p2_name)}`}>
-        {slotLabel(match.p2_name, isByeMatch)}
-      </p>
+      <div className={`min-w-0 truncate text-xs leading-tight ${rowClass(p2Won, hasWinner && p1Won, match.p2_name)}`}>
+        <RowLabel name={match.p2_name} photo={match.p2_photo} isBye={isByeMatch} />
+      </div>
     </div>
   )
 }
