@@ -23,10 +23,10 @@ function initials(name: string): string {
     .toUpperCase()
 }
 
-function FighterChip({ name, photo, compact }: { name: string; photo: string | null; compact?: boolean }) {
+function FighterChip({ name, photo, compact, reverse }: { name: string; photo: string | null; compact?: boolean; reverse?: boolean }) {
   const src = cloudinaryThumb(photo, compact ? 96 : 192)
   return (
-    <div className={`flex items-center gap-2.5 ${compact ? 'flex-row' : 'flex-col sm:flex-row'}`}>
+    <div className={`flex items-center gap-2.5 ${reverse ? 'flex-row-reverse' : 'flex-row'}`}>
       <div
         className={`shrink-0 overflow-hidden bg-steel-dim/20 ring-1 ring-steel-dim/30 ${
           compact ? 'h-12 w-12 rounded-lg' : 'h-20 w-20 rounded-xl sm:h-28 sm:w-28'
@@ -54,12 +54,12 @@ function PairBlock({ pair, label, compact }: { pair: QueuePairOut; label?: strin
         <p className="font-mono text-[9px] uppercase tracking-wider text-brass">{displayRound}</p>
       )}
       <div className="flex items-center justify-center gap-4 sm:gap-6">
-        <div className={`flex flex-col items-center ${compact ? 'max-w-[42%]' : 'max-w-[44%]'} text-center`}>
+        <div className={`${compact ? 'max-w-[42%]' : 'max-w-[44%]'}`}>
           <FighterChip name={pair.p1_name} photo={pair.p1_photo} compact={compact} />
         </div>
         <span className={`font-mono text-steel font-normal shrink-0 ${compact ? 'text-sm' : 'text-2xl sm:text-3xl'}`}>vs</span>
-        <div className={`flex flex-col items-center ${compact ? 'max-w-[42%]' : 'max-w-[44%]'} text-center`}>
-          <FighterChip name={pair.p2_name} photo={pair.p2_photo} compact={compact} />
+        <div className={`${compact ? 'max-w-[42%]' : 'max-w-[44%]'}`}>
+          <FighterChip name={pair.p2_name} photo={pair.p2_photo} compact={compact} reverse />
         </div>
       </div>
     </div>
