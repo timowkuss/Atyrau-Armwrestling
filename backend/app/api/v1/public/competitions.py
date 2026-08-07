@@ -267,6 +267,45 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
         if match.status in ("pending", "waiting"):
             pending_matches.append((match, cat))
 
+    # Отбрасываем структурные bye-матчи: если участников меньше, чем ячеек
+    # сетки, десктоп оставляет матч с одним участником и статусом waiting,
+    # хотя по структуре это bye (противник так и не появится). Слот
+    # "заполняем" только если в нём уже есть участник ИЛИ существует матч-
+    # источник, победитель/проигравший которого придёт в этот слот.
+    # Иначе такой матч после завершения турнира висел бы на табло вечно.
+    all_matches_for_sources = (
+        db.query(Match).filter(Match.competition_id == competition_id).all()
+    )
+    source_by_slot: dict[tuple[int, int], int] = {}
+    for m in all_matches_for_sources:
+        if m.win_next_id is not None:
+            source_by_slot[(m.win_next_id, m.win_next_slot)] = m.id
+        if m.lose_next_id is not None:
+            source_by_slot[(m.lose_next_id, m.lose_next_slot)] = m.id
+
+    pending_by_id: dict[int, tuple[Match, Category]] = {
+        m.id: (m, c) for m, c in pending_matches
+    }
+    stale_ids: set[int] = set()
+    changed = True
+    while changed:
+        changed = False
+        for mid, (m, _) in pending_by_id.items():
+            if mid in stale_ids or m.is_bye or m.status == "bye":
+                continue
+            for slot, pid in ((1, m.p1_id), (2, m.p2_id)):
+                if pid is not None:
+                    continue
+                src = source_by_slot.get((mid, slot))
+                if src is None or src in stale_ids:
+                    stale_ids.add(mid)
+                    changed = True
+                    break
+    if stale_ids:
+        pending_matches = [
+            (m, c) for m, c in pending_matches if m.id not in stale_ids
+        ]
+
     # Батчим участников (N+1 prevention)
     participant_ids: set[int] = set()
     for match, _ in pending_matches:
@@ -333,10 +372,11 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
     for m in done_matches:
         cat_hand_done.setdefault((m.category_id, m.hand), []).append(m)
 
-    # Все матчи по (категория, рука) — нужны для числа раундов сетки
-    # (место выбывшего в single elimination зависит от раунда, а не от
-    # того, сколько матчей уже сыграно).
-    all_matches = db.query(Match).filter(Match.competition_id == competition_id).all()
+    # Все матчи по (категория, рука) — нужны для числа участников сетки
+    # (место выбывшего в single elimination зависит от структуры сетки, а
+    # не от того, сколько матчей уже сыграно). Переиспользуем запрос,
+    # сделанный выше для поиска bye-матчей.
+    all_matches = all_matches_for_sources
     cat_hand_all: dict[tuple[int, str], list[Match]] = {}
     for m in all_matches:
         cat_hand_all.setdefault((m.category_id, m.hand), []).append(m)
@@ -394,21 +434,32 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
             # когда гранд-финал сыгран. Ещё играющие в выдачу не попадают —
             # им нельзя заранее присваивать места (иначе победитель первого
             # же матча сразу висит на 1-м месте, хотя турнир не завершён).
-            # Для 8 участников (3 раунда): 1/4 -> 5,6,7,8; полуфинал -> 3,4;
-            # финал -> 2; чемпион -> 1. Кто раньше проиграл в раунде
-            # (по порядку матча) — тот ниже.
+            # Места считаем по фактическому числу участников сетки, а не по
+            # формуле 2^раунды (для 3 участников с bye она давала бы 4-е
+            # место). Группы выбывших от раннего раунда (худшие места) к
+            # позднему: первый выбывший в самом раннем раунде занимает N-е
+            # место, следующий раунд — диапазон выше и т.д.
             all_ms = cat_hand_all.get((cat_id, hand), [])
-            se_rounds = (max(m.stage for m in all_ms) + 1) if all_ms else 0
+            participant_ids_in_cat: set[int] = set()
+            for m in all_ms:
+                if m.p1_id is not None:
+                    participant_ids_in_cat.add(m.p1_id)
+                if m.p2_id is not None:
+                    participant_ids_in_cat.add(m.p2_id)
+            n_total = len(participant_ids_in_cat)
+
             by_round: dict[int, list] = {}
             for s in stats.values():
                 if s["losses"] >= 1:
                     by_round.setdefault(s["last_loss_stage"], []).append(s)
             placed: dict[int, int] = {}
-            for st, lst in by_round.items():
-                lst.sort(key=lambda s: (s["last_loss_order"], s["pid"]))
-                max_place = 2 ** (se_rounds - st) if se_rounds else 0
+            eliminated_so_far = 0
+            for st in sorted(by_round):
+                lst = sorted(by_round[st], key=lambda s: (s["last_loss_order"], s["pid"]))
+                max_place = n_total - eliminated_so_far
                 for i, s in enumerate(lst):
                     placed[s["pid"]] = max_place - i
+                eliminated_so_far += len(lst)
             if champion is not None:
                 placed[champion] = 1
             ordered = [s for s in stats.values() if s["pid"] in placed]
