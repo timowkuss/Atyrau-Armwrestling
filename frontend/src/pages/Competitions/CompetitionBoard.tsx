@@ -312,6 +312,7 @@ export function CompetitionBoard() {
           </p>
         )}
       </div>
+      <p className="mt-8 text-center font-mono text-[9px] text-steel-dim/40">build 2026-08-07</p>
     </div>
   )
 }
