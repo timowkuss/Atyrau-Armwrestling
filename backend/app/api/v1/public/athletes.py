@@ -248,7 +248,7 @@ def get_athlete_history(athlete_id: int, db: Session = Depends(get_db)):
         )
         .filter(
             CompetitionParticipant.athlete_id == athlete_id,
-            Competition.status == "published",
+            Competition.status.in_(("published", "completed")),
         )
         .order_by(Competition.date.desc())
         .all()
@@ -277,7 +277,10 @@ def get_athlete_matches(athlete_id: int, db: Session = Depends(get_db)):
             P1,
             or_(Match.p1_id == P1.id, Match.p2_id == P1.id),
         )
-        .filter(P1.athlete_id == athlete_id, Competition.status == "published")
+        .filter(
+            P1.athlete_id == athlete_id,
+            Competition.status.in_(("published", "completed")),
+        )
         .order_by(Competition.date.desc())
         .all()
     )
