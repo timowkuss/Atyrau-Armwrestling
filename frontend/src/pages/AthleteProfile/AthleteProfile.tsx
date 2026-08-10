@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useAthlete, useAthleteEloHistory, useAthleteHistory, useAthleteMatches } from '@/features/athletes/useAthletes'
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/States'
@@ -7,7 +7,7 @@ import { EloRating } from '@/components/ui/EloRating'
 import { MedalBadge } from '@/components/ui/Medal'
 import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 import { ageText } from '@/lib/age'
-import type { AthleteCompetitionHistoryItem, EloHistoryItem, Medal } from '@/types/api'
+import type { AthleteCompetitionHistoryItem, AthleteMatchHistoryItem, EloHistoryItem, Medal } from '@/types/api'
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -23,7 +23,17 @@ type CareerRow = {
   elo: number | null
 }
 
-function CareerHistory({ history, eloItems }: { history: AthleteCompetitionHistoryItem[]; eloItems: EloHistoryItem[] }) {
+function CareerHistory({
+  history,
+  eloItems,
+  matches,
+}: {
+  history: AthleteCompetitionHistoryItem[]
+  eloItems: EloHistoryItem[]
+  matches: AthleteMatchHistoryItem[]
+}) {
+  const [open, setOpen] = useState<number | null>(null)
+
   const rows = useMemo<CareerRow[]>(() => {
     const map = new Map<number, Omit<CareerRow, 'elo'>>()
     for (const h of history) {
@@ -45,6 +55,16 @@ function CareerHistory({ history, eloItems }: { history: AthleteCompetitionHisto
       .sort((a, b) => a.date.localeCompare(b.date))
   }, [history, eloItems])
 
+  const matchGroups = useMemo(() => {
+    const g = new Map<number, AthleteMatchHistoryItem[]>()
+    for (const m of matches) {
+      const arr = g.get(m.competition_id) ?? []
+      arr.push(m)
+      g.set(m.competition_id, arr)
+    }
+    return g
+  }, [matches])
+
   const change = (i: number) => {
     const elo = rows[i].elo
     if (elo == null) return null
@@ -62,6 +82,8 @@ function CareerHistory({ history, eloItems }: { history: AthleteCompetitionHisto
     }
     return counts
   }
+
+  const toggle = (id: number) => setOpen((v) => (v === id ? null : id))
 
   return (
     <section className="mt-14">
@@ -88,45 +110,123 @@ function CareerHistory({ history, eloItems }: { history: AthleteCompetitionHisto
               {rows.map((r, i) => {
                 const ch = change(i)
                 const medals = medalCounts(r)
+                const isOpen = open === r.competition_id
+                const compMatches = matchGroups.get(r.competition_id)
                 return (
-                  <tr key={r.competition_id} className="border-b border-steel-dim/10 transition-colors last:border-none hover:bg-bone/[0.02]">
-                    <td className="px-5 py-3.5">
-                      <Link to={`/competitions/${r.competition_id}`} className="font-medium text-bone transition-colors hover:text-brass">
-                        {r.competition_name}
-                      </Link>
-                      {r.categories.length > 0 && (
-                        <div className="mt-0.5 text-xs text-steel">{r.categories.map((c) => c.name).join(' · ')}</div>
-                      )}
-                      <div className="mt-0.5 font-mono text-xs text-steel-dim">{formatDate(r.date)}</div>
-                    </td>
-                    <td className="px-5 py-3.5 font-mono text-sm font-medium text-bone">
-                      {r.categories.map((c) => c.place ?? '—').join(' · ')}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      {medals.gold + medals.silver + medals.bronze === 0 ? (
-                        <span className="text-steel-dim">—</span>
+                  <Fragment key={r.competition_id}>
+                    <tr className="border-b border-steel-dim/10 transition-colors last:border-none hover:bg-bone/[0.02]">
+                      <td className="px-5 py-3.5">
+                        <button
+                          type="button"
+                          onClick={() => toggle(r.competition_id)}
+                          aria-expanded={isOpen}
+                          className="group flex w-full items-center gap-2 text-left"
+                        >
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 16 16"
+                            className={`flex-shrink-0 text-steel-dim transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}
+                          >
+                            <path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                          <span className="font-medium text-bone transition-colors group-hover:text-brass">{r.competition_name}</span>
+                        </button>
+                        {r.categories.length > 0 && (
+                          <div className="mt-0.5 text-xs text-steel">{r.categories.map((c) => c.name).join(' · ')}</div>
+                        )}
+                        <div className="mt-0.5 font-mono text-xs text-steel-dim">{formatDate(r.date)}</div>
+                      </td>
+                      <td className="px-5 py-3.5 font-mono text-sm font-medium text-bone">
+                        {r.categories.map((c) => c.place ?? '—').join(' · ')}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        {medals.gold + medals.silver + medals.bronze === 0 ? (
+                          <span className="text-steel-dim">—</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {medals.gold > 0 && <MedalBadge medal="gold" />}
+                            {medals.silver > 0 && <MedalBadge medal="silver" />}
+                            {medals.bronze > 0 && <MedalBadge medal="bronze" />}
+                          </div>
+                        )}
+                      </td>
+                      {ch ? (
+                        <>
+                          <td className="px-5 py-3.5 text-right font-mono text-sm text-steel">{ch.before}</td>
+                          <td className="px-5 py-3.5 text-right font-mono text-sm font-semibold text-bone">{ch.after}</td>
+                          <td className={`px-5 py-3.5 text-right font-mono text-sm font-semibold ${
+                            ch.delta > 0 ? 'text-brass' : ch.delta < 0 ? 'text-rust' : 'text-steel-dim'
+                          }`}>
+                            {ch.delta > 0 ? `+${ch.delta}` : ch.delta}
+                          </td>
+                        </>
                       ) : (
-                        <div className="flex flex-wrap gap-1.5">
-                          {medals.gold > 0 && <MedalBadge medal="gold" />}
-                          {medals.silver > 0 && <MedalBadge medal="silver" />}
-                          {medals.bronze > 0 && <MedalBadge medal="bronze" />}
-                        </div>
+                        <td colSpan={3} className="px-5 py-3.5 text-right font-mono text-sm text-steel-dim">—</td>
                       )}
-                    </td>
-                    {ch ? (
-                      <>
-                        <td className="px-5 py-3.5 text-right font-mono text-sm text-steel">{ch.before}</td>
-                        <td className="px-5 py-3.5 text-right font-mono text-sm font-semibold text-bone">{ch.after}</td>
-                        <td className={`px-5 py-3.5 text-right font-mono text-sm font-semibold ${
-                          ch.delta > 0 ? 'text-brass' : ch.delta < 0 ? 'text-rust' : 'text-steel-dim'
-                        }`}>
-                          {ch.delta > 0 ? `+${ch.delta}` : ch.delta}
+                    </tr>
+                    {isOpen && (
+                      <tr className="border-b border-steel-dim/10 bg-ink/30 last:border-none">
+                        <td colSpan={6} className="px-5 py-4">
+                          <div className="mb-3 flex items-center gap-2 text-eyebrow text-steel-dim">
+                            <span className="h-1 w-1 rounded-full bg-brass/60" />
+                            Матчи турнира
+                          </div>
+                          {compMatches && compMatches.length > 0 ? (
+                            <div className="divide-y divide-steel-dim/10">
+                              {compMatches.map((m) => (
+                                <div key={m.match_id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-x-2">
+                                      {m.opponent_id && m.opponent_name ? (
+                                        <Link to={`/athletes/${m.opponent_id}`} className="font-medium text-bone transition-colors hover:text-brass">
+                                          {m.opponent_name}
+                                        </Link>
+                                      ) : (
+                                        <span className="text-steel-dim">—</span>
+                                      )}
+                                      {m.opponent_elo != null && (
+                                        <span className="font-mono text-xs text-steel-dim">рейтинг {m.opponent_elo}</span>
+                                      )}
+                                    </div>
+                                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-xs text-steel-dim">
+                                      {m.category_name && <span>{m.category_name}</span>}
+                                      {m.hand && <span className="inline-flex items-center gap-1"><span className="h-1 w-1 rounded-full bg-steel-dim/40" />{m.hand}</span>}
+                                      {m.round_name && <span className="inline-flex items-center gap-1"><span className="h-1 w-1 rounded-full bg-steel-dim/40" />{m.round_name}</span>}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    {m.is_winner === null ? (
+                                      <span className="font-mono text-xs text-steel-dim">—</span>
+                                    ) : (
+                                      <span
+                                        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-xs font-medium ${
+                                          m.is_winner
+                                            ? 'border border-success/30 bg-success/10 text-success'
+                                            : 'border border-danger/30 bg-danger/10 text-danger'
+                                        }`}
+                                      >
+                                        {m.is_winner ? 'победа' : 'поражение'}
+                                      </span>
+                                    )}
+                                    {m.elo_delta != null && (
+                                      <span className={`w-12 text-right font-mono text-sm font-semibold ${
+                                        m.elo_delta > 0 ? 'text-brass' : m.elo_delta < 0 ? 'text-rust' : 'text-steel-dim'
+                                      }`}>
+                                        {m.elo_delta > 0 ? `+${m.elo_delta}` : m.elo_delta}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <EmptyState title="Матчей нет" />
+                          )}
                         </td>
-                      </>
-                    ) : (
-                      <td colSpan={3} className="px-5 py-3.5 text-right font-mono text-sm text-steel-dim">—</td>
+                      </tr>
                     )}
-                  </tr>
+                  </Fragment>
                 )
               })}
             </tbody>
@@ -401,7 +501,7 @@ export function AthleteProfile() {
           </section>
         )}
         {history.data && history.data.length > 0 && (
-          <CareerHistory history={history.data} eloItems={eloHistory.data?.items ?? []} />
+          <CareerHistory history={history.data} eloItems={eloHistory.data?.items ?? []} matches={matches.data ?? []} />
         )}
 
         {/* Последние матчи */}

@@ -26,7 +26,7 @@ from app.schemas.athletes import (
 )
 from app.schemas.common import Page
 from app.services.club_rating import _category_standings
-from app.services.elo_engine import elo_combined
+from app.services.elo_engine import _hand_field, elo_combined
 
 router = APIRouter(prefix="/athletes", tags=["public:athletes"])
 
@@ -346,15 +346,44 @@ def get_athlete_matches(athlete_id: int, db: Session = Depends(get_db)):
         )
     } if pids else {}
 
+    # Рейтинги соперников (текущие, по руке матча) — для отображения рядом
+    # с именем соперника в истории матчей.
+    opponent_ids = set()
+    for match, _, _ in matches:
+        p1 = participants.get(match.p1_id) if match.p1_id else None
+        p2 = participants.get(match.p2_id) if match.p2_id else None
+        if p1 and p1.athlete_id == athlete_id and p2:
+            opponent_ids.add(p2.athlete_id)
+        elif p2 and p2.athlete_id == athlete_id and p1:
+            opponent_ids.add(p1.athlete_id)
+    opponent_stats = {
+        s.athlete_id: s
+        for s in (
+            db.query(AthleteStatistic)
+            .filter(AthleteStatistic.athlete_id.in_(opponent_ids))
+            .all()
+        )
+    } if opponent_ids else {}
+
     items = []
     for match, competition, category in matches:
         p1 = participants.get(match.p1_id) if match.p1_id else None
         p2 = participants.get(match.p2_id) if match.p2_id else None
         opponent = None
+        our_delta = None
+        opponent_elo = None
         if p1 and p1.athlete_id == athlete_id and p2:
-            opponent = p2.athlete.full_name
+            opponent = p2
+            our_delta = match.elo_delta_p1
         elif p2 and p2.athlete_id == athlete_id and p1:
-            opponent = p1.athlete.full_name
+            opponent = p1
+            our_delta = match.elo_delta_p2
+
+        if opponent is not None:
+            opp_stats = opponent_stats.get(opponent.athlete_id)
+            field = _hand_field(match.hand)
+            if opp_stats is not None and field is not None:
+                opponent_elo = getattr(opp_stats, field)
 
         is_winner = None
         if match.winner_id is not None:
@@ -369,7 +398,11 @@ def get_athlete_matches(athlete_id: int, db: Session = Depends(get_db)):
                 competition_name=competition.name,
                 category_name=category.name,
                 round_name=match.round_name,
-                opponent_name=opponent,
+                opponent_id=opponent.athlete_id if opponent is not None else None,
+                opponent_name=opponent.athlete.full_name if opponent is not None else None,
+                opponent_elo=opponent_elo,
+                elo_delta=our_delta,
+                hand=match.hand,
                 is_winner=is_winner,
             )
         )

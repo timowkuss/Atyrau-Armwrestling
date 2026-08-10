@@ -106,7 +106,11 @@ export interface AthleteMatchHistoryItem {
   competition_name: string
   category_name: string
   round_name: string | null
+  opponent_id: number | null
   opponent_name: string | null
+  opponent_elo: number | null
+  elo_delta: number | null
+  hand: string | null
   is_winner: boolean | null
 }
 

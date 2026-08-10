@@ -112,7 +112,11 @@ class AthleteMatchHistoryItem(BaseModel):
     competition_name: str
     category_name: str
     round_name: str | None
+    opponent_id: int | None
     opponent_name: str | None
+    opponent_elo: int | None
+    elo_delta: int | None
+    hand: str | None
     is_winner: bool | None
 
 
