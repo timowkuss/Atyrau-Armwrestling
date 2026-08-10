@@ -4351,13 +4351,16 @@ class BracketWindow(ctk.CTkToplevel):
 
         def on_toggle():
             if self.broadcast_var.get():
-                table_num = self.table_number or self._suggest_table_number()
-                conflict = self._find_broadcast_conflict(table_num)
-                if conflict and not messagebox.askyesno(
-                        "Стол уже занят",
-                        f"Стол {table_num} уже транслирует «{conflict}». "
-                        "Продолжить с тем же номером? (пары перемешаются на табло)"):
+                # Автоподбор номера стола без диалога: если этот номер уже
+                # транслируется другой открытой сеткой (стол 1 занят первой
+                # сеткой), сразу берём следующий свободный (стол 2, 3, ...).
+                table_num = self.table_number
+                if table_num is None:
                     table_num = self._suggest_table_number()
+                elif self._find_broadcast_conflict(table_num):
+                    suggested = self._suggest_table_number()
+                    if suggested != table_num:
+                        table_num = suggested
                 self.table_entry.configure(state="normal")
                 self.table_entry.delete(0, "end")
                 self.table_entry.insert(0, str(table_num))
