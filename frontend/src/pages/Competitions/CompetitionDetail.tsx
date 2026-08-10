@@ -92,6 +92,15 @@ function ParticipantList({ participants }: { participants: ParticipantOut[] }) {
   )
 }
 
+// Цвет места в цветах медалей проекта: 1 — brass (золото), 2 — steel
+// (серебро), 3 — rust (бронза), остальные — обычный текст.
+function placeColor(place: number | null): string {
+  if (place === 1) return 'text-[var(--color-brass)]'
+  if (place === 2) return 'text-[var(--color-steel)]'
+  if (place === 3) return 'text-[var(--color-rust)]'
+  return 'text-bone'
+}
+
 function ResultsTable({ rows }: { rows: ResultOut[] }) {
   if (rows.length === 0) return null
   return (
@@ -108,7 +117,7 @@ function ResultsTable({ rows }: { rows: ResultOut[] }) {
         <tbody>
           {rows.map((r, i) => (
             <tr key={i} className="border-b border-steel-dim/15">
-              <td className="py-2 pr-4 font-mono text-bone">{r.place ?? '—'}</td>
+              <td className={`py-2 pr-4 font-mono ${placeColor(r.place)}`}>{r.place ?? '—'}</td>
               <td className="py-2 pr-4">
                 <Link to={`/athletes/${r.athlete_id}`} className="whitespace-nowrap text-bone hover:text-brass">
                   {r.athlete_name}
@@ -145,7 +154,7 @@ function HandResultsTable({ rows }: { rows: HandResultOut[] }) {
         <tbody>
           {rows.map((r, i) => (
             <tr key={i} className="border-b border-steel-dim/15">
-              <td className="py-2 pr-4 font-mono text-bone">{r.place}</td>
+              <td className={`py-2 pr-4 font-mono ${placeColor(r.place)}`}>{r.place}</td>
               <td className="py-2 pr-4">
                 <Link to={`/athletes/${r.athlete_id}`} className="whitespace-nowrap text-bone hover:text-brass">
                   {r.athlete_name}
