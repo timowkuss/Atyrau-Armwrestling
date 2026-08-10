@@ -17,6 +17,7 @@ from app.schemas.competitions import (
     CompetitionDetailOut,
     CompetitionListOut,
     EliminatedOut,
+    HandResultOut,
     QueuePairOut,
     ResultOut,
     TableQueueOut,
@@ -146,6 +147,64 @@ def get_competition_results(competition_id: int, db: Session = Depends(get_db)):
         )
         for r in rows
     ]
+
+
+@router.get("/{competition_id}/hand-results", response_model=list[HandResultOut])
+def get_competition_hand_results(competition_id: int, db: Session = Depends(get_db)):
+    """Места по каждой руке каждой категории (левая/правая отдельно).
+
+    Считается на лету из матчей через _hand_standings. Несыгранные руки
+    (нет матчей со статусом done) в выдаче отсутствуют."""
+    from app.services.club_rating import _hand_standings
+
+    categories = db.query(Category).filter(Category.competition_id == competition_id).all()
+    if not categories:
+        return []
+
+    # Какие руки хотя бы начали играть (в противном случае _hand_standings
+    # вернёт пустой список, но не будем даже дёргать его).
+    played_hands: dict[int, set[str]] = {}
+    for cat_id, hand in (
+        db.query(Match.category_id, Match.hand)
+        .filter(Match.competition_id == competition_id, Match.status == "done")
+        .distinct()
+        .all()
+    ):
+        played_hands.setdefault(cat_id, set()).add(hand)
+
+    participants = (
+        db.query(CompetitionParticipant)
+        .options(joinedload(CompetitionParticipant.athlete))
+        .filter(CompetitionParticipant.competition_id == competition_id)
+        .all()
+    )
+    by_pid = {p.id: p for p in participants}
+
+    club_ids = {p.athlete.club_id for p in participants if p.athlete.club_id}
+    club_names: dict[int, str] = {}
+    if club_ids:
+        club_names = dict(db.query(Club.id, Club.name).filter(Club.id.in_(club_ids)).all())
+
+    items: list[HandResultOut] = []
+    for cat in categories:
+        for hand in sorted(played_hands.get(cat.id, set())):
+            for entry in _hand_standings(db, competition_id, cat.id, hand):
+                participant = by_pid.get(entry["participant_id"])
+                if participant is None:
+                    continue
+                athlete = participant.athlete
+                items.append(
+                    HandResultOut(
+                        category_id=cat.id,
+                        category_name=cat.name,
+                        hand=hand,
+                        place=entry["place"],
+                        athlete_id=athlete.id,
+                        athlete_name=athlete.full_name,
+                        club_name=club_names.get(athlete.club_id),
+                    )
+                )
+    return items
 
 
 @router.get("/{competition_id}/bracket", response_model=list[BracketMatchOut])

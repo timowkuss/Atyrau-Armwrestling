@@ -31,6 +31,14 @@ export function useCompetitionResults(id: number) {
   })
 }
 
+export function useCompetitionHandResults(id: number) {
+  return useQuery({
+    queryKey: ['competition', id, 'hand-results'],
+    queryFn: () => api.competitions.handResults(id),
+    enabled: Number.isFinite(id),
+  })
+}
+
 export function useCompetitionParticipants(id: number) {
   return useQuery({
     queryKey: ['competition', id, 'participants'],

@@ -45,6 +45,18 @@ class ResultOut(BaseModel):
     club_name: str | None
 
 
+class HandResultOut(BaseModel):
+    """Место спортсмена в отдельной руке категории (для двоеборья: левая и
+    правая рука по отдельности). Считается из матчей на лету."""
+    category_id: int
+    category_name: str
+    hand: str
+    place: int
+    athlete_id: int
+    athlete_name: str
+    club_name: str | None
+
+
 class BracketMatchOut(BaseModel):
     id: int
     category_name: str

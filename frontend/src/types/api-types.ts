@@ -137,6 +137,16 @@ export interface ResultOut {
   club_name: string | null
 }
 
+export interface HandResultOut {
+  category_id: number
+  category_name: string
+  hand: string
+  place: number
+  athlete_id: number
+  athlete_name: string
+  club_name: string | null
+}
+
 export interface BracketMatchOut {
   id: number
   category_name: string
