@@ -177,9 +177,9 @@ function hasPlayedMatches(matches: BracketMatchOut[]): boolean {
 
 // Сетка выбранной категории. Для двоеборья (hand == "Обе") — переключатель
 // «Левая рука»/«Правая рука» (карусель): выбранная рука показывает свою сетку
-// и свой результат. Показываем только сыгранные руки (рука, которая вообще не
-// разыгрывалась в завершённом турнире, — "неверные данные", её не рисуем).
-// Внизу отдельный блок итогов: для двоеборья это ИТОГ по сумме обеих рук.
+// и свой результат. Несыгранная рука (нет матчей done/bye — "неверные данные")
+// показывает заглушку вместо пустой сетки. Внизу отдельный блок итогов: для
+// двоеборья это ИТОГ по сумме обеих рук.
 function CategoryBracketSection({
   category,
   matches,
@@ -197,15 +197,22 @@ function CategoryBracketSection({
 
   const order = ['Левая', 'Правая']
   const hands = isCombined
-    ? order.filter((h) => byHand[h] && hasPlayedMatches(byHand[h]))
+    ? order
     : Object.keys(byHand).filter((h) => h === category.hand || hasPlayedMatches(byHand[h]))
 
   const [activeHand, setActiveHand] = useState<string | null>(null)
-  const currentHand = activeHand && hands.includes(activeHand) ? activeHand : (hands[0] ?? null)
+  const defaultHand = isCombined
+    ? order.find((h) => byHand[h] && hasPlayedMatches(byHand[h])) ?? order[0]
+    : hands[0]
+  const currentHand = activeHand && hands.includes(activeHand) ? activeHand : (defaultHand ?? null)
 
-  if (hands.length === 0 || !currentHand) {
+  if (!currentHand) {
     return <EmptyState title="Сетка по этой категории не найдена" />
   }
+
+  const handPlayed = isCombined
+    ? Boolean(byHand[currentHand] && hasPlayedMatches(byHand[currentHand]))
+    : Boolean(byHand[currentHand])
 
   const handResultRows = (handResults ?? []).filter(
     (r) => r.category_id === category.id && r.hand === currentHand,
@@ -219,9 +226,9 @@ function CategoryBracketSection({
   return (
     <div className="space-y-10">
       <div>
-        {hands.length > 1 && (
+        {isCombined && (
           <div className="mb-5 flex flex-wrap gap-2" role="tablist" aria-label="Рука">
-            {hands.map((hand) => (
+            {order.map((hand) => (
               <button
                 key={hand}
                 type="button"
@@ -235,13 +242,19 @@ function CategoryBracketSection({
             ))}
           </div>
         )}
-        <div>
-          <BracketTree matches={byHand[currentHand]} />
-        </div>
-        <h3 className="mt-8 border-b border-steel-dim/20 pb-2 font-display text-sm text-bone">
-          Результат · {handLabel(currentHand)} рука
-        </h3>
-        <HandResultsTable rows={handResultRows} />
+        {handPlayed ? (
+          <>
+            <div>
+              <BracketTree matches={byHand[currentHand]} />
+            </div>
+            <h3 className="mt-8 border-b border-steel-dim/20 pb-2 font-display text-sm text-bone">
+              Результат · {handLabel(currentHand)} рука
+            </h3>
+            <HandResultsTable rows={handResultRows} />
+          </>
+        ) : (
+          <EmptyState title={`${handLabel(currentHand)} рука не разыгрывалась`} />
+        )}
       </div>
 
       {isCombined && results && results.length > 0 && (
