@@ -11,7 +11,6 @@ from app.db.models.coaches import Coach
 from app.db.models.competitions import Competition, CompetitionParticipant
 from app.db.models.geo import City, Country, Region
 from app.db.models.matches import Match
-from app.db.models.results import Result
 from app.db.models.statistics import AthleteStatistic
 from app.db.session import get_db
 from app.schemas.athletes import (
@@ -23,6 +22,7 @@ from app.schemas.athletes import (
     AthleteStatisticsOut,
 )
 from app.schemas.common import Page
+from app.services.club_rating import _category_standings
 from app.services.elo_engine import elo_combined
 
 router = APIRouter(prefix="/athletes", tags=["public:athletes"])
@@ -232,20 +232,16 @@ def get_athlete(athlete_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{athlete_id}/history", response_model=list[AthleteCompetitionHistoryItem])
 def get_athlete_history(athlete_id: int, db: Session = Depends(get_db)):
-    rows = (
-        db.query(
-            Competition.id.label("competition_id"),
-            Competition.name.label("competition_name"),
-            Competition.date,
-            Category.name.label("category_name"),
-            Result.place,
-            Result.medal,
-        )
-        .join(CompetitionParticipant, CompetitionParticipant.competition_id == Competition.id)
+    """История турниров спортсмена.
+
+    Место/медаль пересчитываются из фактических матчей (та же логика, что в
+    итогах турнира), а не читаются из таблицы results — она может остаться
+    устаревшей после досыгранных позже матчей.
+    """
+    participations = (
+        db.query(CompetitionParticipant, Competition, Category)
+        .join(Competition, CompetitionParticipant.competition_id == Competition.id)
         .join(Category, CompetitionParticipant.category_id == Category.id)
-        .outerjoin(
-            Result, Result.competition_participant_id == CompetitionParticipant.id
-        )
         .filter(
             CompetitionParticipant.athlete_id == athlete_id,
             Competition.status.in_(("published", "completed")),
@@ -253,17 +249,33 @@ def get_athlete_history(athlete_id: int, db: Session = Depends(get_db)):
         .order_by(Competition.date.desc())
         .all()
     )
-    return [
-        AthleteCompetitionHistoryItem(
-            competition_id=r.competition_id,
-            competition_name=r.competition_name,
-            date=r.date,
-            category_name=r.category_name,
-            place=r.place,
-            medal=r.medal or "none",
+
+    standings_cache: dict[tuple[int, int], dict[int, int]] = {}
+    rows: list[AthleteCompetitionHistoryItem] = []
+    for participant, competition, category in participations:
+        key = (competition.id, category.id)
+        if key not in standings_cache:
+            standings_cache[key] = {
+                s["participant_id"]: s["place"]
+                for s in _category_standings(db, competition, category)
+            }
+        place = standings_cache[key].get(participant.id)
+        medal = (
+            {1: "gold", 2: "silver", 3: "bronze"}.get(place, "none")
+            if place
+            else "none"
         )
-        for r in rows
-    ]
+        rows.append(
+            AthleteCompetitionHistoryItem(
+                competition_id=competition.id,
+                competition_name=competition.name,
+                date=competition.date,
+                category_name=category.name,
+                place=place,
+                medal=medal,
+            )
+        )
+    return rows
 
 
 @router.get("/{athlete_id}/matches", response_model=list[AthleteMatchHistoryItem])
