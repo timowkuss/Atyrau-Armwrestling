@@ -83,10 +83,13 @@ interface Layout {
 
 // Раунды одной секции (winners / losers / final) в хронологическом порядке
 // (ранний раунд первым), матчи внутри раунда — по match_order, как в
-// десктопной отрисовке.
+// десктопной отрисовке. Группируем по round_name, но если он пустой
+// (например, на проде у single-elimination 1/4 и 1/2 остались без имени) —
+// фолбэк на stage, иначе разные раунды слипаются в одну колонку.
 function roundsInOrder(matches: BracketMatchOut[] | undefined): BracketMatchOut[][] {
   if (!matches || matches.length === 0) return []
-  const byRound = groupBy(matches, (m) => m.round_name ?? '—')
+  const keyOf = (m: BracketMatchOut) => (m.round_name?.trim() ? m.round_name : `stage:${m.stage}`)
+  const byRound = groupBy(matches, keyOf)
   const names = Object.keys(byRound)
   const stageOf = (rn: string) => Math.min(...byRound[rn].map((m) => m.stage))
   names.sort((a, b) => stageOf(a) - stageOf(b))
@@ -301,34 +304,16 @@ function RowLabel({ name, photo, isBye }: { name: string | null; photo: string |
   )
 }
 
-function MatchBox({
-  match,
-  x,
-  y,
-  isCurrent,
-  isNext,
-  g,
-}: {
-  match: BracketMatchOut
-  x: number
-  y: number
-  isCurrent: boolean
-  isNext: boolean
-  g: Geometry
-}) {
+function MatchBox({ match, x, y, g }: { match: BracketMatchOut; x: number; y: number; g: Geometry }) {
   const { boxW, boxH } = g
   const isByeMatch = match.status === 'bye'
   const hasWinner = match.winner_name != null
   const p1Won = hasWinner && match.winner_name === match.p1_name
   const p2Won = hasWinner && match.winner_name === match.p2_name
 
-  const boxClass = isCurrent
-    ? 'border-2 border-emerald-400 bg-emerald-950/40'
-    : isNext
-      ? 'border-2 border-amber-400/80 bg-black/20'
-      : hasWinner
-        ? 'border border-brass/30 bg-brass/5'
-        : 'border border-steel-dim/25 bg-black/20'
+  const boxClass = hasWinner
+    ? 'border border-brass/30 bg-brass/5'
+    : 'border border-steel-dim/25 bg-black/20'
 
   const rowClass = (won: boolean, lost: boolean, name: string | null) => {
     if (won) return 'font-medium text-emerald-400'
@@ -345,15 +330,12 @@ function MatchBox({
         top: y,
         width: boxW,
         height: boxH,
-        boxShadow: isCurrent ? '0 0 0 4px rgba(52,211,153,0.15)' : undefined,
       }}
     >
       <div className="flex items-center justify-between gap-1.5">
         <div className={`min-w-0 truncate text-[11px] leading-tight sm:text-xs ${rowClass(p1Won, hasWinner && p2Won, match.p1_name)}`}>
           <RowLabel name={match.p1_name} photo={match.p1_photo} isBye={isByeMatch} />
         </div>
-        {isCurrent && <span className="shrink-0 text-[8px] uppercase tracking-wider text-emerald-400">сейчас</span>}
-        {isNext && <span className="shrink-0 text-[8px] uppercase tracking-wider text-amber-400">далее</span>}
       </div>
       <div className="my-0.5 h-px bg-steel-dim/15" />
       <div className={`min-w-0 truncate text-[11px] leading-tight sm:text-xs ${rowClass(p2Won, hasWinner && p1Won, match.p2_name)}`}>
@@ -363,26 +345,10 @@ function MatchBox({
   )
 }
 
-// Текущий/следующий матч категории+руки — тот же принцип, что и
-// get_current_and_next_match в десктопе: среди pending-матчей с обоими
-// известными участниками берём первый по (stage, id) как текущий, второй
-// как следующий. Считается один раз на весь список матчей руки (across
-// winners/losers/final), а не отдельно на секцию.
-function getCurrentAndNext(matches: BracketMatchOut[]): { currentId: number | null; nextId: number | null } {
-  const ready = matches
-    .filter((m) => m.status === 'pending' && m.p1_name && m.p2_name)
-    .sort((a, b) => a.stage - b.stage || a.id - b.id)
-  return { currentId: ready[0]?.id ?? null, nextId: ready[1]?.id ?? null }
-}
-
 export function BracketTree({ matches }: { matches: BracketMatchOut[] }) {
   const compact = useCompact()
   const g = compact ? COMPACT : FULL
   const layout = useMemo(() => layoutBracket(matches, g), [matches, g])
-  // Считаем на полном списке матчей руки (все секции сразу) — как в
-  // десктопе, где current/next общие для категории+руки, а не свои
-  // для каждой секции сетки.
-  const { currentId, nextId } = useMemo(() => getCurrentAndNext(matches), [matches])
   if (layout.positioned.length === 0) return null
 
   return (
@@ -402,15 +368,7 @@ export function BracketTree({ matches }: { matches: BracketMatchOut[] }) {
           </p>
         )}
         {layout.positioned.map(({ match, x, y }) => (
-          <MatchBox
-            key={match.id}
-            match={match}
-            x={x}
-            y={y}
-            g={g}
-            isCurrent={match.id === currentId}
-            isNext={match.id === nextId}
-          />
+          <MatchBox key={match.id} match={match} x={x} y={y} g={g} />
         ))}
       </div>
     </div>
