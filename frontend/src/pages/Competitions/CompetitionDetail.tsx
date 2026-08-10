@@ -204,6 +204,13 @@ function hasPlayedMatches(matches: BracketMatchOut[]): boolean {
   return matches.some((m) => m.status === 'done' || m.status === 'bye')
 }
 
+// Рука считается полностью сыгранной, когда нет ни одного матча в статусе
+// pending/waiting — только тогда по ней можно показывать результат.
+function isHandFinished(matches: BracketMatchOut[] | undefined): boolean {
+  if (!matches || matches.length === 0) return false
+  return matches.every((m) => m.status === 'done' || m.status === 'bye')
+}
+
 // Сетка выбранной категории. Для двоеборья (hand == "Обе") — переключатель
 // «Левая рука»/«Правая рука» (карусель): выбранная рука показывает свою сетку
 // и свой результат. Несыгранная рука (нет матчей done/bye — "неверные данные")
@@ -243,9 +250,10 @@ function CategoryBracketSection({
     ? Boolean(byHand[currentHand] && hasPlayedMatches(byHand[currentHand]))
     : Boolean(byHand[currentHand])
 
-  // ИТОГ двоеборья показываем только когда сыграны обе руки — иначе он был
-  // бы посчитан по одной руке и вводил в заблуждение.
-  const bothHandsPlayed = isCombined && order.every((h) => byHand[h] && hasPlayedMatches(byHand[h]))
+  // ИТОГ двоеборья показываем только когда обе руки сыграны ПОЛНОСТЬЮ
+  // (ни одного pending/waiting) — иначе он считался бы по одной руке
+  // или по недосыгранной сетке и вводил в заблуждение.
+  const bothHandsPlayed = isCombined && order.every((h) => isHandFinished(byHand[h]))
 
   const handResultRows = (handResults ?? []).filter(
     (r) => r.category_id === category.id && r.hand === currentHand,

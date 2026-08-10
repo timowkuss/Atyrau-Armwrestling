@@ -8,7 +8,6 @@ from app.db.models.clubs import Club
 from app.db.models.competitions import Competition, CompetitionParticipant
 from app.db.models.geo import City
 from app.db.models.matches import Match
-from app.db.models.results import Result
 from app.db.session import get_db
 from app.schemas.common import Page
 from app.schemas.competitions import (
@@ -116,39 +115,51 @@ def get_competition(competition_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{competition_id}/results", response_model=list[ResultOut])
 def get_competition_results(competition_id: int, db: Session = Depends(get_db)):
-    rows = (
-        db.query(
-            Category.name.label("category_name"),
-            Result.place,
-            Result.medal,
-            Athlete.id.label("athlete_id"),
-            Athlete.full_name.label("athlete_name"),
-            Club.id.label("club_id"),
-            Club.name.label("club_name"),
-        )
-        .join(Category, Result.category_id == Category.id)
-        .join(
-            CompetitionParticipant,
-            Result.competition_participant_id == CompetitionParticipant.id,
-        )
-        .join(Athlete, CompetitionParticipant.athlete_id == Athlete.id)
-        .outerjoin(Club, Athlete.club_id == Club.id)
-        .filter(Result.competition_id == competition_id)
-        .order_by(Category.name, Result.place)
+    """Итоговые места категорий, пересчитанные из актуальных матчей.
+
+    Не читаем сохранённую таблицу results: она создаётся в момент завершения
+    турнира и не обновляется, если матчи досыгрываются после — из-за этого
+    итог на сайте расходился с фактической сеткой."""
+    from app.services.club_rating import _category_standings
+
+    competition = db.get(Competition, competition_id)
+    if competition is None:
+        return []
+    categories = db.query(Category).filter(Category.competition_id == competition_id).all()
+    if not categories:
+        return []
+
+    participants = (
+        db.query(CompetitionParticipant)
+        .options(joinedload(CompetitionParticipant.athlete))
+        .filter(CompetitionParticipant.competition_id == competition_id)
         .all()
     )
-    return [
-        ResultOut(
-            category_name=r.category_name,
-            place=r.place,
-            medal=r.medal,
-            athlete_id=r.athlete_id,
-            athlete_name=r.athlete_name,
-            club_id=r.club_id,
-            club_name=r.club_name,
-        )
-        for r in rows
-    ]
+    by_pid = {p.id: p for p in participants}
+    club_ids = {p.athlete.club_id for p in participants if p.athlete.club_id}
+    club_names: dict[int, str] = {}
+    if club_ids:
+        club_names = dict(db.query(Club.id, Club.name).filter(Club.id.in_(club_ids)).all())
+
+    items: list[ResultOut] = []
+    for cat in categories:
+        for entry in _category_standings(db, competition, cat):
+            participant = by_pid.get(entry["participant_id"])
+            if participant is None:
+                continue
+            athlete = participant.athlete
+            items.append(
+                ResultOut(
+                    category_name=cat.name,
+                    place=entry["place"],
+                    medal={1: "gold", 2: "silver", 3: "bronze"}.get(entry["place"], "none"),
+                    athlete_id=athlete.id,
+                    athlete_name=athlete.full_name,
+                    club_id=athlete.club_id,
+                    club_name=club_names.get(athlete.club_id),
+                )
+            )
+    return items
 
 
 @router.get("/{competition_id}/hand-results", response_model=list[HandResultOut])
