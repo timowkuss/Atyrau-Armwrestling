@@ -26,7 +26,7 @@ function initials(name: string): string {
 function FighterChip({ name, photo, compact, reverse }: { name: string; photo: string | null; compact?: boolean; reverse?: boolean }) {
   const src = cloudinaryThumb(photo, compact ? 96 : 192)
   return (
-    <div className={`flex min-w-0 items-center gap-2 ${reverse ? 'flex-row-reverse' : 'flex-row'}`}>
+    <div className={`flex min-w-0 items-center gap-1.5 sm:gap-2 ${reverse ? 'flex-col sm:flex-row-reverse' : 'flex-col sm:flex-row'}`}>
       <div
         className={`shrink-0 overflow-hidden bg-steel-dim/20 ring-1 ring-steel-dim/30 ${
           compact ? 'h-10 w-10 rounded-lg sm:h-12 sm:w-12' : 'h-16 w-16 rounded-xl sm:h-28 sm:w-28'
@@ -40,7 +40,13 @@ function FighterChip({ name, photo, compact, reverse }: { name: string; photo: s
           </span>
         )}
       </div>
-      <span className={`min-w-0 flex-1 truncate text-bone ${compact ? 'text-xs sm:text-sm' : 'text-sm sm:text-xl'}`}>{name}</span>
+      <span
+        className={`min-w-0 break-words text-center leading-tight text-bone sm:truncate sm:text-left ${
+          compact ? 'text-xs sm:text-sm' : 'text-sm sm:text-xl'
+        }`}
+      >
+        {name}
+      </span>
     </div>
   )
 }
