@@ -497,11 +497,17 @@ def finalize_competition(db: Session, competition: Competition) -> dict:
     db.commit()
 
     # Пересчитываем агрегированную статистику спортсменов из фактических
-    # матчей и мест завершённого турнира.
-    from app.services.stats_engine import recalculate_all
+    # матчей и мест завершённого турнира и фиксируем снимки elo-истории.
+    from app.services.stats_engine import recalculate_all, record_elo_snapshots
 
     stats_count = recalculate_all(db)
-    return {"status": "ok", "place_records": place_records, "stats_count": stats_count}
+    elo_records = record_elo_snapshots(db, competition)
+    return {
+        "status": "ok",
+        "place_records": place_records,
+        "stats_count": stats_count,
+        "elo_records": elo_records,
+    }
 
 
 def _category_hands_label(db: Session, competition: Competition, category: Category) -> str:

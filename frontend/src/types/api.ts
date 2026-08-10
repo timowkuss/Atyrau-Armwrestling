@@ -88,6 +88,18 @@ export interface AthleteCompetitionHistoryItem {
   medal: Medal
 }
 
+export interface EloHistoryItem {
+  competition_id: number
+  competition_name: string
+  date: string
+  hand: 'left' | 'right' | 'both'
+  elo: number
+}
+
+export interface EloHistoryOut {
+  items: EloHistoryItem[]
+}
+
 export interface AthleteMatchHistoryItem {
   match_id: number
   competition_id: number

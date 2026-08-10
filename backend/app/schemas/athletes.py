@@ -93,6 +93,19 @@ class AthleteCompetitionHistoryItem(BaseModel):
     medal: str
 
 
+class EloHistoryItem(BaseModel):
+    competition_id: int
+    competition_name: str
+    date: date
+    hand: str
+    elo: int
+
+
+class EloHistoryOut(BaseModel):
+    """История рейтинга спортсмена: текущий elo + снимки после турниров."""
+    items: list[EloHistoryItem]
+
+
 class AthleteMatchHistoryItem(BaseModel):
     match_id: int
     competition_id: int

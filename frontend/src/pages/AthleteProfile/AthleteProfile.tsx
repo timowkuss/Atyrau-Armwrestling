@@ -1,14 +1,92 @@
+import { useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { useAthlete, useAthleteHistory, useAthleteMatches } from '@/features/athletes/useAthletes'
+import { useAthlete, useAthleteEloHistory, useAthleteHistory, useAthleteMatches } from '@/features/athletes/useAthletes'
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/States'
 import { Gauge } from '@/components/ui/Gauge'
 import { EloRating } from '@/components/ui/EloRating'
 import { MedalBadge } from '@/components/ui/Medal'
 import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 import { ageText } from '@/lib/age'
+import type { EloHistoryItem } from '@/types/api'
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+function EloHistorySection({ items }: { items: EloHistoryItem[] }) {
+  const rows = useMemo(() => {
+    const map = new Map<number, { competition_id: number; competition_name: string; date: string; left?: number; right?: number; both?: number }>()
+    for (const it of items) {
+      const row = map.get(it.competition_id) ?? { competition_id: it.competition_id, competition_name: it.competition_name, date: it.date }
+      if (it.hand === 'left') row.left = it.elo
+      if (it.hand === 'right') row.right = it.elo
+      if (it.hand === 'both') row.both = it.elo
+      map.set(it.competition_id, row)
+    }
+    return [...map.values()].sort((a, b) => a.date.localeCompare(b.date))
+  }, [items])
+
+  const delta = (current: number | undefined, i: number, key: 'left' | 'right' | 'both') => {
+    if (current == null) return null
+    const prev = rows[i - 1]?.[key]
+    if (prev == null || prev === current) return null
+    const d = current - prev
+    return d > 0 ? `+${d}` : `${d}`
+  }
+
+  const Cell = ({ value, d }: { value: number | undefined; d: string | null }) => (
+    <td className="px-4 py-3 font-mono text-sm">
+      {value == null ? (
+        <span className="text-steel-dim">—</span>
+      ) : (
+        <div className="flex items-baseline gap-2">
+          <span className="text-bone">{value}</span>
+          {d && <span className={`text-xs font-semibold ${d.startsWith('+') ? 'text-brass' : 'text-rust'}`}>{d}</span>}
+        </div>
+      )}
+    </td>
+  )
+
+  return (
+    <section className="mt-14">
+      <div className="mb-6 flex items-center gap-3">
+        <div className="h-px flex-1 bg-gradient-to-r from-brass/40 via-brass/10 to-transparent" />
+        <h2 className="font-display text-lg font-semibold tracking-wide text-bone">История рейтинга</h2>
+        <div className="h-px flex-1 bg-gradient-to-l from-brass/40 via-brass/10 to-transparent" />
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-steel-dim/15 bg-gradient-to-b from-petrol/30 to-ink-soft/50">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-steel-dim/15">
+                <th className="px-5 py-3.5 font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Турнир</th>
+                <th className="px-5 py-3.5 font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Дата</th>
+                <th className="px-5 py-3.5 font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Левая</th>
+                <th className="px-5 py-3.5 font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Правая</th>
+                <th className="px-5 py-3.5 font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Общий</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={`${r.competition_name}-${r.date}`} className="border-b border-steel-dim/10 transition-colors last:border-none hover:bg-bone/[0.02]">
+                  <td className="px-5 py-3.5">
+                    <Link to={`/competitions/${r.competition_id}`} className="font-medium text-bone transition-colors hover:text-brass">
+                      {r.competition_name}
+                    </Link>
+                  </td>
+                  <td className="px-5 py-3.5 font-mono text-sm text-steel">{formatDate(r.date)}</td>
+                  <Cell value={r.left} d={delta(r.left, i, 'left')} />
+                  <Cell value={r.right} d={delta(r.right, i, 'right')} />
+                  <Cell value={r.both} d={delta(r.both, i, 'both')} />
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  )
 }
 
 export function AthleteProfile() {
@@ -18,6 +96,7 @@ export function AthleteProfile() {
   const athlete = useAthlete(athleteId)
   const history = useAthleteHistory(athleteId)
   const matches = useAthleteMatches(athleteId)
+  const eloHistory = useAthleteEloHistory(athleteId)
 
   if (athlete.isLoading) return <LoadingState label="Загрузка профиля" />
   if (athlete.isError) {
@@ -263,6 +342,11 @@ export function AthleteProfile() {
               </div>
             </div>
           </section>
+        )}
+
+        {/* История рейтинга */}
+        {eloHistory.data && eloHistory.data.items.length > 0 && (
+          <EloHistorySection items={eloHistory.data.items} />
         )}
 
         {/* История турниров */}

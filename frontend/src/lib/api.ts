@@ -18,6 +18,7 @@ import type {
   CompetitionDetail,
   CompetitionListItem,
   CompetitionListParams,
+  EloHistoryOut,
   EloRankingRow,
   NewsDetail,
   NewsListItem,
@@ -84,6 +85,7 @@ export const api = {
     birthdays: () => request<AthleteBirthdayItem[]>('/public/athletes/birthdays'),
     history: (id: number) => request<AthleteCompetitionHistoryItem[]>(`/public/athletes/${id}/history`),
     matches: (id: number) => request<AthleteMatchHistoryItem[]>(`/public/athletes/${id}/matches`),
+    eloHistory: (id: number) => request<EloHistoryOut>(`/public/athletes/${id}/elo-history`),
   },
   competitions: {
     list: (params?: CompetitionListParams) => request<Page<CompetitionListItem>>('/public/competitions', params),

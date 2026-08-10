@@ -43,3 +43,11 @@ export function useAthleteMatches(id: number) {
     enabled: Number.isFinite(id),
   })
 }
+
+export function useAthleteEloHistory(id: number) {
+  return useQuery({
+    queryKey: ['athlete', id, 'elo-history'],
+    queryFn: () => api.athletes.eloHistory(id),
+    enabled: Number.isFinite(id),
+  })
+}

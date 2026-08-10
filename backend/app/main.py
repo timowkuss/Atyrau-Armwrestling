@@ -17,9 +17,20 @@ async def lifespan(app: FastAPI):
     try:
         db = SessionLocal()
         try:
-            from app.services.stats_engine import recalculate_all
+            from app.db.models.competitions import Competition
+            from app.services.stats_engine import recalculate_all, record_elo_snapshots
 
             recalculate_all(db)
+            completed_ids = [
+                cid
+                for (cid,) in db.query(Competition.id)
+                .filter(Competition.status == "completed")
+                .all()
+            ]
+            for cid in completed_ids:
+                competition = db.get(Competition, cid)
+                if competition is not None:
+                    record_elo_snapshots(db, competition)
         finally:
             db.close()
     except Exception:

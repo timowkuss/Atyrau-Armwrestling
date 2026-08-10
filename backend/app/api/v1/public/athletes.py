@@ -9,6 +9,7 @@ from app.db.models.categories import Category
 from app.db.models.clubs import Club
 from app.db.models.coaches import Coach
 from app.db.models.competitions import Competition, CompetitionParticipant
+from app.db.models.elo_history import EloHistory
 from app.db.models.geo import City, Country, Region
 from app.db.models.matches import Match
 from app.db.models.statistics import AthleteStatistic
@@ -20,6 +21,8 @@ from app.schemas.athletes import (
     AthleteListOut,
     AthleteMatchHistoryItem,
     AthleteStatisticsOut,
+    EloHistoryItem,
+    EloHistoryOut,
 )
 from app.schemas.common import Page
 from app.services.club_rating import _category_standings
@@ -276,6 +279,33 @@ def get_athlete_history(athlete_id: int, db: Session = Depends(get_db)):
             )
         )
     return rows
+
+
+@router.get("/{athlete_id}/elo-history", response_model=EloHistoryOut)
+def get_athlete_elo_history(athlete_id: int, db: Session = Depends(get_db)):
+    """История рейтинга Эло спортсмена: снимки после завершённых турниров
+    по левой руке, правой и суммарному рейтингу (обе руки)."""
+    if db.get(Athlete, athlete_id) is None:
+        raise HTTPException(status_code=404, detail="Спортсмен не найден")
+
+    rows = (
+        db.query(EloHistory, Competition)
+        .join(Competition, EloHistory.competition_id == Competition.id)
+        .filter(EloHistory.athlete_id == athlete_id)
+        .order_by(Competition.date.asc(), EloHistory.hand.asc())
+        .all()
+    )
+    items = [
+        EloHistoryItem(
+            competition_id=h.competition_id,
+            competition_name=comp.name,
+            date=comp.date,
+            hand=h.hand,
+            elo=h.elo,
+        )
+        for h, comp in rows
+    ]
+    return {"items": items}
 
 
 @router.get("/{athlete_id}/matches", response_model=list[AthleteMatchHistoryItem])
