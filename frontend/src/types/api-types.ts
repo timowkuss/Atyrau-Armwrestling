@@ -9,7 +9,7 @@ export interface Page<T> {
 }
 
 export type Gender = 'male' | 'female'
-export type Hand = 'left' | 'right'
+export type Hand = 'Обе' | 'Левая' | 'Правая' | 'left' | 'right' | 'Both'
 export type Medal = 'gold' | 'silver' | 'bronze' | 'none'
 export type CompetitionStatus = 'draft' | 'published' | 'in_progress' | 'completed'
 

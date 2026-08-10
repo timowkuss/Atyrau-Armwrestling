@@ -375,7 +375,7 @@ function getCurrentAndNext(matches: BracketMatchOut[]): { currentId: number | nu
   return { currentId: ready[0]?.id ?? null, nextId: ready[1]?.id ?? null }
 }
 
-function BracketTree({ matches }: { matches: BracketMatchOut[] }) {
+export function BracketTree({ matches }: { matches: BracketMatchOut[] }) {
   const compact = useCompact()
   const g = compact ? COMPACT : FULL
   const layout = useMemo(() => layoutBracket(matches, g), [matches, g])

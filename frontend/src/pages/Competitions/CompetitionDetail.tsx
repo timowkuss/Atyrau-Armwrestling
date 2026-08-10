@@ -1,9 +1,10 @@
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useCompetition, useCompetitionBracket, useCompetitionParticipants, useCompetitionResults } from '@/features/competitions/useCompetitions'
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/States'
 import { MedalBadge } from '@/components/ui/Medal'
-import { BracketBoard } from '@/components/ui/BracketBoard'
-import type { CompetitionStatus, ParticipantOut } from '@/types/api'
+import { BracketTree } from '@/components/ui/BracketBoard'
+import type { BracketMatchOut, CategoryOut, CompetitionStatus, ParticipantOut, ResultOut } from '@/types/api'
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' })
@@ -42,6 +43,23 @@ function statusBadge(status: CompetitionStatus) {
   )
 }
 
+// Руки на бэкенде хранятся по-русски («Обе», «Левая», «Правая»), но для
+// совместимости со старыми данными поддерживаем и английские варианты.
+function handLabel(hand: string): string {
+  switch (hand) {
+    case 'Обе': case 'Both': case 'both': return 'Двоеборье'
+    case 'Левая': case 'left': return 'Левая'
+    case 'Правая': case 'right': return 'Правая'
+    default: return hand
+  }
+}
+
+// Название категории без суффикса "Both" (он дублируется меткой руки).
+function cleanCategoryName(name: string): string {
+  const cleaned = name.replace(/\s*Both\b/gi, '').trim()
+  return cleaned || name
+}
+
 function ParticipantList({ participants }: { participants: ParticipantOut[] }) {
   if (participants.length === 0) return null
 
@@ -74,6 +92,106 @@ function ParticipantList({ participants }: { participants: ParticipantOut[] }) {
   )
 }
 
+function ResultsTable({ rows }: { rows: ResultOut[] }) {
+  if (rows.length === 0) return null
+  return (
+    <div className="overflow-x-auto">
+      <table className="mt-2 w-full min-w-[300px] border-collapse text-left text-sm">
+        <thead>
+          <tr className="border-b border-steel-dim/30 text-eyebrow uppercase tracking-widest text-steel-dim">
+            <th className="py-2 pr-4 font-medium">Место</th>
+            <th className="py-2 pr-4 font-medium">Участник</th>
+            <th className="hidden py-2 pr-4 font-medium sm:table-cell">Клуб</th>
+            <th className="py-2 font-medium">Награда</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-b border-steel-dim/15">
+              <td className="py-2 pr-4 font-mono text-bone">{r.place ?? '—'}</td>
+              <td className="py-2 pr-4">
+                <Link to={`/athletes/${r.athlete_id}`} className="whitespace-nowrap text-bone hover:text-brass">
+                  {r.athlete_name}
+                </Link>
+              </td>
+              <td className="hidden py-2 pr-4 text-steel sm:table-cell">{r.club_name ?? '—'}</td>
+              <td className="py-2">
+                <MedalBadge medal={r.medal} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function groupByHand(matches: BracketMatchOut[]): Record<string, BracketMatchOut[]> {
+  return matches.reduce<Record<string, BracketMatchOut[]>>((acc, m) => {
+    ;(acc[m.hand] ??= []).push(m)
+    return acc
+  }, {})
+}
+
+// Есть ли в руке хоть один сыгранный матч (done/bye). Руки, где ничего не
+// сыграно (все матчи pending/waiting), — "неверные данные": например, в
+// завершённом двоеборье правая рука могла не разыгрываться, и показывать
+// её пустую сетку не нужно.
+function hasPlayedMatches(matches: BracketMatchOut[]): boolean {
+  return matches.some((m) => m.status === 'done' || m.status === 'bye')
+}
+
+// Сетка одной выбранной категории. Для двоеборья (hand == "Обе") показываем
+// сетки обеих рук — но только тех, где есть сыгранные матчи (рука, которая
+// вообще не разыгрывалась, в завершённом турнире — "неверные данные", её
+// пустую сетку не рисуем). Для категории на одну руку — её сетка. Затем —
+// блок итогов: для двоеборья это ИТОГ по сумме очков обеих рук.
+function CategoryBracketSection({
+  category,
+  matches,
+  results,
+}: {
+  category: CategoryOut
+  matches: BracketMatchOut[]
+  results: ResultOut[] | undefined
+}) {
+  const catMatches = matches.filter((m) => m.category_name === category.name)
+  const byHand = groupByHand(catMatches)
+  const isCombined = category.hand === 'Обе' || category.hand === 'Both'
+
+  const order = ['Левая', 'Правая']
+  const hands = isCombined
+    ? order.filter((h) => byHand[h] && hasPlayedMatches(byHand[h]))
+    : Object.keys(byHand).filter((h) => h === category.hand || hasPlayedMatches(byHand[h]))
+
+  if (hands.length === 0) {
+    return <EmptyState title="Сетка по этой категории не найдена" />
+  }
+
+  return (
+    <div className="space-y-10">
+      {hands.map((hand) => (
+        <div key={hand}>
+          <h3 className="font-display text-sm text-brass border-b border-steel-dim/20 pb-2">
+            {handLabel(hand)} рука
+          </h3>
+          <div className="mt-4">
+            <BracketTree matches={byHand[hand]} />
+          </div>
+        </div>
+      ))}
+      {results && results.length > 0 && (
+        <div>
+          <h3 className="font-display text-sm text-bone border-b border-steel-dim/20 pb-2">
+            {isCombined ? 'ИТОГ · Двоеборье' : 'Итог'}
+          </h3>
+          <ResultsTable rows={results} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function CompetitionDetail() {
   const { id } = useParams<{ id: string }>()
   const competitionId = Number(id)
@@ -82,6 +200,9 @@ export function CompetitionDetail() {
   const results = useCompetitionResults(competitionId)
   const participants = useCompetitionParticipants(competitionId)
   const bracket = useCompetitionBracket(competitionId)
+
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null)
+  useEffect(() => setSelectedCategoryId(null), [competitionId])
 
   if (competition.isLoading) return <LoadingState label="Загрузка турнира" />
   if (competition.isError) {
@@ -100,7 +221,8 @@ export function CompetitionDetail() {
   const c = competition.data
   const isFinished = c.status === 'completed'
   const isLive = c.status === 'in_progress'
-  const resultsByCategory = (results.data ?? []).reduce<Record<string, typeof results.data>>((acc, r) => {
+  const selectedCategory = c.categories.find((cat) => cat.id === selectedCategoryId) ?? c.categories[0]
+  const resultsByCategory = (results.data ?? []).reduce<Record<string, ResultOut[]>>((acc, r) => {
     ;(acc[r.category_name] ??= []).push(r)
     return acc
   }, {})
@@ -149,7 +271,7 @@ export function CompetitionDetail() {
                 key={cat.id}
                 className="text-eyebrow rounded-[var(--radius-rivet)] border border-steel-dim px-2 py-1 text-steel"
               >
-                {cat.name} · {cat.hand === 'left' ? 'левая' : 'правая'}
+                {cleanCategoryName(cat.name)} · {handLabel(cat.hand)}
               </span>
             ))}
           </div>
@@ -164,23 +286,46 @@ export function CompetitionDetail() {
         </section>
       )}
 
-      {c.categories.length > 0 && (
-        <section className="mt-10 mb-16">
-          <h2 className="font-display text-xl text-bone">Турнирная сетка</h2>
-          <div className="rivet-line my-4" />
-          {isFinished ? (
-            bracket.isLoading ? (
+      <section className="mt-10 mb-16">
+        <h2 className="font-display text-xl text-bone">Турнирная сетка</h2>
+        <div className="rivet-line my-4" />
+        {!isFinished ? (
+          <EmptyState title="Турнир ещё не завершён" />
+        ) : (
+          <>
+            {c.categories.length > 1 && (
+              <div className="mb-6 flex max-w-sm flex-col gap-1.5">
+                <label htmlFor="bracket-category" className="font-mono text-[11px] font-medium uppercase tracking-widest text-steel-dim">
+                  Категория
+                </label>
+                <select
+                  id="bracket-category"
+                  value={selectedCategory.id}
+                  onChange={(e) => setSelectedCategoryId(Number(e.target.value))}
+                  className="w-full rounded-lg border border-steel-dim/20 bg-ink/80 px-3.5 py-2.5 text-sm text-bone backdrop-blur transition-colors focus:border-brass/50 focus:bg-ink focus:outline-none"
+                >
+                  {c.categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cleanCategoryName(cat.name)} · {handLabel(cat.hand)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {bracket.isLoading ? (
               <LoadingState label="Загрузка сетки" />
             ) : bracket.data && bracket.data.length > 0 ? (
-              <BracketBoard matches={bracket.data} />
+              <CategoryBracketSection
+                category={selectedCategory}
+                matches={bracket.data}
+                results={resultsByCategory[selectedCategory.name]}
+              />
             ) : (
               <EmptyState title="Сетка не найдена" />
-            )
-          ) : (
-            <EmptyState title="Турнир ещё не завершён" />
-          )}
-        </section>
-      )}
+            )}
+          </>
+        )}
+      </section>
 
       <section className="mt-10 mb-16">
         <h2 className="font-display text-xl text-bone">Результаты</h2>
@@ -194,35 +339,10 @@ export function CompetitionDetail() {
         )}
         {Object.entries(resultsByCategory).map(([category, rows]) => (
           <div key={category} className="mb-6">
-            <h3 className="font-display text-sm text-brass">{category.replace(/ Both\b/g, ' Двоеборье').replace(/\bBoth\b/g, 'Двоеборье')}</h3>
-            <div className="overflow-x-auto">
-              <table className="mt-2 w-full min-w-[300px] border-collapse text-left text-sm">
-                <thead>
-                  <tr className="border-b border-steel-dim/30 text-eyebrow uppercase tracking-widest text-steel-dim">
-                    <th className="py-2 pr-4 font-medium">Место</th>
-                    <th className="py-2 pr-4 font-medium">Участник</th>
-                    <th className="hidden py-2 pr-4 font-medium sm:table-cell">Клуб</th>
-                    <th className="py-2 font-medium">Награда</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows?.map((r, i) => (
-                    <tr key={i} className="border-b border-steel-dim/15">
-                      <td className="py-2 pr-4 font-mono text-bone">{r.place ?? '—'}</td>
-                      <td className="py-2 pr-4">
-                        <Link to={`/athletes/${r.athlete_id}`} className="whitespace-nowrap text-bone hover:text-brass">
-                          {r.athlete_name}
-                        </Link>
-                      </td>
-                      <td className="hidden py-2 pr-4 text-steel sm:table-cell">{r.club_name ?? '—'}</td>
-                      <td className="py-2">
-                        <MedalBadge medal={r.medal} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <h3 className="font-display text-sm text-brass">
+              {cleanCategoryName(category)}{c.format_type === 'combined' ? ' · Двоеборье' : ''}
+            </h3>
+            <ResultsTable rows={rows ?? []} />
           </div>
         ))}
       </section>
