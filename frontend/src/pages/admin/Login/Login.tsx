@@ -1,4 +1,4 @@
-﻿import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/features/auth/useAuth'
 
@@ -34,18 +34,18 @@ export function AdminLogin() {
     <div className="flex min-h-screen items-center justify-center bg-ink px-5">
       <div className="plate w-full max-w-sm rounded-[var(--radius-rivet)] p-6 sm:p-8">
         <div className="flex items-center gap-3">
-          <img src="/brand/logo-armsport.png" alt="Р›РѕРіРѕС‚РёРї С„РµРґРµСЂР°С†РёРё" className="h-10 w-auto" />
+          <img src="/brand/logo-armsport.png" alt="Логотип федерации" className="h-10 w-auto" />
           <span className="font-display text-sm font-bold uppercase tracking-wide text-bone">
             Atyrau<span className="text-rust"> Armsport</span>
           </span>
         </div>
-        <p className="text-eyebrow mt-6 text-rust">РџР°РЅРµР»СЊ СѓРїСЂР°РІР»РµРЅРёСЏ</p>
-        <h1 className="mt-1 font-display text-2xl text-bone">Р’С…РѕРґ</h1>
+        <p className="text-eyebrow mt-6 text-rust">Панель управления</p>
+        <h1 className="mt-1 font-display text-2xl text-bone">Вход</h1>
 
         <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
           <div className="flex flex-col gap-1">
             <label htmlFor="username" className="text-eyebrow text-steel">
-              Р›РѕРіРёРЅ
+              Логин
             </label>
             <input
               id="username"
@@ -58,7 +58,7 @@ export function AdminLogin() {
           </div>
           <div className="flex flex-col gap-1">
             <label htmlFor="password" className="text-eyebrow text-steel">
-              РџР°СЂРѕР»СЊ
+              Пароль
             </label>
             <input
               id="password"
@@ -75,7 +75,7 @@ export function AdminLogin() {
             disabled={isSubmitting}
             className="mt-2 rounded-[var(--radius-rivet)] bg-rust px-4 py-2.5 text-sm font-semibold text-bone transition-colors hover:bg-rust-dim disabled:opacity-50"
           >
-            {isSubmitting ? 'Р’С…РѕРґРёРјвЂ¦' : 'Р’РѕР№С‚Рё'}
+            {isSubmitting ? 'Входим…' : 'Войти'}
           </button>
         </form>
       </div>

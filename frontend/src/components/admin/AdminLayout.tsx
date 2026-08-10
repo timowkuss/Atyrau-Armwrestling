@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '@/features/auth/useAuth'
 import type { RoleCode } from '@/types/api'
@@ -11,13 +11,13 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/admin', label: 'РћР±Р·РѕСЂ', end: true },
-  { to: '/admin/clubs', label: 'РљР»СѓР±С‹', roles: ['super_admin', 'admin'] },
-  { to: '/admin/coaches', label: 'РўСЂРµРЅРµСЂС‹', roles: ['super_admin', 'admin'] },
-  { to: '/admin/athletes', label: 'РЎРїРѕСЂС‚СЃРјРµРЅС‹', roles: ['super_admin', 'admin'] },
-  { to: '/admin/news', label: 'РќРѕРІРѕСЃС‚Рё', roles: ['super_admin', 'admin', 'editor'] },
-  { to: '/admin/gallery', label: 'РњРµРґРёР°', roles: ['super_admin', 'admin', 'editor'] },
-  { to: '/admin/competitions', label: 'РўСѓСЂРЅРёСЂС‹ (РёРЅС„Рѕ)', roles: ['super_admin', 'admin'] },
+  { to: '/admin', label: 'Обзор', end: true },
+  { to: '/admin/clubs', label: 'Клубы', roles: ['super_admin', 'admin'] },
+  { to: '/admin/coaches', label: 'Тренеры', roles: ['super_admin', 'admin'] },
+  { to: '/admin/athletes', label: 'Спортсмены', roles: ['super_admin', 'admin'] },
+  { to: '/admin/news', label: 'Новости', roles: ['super_admin', 'admin', 'editor'] },
+  { to: '/admin/gallery', label: 'Медиа', roles: ['super_admin', 'admin', 'editor'] },
+  { to: '/admin/competitions', label: 'Турниры (инфо)', roles: ['super_admin', 'admin'] },
 ]
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
@@ -26,12 +26,12 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <>
       <div className="flex items-center gap-3 px-5 py-5">
-        <img src="/brand/logo-armsport.png" alt="Р›РѕРіРѕС‚РёРї С„РµРґРµСЂР°С†РёРё" className="h-9 w-auto" />
+        <img src="/brand/logo-armsport.png" alt="Логотип федерации" className="h-9 w-auto" />
         <div>
           <p className="font-display text-sm font-bold uppercase tracking-wide text-bone">
             Atyrau<span className="text-rust"> Armsport</span>
           </p>
-          <p className="text-eyebrow mt-0.5 text-steel">РїР°РЅРµР»СЊ СѓРїСЂР°РІР»РµРЅРёСЏ</p>
+          <p className="text-eyebrow mt-0.5 text-steel">панель управления</p>
         </div>
       </div>
       <div className="rivet-line" />
@@ -60,7 +60,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           onClick={logout}
           className="mt-3 w-full rounded-[var(--radius-rivet)] border border-steel-dim px-3 py-2 text-sm text-steel transition-colors hover:border-danger hover:text-danger"
         >
-          Р’С‹Р№С‚Рё
+          Выйти
         </button>
       </div>
     </>
@@ -84,12 +84,12 @@ export function AdminLayout() {
 
   return (
     <div className="flex min-h-screen bg-ink text-bone">
-        {/* РЎР°Р№РґР±Р°СЂ вЂ” РїРѕСЃС‚РѕСЏРЅРЅРѕ РІРёРґРµРЅ РѕС‚ md Рё РІС‹С€Рµ */}
+        {/* Сайдбар — постоянно виден от md и выше */}
         <aside className="hidden w-60 flex-shrink-0 flex-col overflow-y-auto border-r border-steel-dim/30 bg-ink-soft md:flex">
           <SidebarContent />
         </aside>
 
-      {/* РњРѕР±РёР»СЊРЅС‹Р№ off-canvas drawer */}
+      {/* Мобильный off-canvas drawer */}
       {drawerOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div
@@ -104,20 +104,20 @@ export function AdminLayout() {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* РњРѕР±РёР»СЊРЅР°СЏ РІРµСЂС…РЅСЏСЏ РїР°РЅРµР»СЊ СЃ РєРЅРѕРїРєРѕР№ РѕС‚РєСЂС‹С‚РёСЏ РјРµРЅСЋ */}
+        {/* Мобильная верхняя панель с кнопкой открытия меню */}
         <div className="flex min-w-0 items-center gap-3 border-b border-steel-dim/30 bg-ink-soft px-4 py-3 md:hidden">
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
             className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[var(--radius-rivet)] text-bone"
-            aria-label="РћС‚РєСЂС‹С‚СЊ РјРµРЅСЋ"
+            aria-label="Открыть меню"
             aria-expanded={drawerOpen}
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M4 6.5H20M4 12H20M4 17.5H20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
             </svg>
           </button>
-          <img src="/brand/logo-armsport.png" alt="Р›РѕРіРѕС‚РёРї С„РµРґРµСЂР°С†РёРё" className="h-8 w-auto flex-shrink-0" />
+          <img src="/brand/logo-armsport.png" alt="Логотип федерации" className="h-8 w-auto flex-shrink-0" />
           <p className="truncate font-display text-sm font-bold uppercase tracking-wide text-bone">
             Atyrau<span className="text-rust"> Admin</span>
           </p>
