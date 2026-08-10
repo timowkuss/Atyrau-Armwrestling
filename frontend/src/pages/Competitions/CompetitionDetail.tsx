@@ -194,9 +194,17 @@ export function CompetitionDetail() {
         )}
         {Object.entries(resultsByCategory).map(([category, rows]) => (
           <div key={category} className="mb-6">
-            <h3 className="font-display text-sm text-brass">{category}</h3>
+            <h3 className="font-display text-sm text-brass">{category.replace(/ Both\b/g, ' Двоеборье').replace(/\bBoth\b/g, 'Двоеборье')}</h3>
             <div className="overflow-x-auto">
               <table className="mt-2 w-full min-w-[300px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-steel-dim/30 text-eyebrow uppercase tracking-widest text-steel-dim">
+                    <th className="py-2 pr-4 font-medium">Место</th>
+                    <th className="py-2 pr-4 font-medium">Участник</th>
+                    <th className="hidden py-2 pr-4 font-medium sm:table-cell">Клуб</th>
+                    <th className="py-2 font-medium">Награда</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {rows?.map((r, i) => (
                     <tr key={i} className="border-b border-steel-dim/15">
