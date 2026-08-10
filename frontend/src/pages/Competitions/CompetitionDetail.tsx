@@ -214,6 +214,10 @@ function CategoryBracketSection({
     ? Boolean(byHand[currentHand] && hasPlayedMatches(byHand[currentHand]))
     : Boolean(byHand[currentHand])
 
+  // ИТОГ двоеборья показываем только когда сыграны обе руки — иначе он был
+  // бы посчитан по одной руке и вводил в заблуждение.
+  const bothHandsPlayed = isCombined && order.every((h) => byHand[h] && hasPlayedMatches(byHand[h]))
+
   const handResultRows = (handResults ?? []).filter(
     (r) => r.category_id === category.id && r.hand === currentHand,
   )
@@ -257,7 +261,7 @@ function CategoryBracketSection({
         )}
       </div>
 
-      {isCombined && results && results.length > 0 && (
+      {isCombined && bothHandsPlayed && results && results.length > 0 && (
         <div>
           <h3 className="border-b border-steel-dim/20 pb-2 font-display text-sm text-bone">
             ИТОГ · Двоеборье
