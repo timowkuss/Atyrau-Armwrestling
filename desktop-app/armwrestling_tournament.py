@@ -3774,6 +3774,7 @@ class BracketWindow(ctk.CTkToplevel):
         self.hand = hand
         tournament = db.get_tournament(tournament_id)
         bracket_system = tournament["bracket_system"] if tournament and "bracket_system" in tournament.keys() else "double"
+        self.is_double_elimination = bracket_system != "single"
         self.engine = SingleEliminationEngine(db) if bracket_system == "single" else DoubleEliminationEngine(db)
 
         if not hasattr(master, "_open_bracket_windows"):
@@ -3845,7 +3846,7 @@ class BracketWindow(ctk.CTkToplevel):
         top.pack(fill="x", padx=0, pady=0)
         top.pack_propagate(False)
 
-        title_text = f"🏆  {self.category['name']}  |  {self.hand}  |  До 2 поражений"
+        title_text = f"🏆  {self.category['name']}  |  {self.hand}  |  До {2 if self.is_double_elimination else 1} поражения"
         locked = self.db.is_tournament_finished(self.tournament_id)
         if locked:
             title_text += "   🔒 ТУРНИР ЗАВЕРШЁН — ТОЛЬКО ПРОСМОТР"
@@ -4981,10 +4982,11 @@ class BracketWindow(ctk.CTkToplevel):
         if not REPORTLAB_AVAILABLE:
             messagebox.showerror("Ошибка", "Установите reportlab:\npip install reportlab")
             return
+        cat_name = self._clean_category_name()
         filepath = filedialog.asksaveasfilename(
             defaultextension=".pdf",
             filetypes=[("PDF files", "*.pdf")],
-            initialfile=f"protocol_{self.category['name']}_{self.hand}.pdf")
+            initialfile=f"protocol_{cat_name}_{self.hand}.pdf")
         if not filepath:
             return
 
@@ -5005,8 +5007,13 @@ class BracketWindow(ctk.CTkToplevel):
             story.append(Paragraph(
                 f"{t['name']}  |  {t['date']}  |  {t['location'] or ''}", info_style))
 
+        # Формат зависит от системы розыгрыша турнира: single elimination —
+        # до 1 поражения, double elimination — до 2 поражений.
+        bracket_system = t["bracket_system"] if t and "bracket_system" in t.keys() else "double"
+        format_label = "До 1 поражения" if bracket_system == "single" else "До 2 поражений"
+        hand_label = "Двоеборье" if self.hand == "Обе" else self.hand
         story.append(Paragraph(
-            f"Весовая категория: {self.category['name']}  |  Рука: {self.hand}  |  Формат: До 2 поражений",
+            f"Весовая категория: {cat_name}  |  Рука: {hand_label}  |  Формат: {format_label}",
             ParagraphStyle("Cat", parent=styles["Normal"], fontName="Arial", fontSize=12, spaceAfter=12, alignment=1)))
         story.append(Spacer(1, 0.5 * cm))
 
@@ -5300,7 +5307,7 @@ class CombinedResultsWindow(ctk.CTkToplevel):
 
     def _clean_category_name(self):
         name = self.category["name"]
-        name = re.sub(r"\s+Both\b", "", name)
+        name = re.sub(r"\s+Both\b", " Двоеборье", name)
         name = re.sub(r"\s+Left\b", "", name)
         name = re.sub(r"\s+Right\b", "", name)
         return name.strip()
