@@ -13,39 +13,27 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+const DEFAULT_ELO_START = 1000
+
 function EloHistorySection({ items }: { items: EloHistoryItem[] }) {
   const rows = useMemo(() => {
-    const map = new Map<number, { competition_id: number; competition_name: string; date: string; left?: number; right?: number; both?: number }>()
+    const map = new Map<number, { competition_id: number; competition_name: string; date: string; elo: number }>()
     for (const it of items) {
-      const row = map.get(it.competition_id) ?? { competition_id: it.competition_id, competition_name: it.competition_name, date: it.date }
-      if (it.hand === 'left') row.left = it.elo
-      if (it.hand === 'right') row.right = it.elo
-      if (it.hand === 'both') row.both = it.elo
-      map.set(it.competition_id, row)
+      if (it.hand !== 'both') continue
+      map.set(it.competition_id, {
+        competition_id: it.competition_id,
+        competition_name: it.competition_name,
+        date: it.date,
+        elo: it.elo,
+      })
     }
     return [...map.values()].sort((a, b) => a.date.localeCompare(b.date))
   }, [items])
 
-  const delta = (current: number | undefined, i: number, key: 'left' | 'right' | 'both') => {
-    if (current == null) return null
-    const prev = rows[i - 1]?.[key]
-    if (prev == null || prev === current) return null
-    const d = current - prev
-    return d > 0 ? `+${d}` : `${d}`
+  const change = (i: number) => {
+    const before = i === 0 ? DEFAULT_ELO_START : rows[i - 1].elo
+    return { before, after: rows[i].elo, delta: rows[i].elo - before }
   }
-
-  const Cell = ({ value, d }: { value: number | undefined; d: string | null }) => (
-    <td className="px-4 py-3 font-mono text-sm">
-      {value == null ? (
-        <span className="text-steel-dim">—</span>
-      ) : (
-        <div className="flex items-baseline gap-2">
-          <span className="text-bone">{value}</span>
-          {d && <span className={`text-xs font-semibold ${d.startsWith('+') ? 'text-brass' : 'text-rust'}`}>{d}</span>}
-        </div>
-      )}
-    </td>
-  )
 
   return (
     <section className="mt-14">
@@ -61,26 +49,32 @@ function EloHistorySection({ items }: { items: EloHistoryItem[] }) {
             <thead>
               <tr className="border-b border-steel-dim/15">
                 <th className="px-5 py-3.5 font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Турнир</th>
-                <th className="px-5 py-3.5 font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Дата</th>
-                <th className="px-5 py-3.5 font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Левая</th>
-                <th className="px-5 py-3.5 font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Правая</th>
-                <th className="px-5 py-3.5 font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Общий</th>
+                <th className="px-5 py-3.5 text-right font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Было</th>
+                <th className="px-5 py-3.5 text-right font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Стало</th>
+                <th className="px-5 py-3.5 text-right font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Изменение</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, i) => (
-                <tr key={`${r.competition_name}-${r.date}`} className="border-b border-steel-dim/10 transition-colors last:border-none hover:bg-bone/[0.02]">
-                  <td className="px-5 py-3.5">
-                    <Link to={`/competitions/${r.competition_id}`} className="font-medium text-bone transition-colors hover:text-brass">
-                      {r.competition_name}
-                    </Link>
-                  </td>
-                  <td className="px-5 py-3.5 font-mono text-sm text-steel">{formatDate(r.date)}</td>
-                  <Cell value={r.left} d={delta(r.left, i, 'left')} />
-                  <Cell value={r.right} d={delta(r.right, i, 'right')} />
-                  <Cell value={r.both} d={delta(r.both, i, 'both')} />
-                </tr>
-              ))}
+              {rows.map((r, i) => {
+                const { before, after, delta } = change(i)
+                return (
+                  <tr key={r.competition_id} className="border-b border-steel-dim/10 transition-colors last:border-none hover:bg-bone/[0.02]">
+                    <td className="px-5 py-3.5">
+                      <Link to={`/competitions/${r.competition_id}`} className="font-medium text-bone transition-colors hover:text-brass">
+                        {r.competition_name}
+                      </Link>
+                      <div className="mt-0.5 font-mono text-xs text-steel-dim">{formatDate(r.date)}</div>
+                    </td>
+                    <td className="px-5 py-3.5 text-right font-mono text-sm text-steel">{before}</td>
+                    <td className="px-5 py-3.5 text-right font-mono text-sm font-semibold text-bone">{after}</td>
+                    <td className={`px-5 py-3.5 text-right font-mono text-sm font-semibold ${
+                      delta > 0 ? 'text-brass' : delta < 0 ? 'text-rust' : 'text-steel-dim'
+                    }`}>
+                      {delta > 0 ? `+${delta}` : delta}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
