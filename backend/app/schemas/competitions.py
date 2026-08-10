@@ -42,6 +42,7 @@ class ResultOut(BaseModel):
     medal: str
     athlete_id: int
     athlete_name: str
+    club_id: int | None
     club_name: str | None
 
 
@@ -54,6 +55,7 @@ class HandResultOut(BaseModel):
     place: int
     athlete_id: int
     athlete_name: str
+    club_id: int | None
     club_name: str | None
 
 

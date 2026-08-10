@@ -101,6 +101,22 @@ function placeColor(place: number | null): string {
   return 'text-bone'
 }
 
+// Название клуба со ссылкой на его страницу (если клуб известен).
+function ClubCell({ clubId, clubName }: { clubId: number | null; clubName: string | null }) {
+  if (!clubName) return <span className="text-steel">—</span>
+  return (
+    <Link
+      to={clubId != null ? `/clubs/${clubId}` : '#'}
+      className={clubId != null ? 'text-steel hover:text-brass' : 'cursor-default text-steel'}
+      onClick={(e) => {
+        if (clubId == null) e.preventDefault()
+      }}
+    >
+      {clubName}
+    </Link>
+  )
+}
+
 function ResultsTable({ rows }: { rows: ResultOut[] }) {
   if (rows.length === 0) return null
   return (
@@ -123,7 +139,9 @@ function ResultsTable({ rows }: { rows: ResultOut[] }) {
                   {r.athlete_name}
                 </Link>
               </td>
-              <td className="hidden py-2 pr-4 text-steel sm:table-cell">{r.club_name ?? '—'}</td>
+              <td className="hidden py-2 pr-4 sm:table-cell">
+                <ClubCell clubId={r.club_id} clubName={r.club_name} />
+              </td>
               <td className="py-2">
                 <MedalBadge medal={r.medal} />
               </td>
@@ -160,7 +178,9 @@ function HandResultsTable({ rows }: { rows: HandResultOut[] }) {
                   {r.athlete_name}
                 </Link>
               </td>
-              <td className="hidden py-2 pr-4 text-steel sm:table-cell">{r.club_name ?? '—'}</td>
+              <td className="hidden py-2 pr-4 sm:table-cell">
+                <ClubCell clubId={r.club_id} clubName={r.club_name} />
+              </td>
             </tr>
           ))}
         </tbody>

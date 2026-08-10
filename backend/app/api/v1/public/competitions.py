@@ -123,6 +123,7 @@ def get_competition_results(competition_id: int, db: Session = Depends(get_db)):
             Result.medal,
             Athlete.id.label("athlete_id"),
             Athlete.full_name.label("athlete_name"),
+            Club.id.label("club_id"),
             Club.name.label("club_name"),
         )
         .join(Category, Result.category_id == Category.id)
@@ -143,6 +144,7 @@ def get_competition_results(competition_id: int, db: Session = Depends(get_db)):
             medal=r.medal,
             athlete_id=r.athlete_id,
             athlete_name=r.athlete_name,
+            club_id=r.club_id,
             club_name=r.club_name,
         )
         for r in rows
@@ -201,6 +203,7 @@ def get_competition_hand_results(competition_id: int, db: Session = Depends(get_
                         place=entry["place"],
                         athlete_id=athlete.id,
                         athlete_name=athlete.full_name,
+                        club_id=athlete.club_id,
                         club_name=club_names.get(athlete.club_id),
                     )
                 )

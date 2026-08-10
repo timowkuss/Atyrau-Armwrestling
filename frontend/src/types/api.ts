@@ -150,6 +150,7 @@ export interface ResultOut {
   medal: Medal
   athlete_id: number
   athlete_name: string
+  club_id: number | null
   club_name: string | null
 }
 
@@ -160,6 +161,7 @@ export interface HandResultOut {
   place: number
   athlete_id: number
   athlete_name: string
+  club_id: number | null
   club_name: string | null
 }
 
