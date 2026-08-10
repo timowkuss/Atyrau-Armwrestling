@@ -7,7 +7,7 @@ import { EloRating } from '@/components/ui/EloRating'
 import { MedalBadge } from '@/components/ui/Medal'
 import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 import { ageText } from '@/lib/age'
-import type { EloHistoryItem } from '@/types/api'
+import type { AthleteCompetitionHistoryItem, EloHistoryItem, Medal } from '@/types/api'
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -15,32 +15,60 @@ function formatDate(iso: string): string {
 
 const DEFAULT_ELO_START = 1000
 
-function EloHistorySection({ items }: { items: EloHistoryItem[] }) {
-  const rows = useMemo(() => {
-    const map = new Map<number, { competition_id: number; competition_name: string; date: string; elo: number }>()
-    for (const it of items) {
-      if (it.hand !== 'both') continue
-      map.set(it.competition_id, {
-        competition_id: it.competition_id,
-        competition_name: it.competition_name,
-        date: it.date,
-        elo: it.elo,
-      })
+type CareerRow = {
+  competition_id: number
+  competition_name: string
+  date: string
+  categories: { name: string; place: number | null; medal: Medal }[]
+  elo: number | null
+}
+
+function CareerHistory({ history, eloItems }: { history: AthleteCompetitionHistoryItem[]; eloItems: EloHistoryItem[] }) {
+  const rows = useMemo<CareerRow[]>(() => {
+    const map = new Map<number, Omit<CareerRow, 'elo'>>()
+    for (const h of history) {
+      const row = map.get(h.competition_id) ?? {
+        competition_id: h.competition_id,
+        competition_name: h.competition_name,
+        date: h.date,
+        categories: [],
+      }
+      row.categories.push({ name: h.category_name, place: h.place, medal: h.medal })
+      map.set(h.competition_id, row)
     }
-    return [...map.values()].sort((a, b) => a.date.localeCompare(b.date))
-  }, [items])
+    const eloByComp = new Map<number, number>()
+    for (const it of eloItems) {
+      if (it.hand === 'both') eloByComp.set(it.competition_id, it.elo)
+    }
+    return [...map.values()]
+      .map((row) => ({ ...row, elo: eloByComp.get(row.competition_id) ?? null }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+  }, [history, eloItems])
 
   const change = (i: number) => {
+    const elo = rows[i].elo
+    if (elo == null) return null
     const before = i === 0 ? DEFAULT_ELO_START : rows[i - 1].elo
-    return { before, after: rows[i].elo, delta: rows[i].elo - before }
+    if (before == null) return null
+    return { before, after: elo, delta: elo - before }
+  }
+
+  const medalCounts = (row: CareerRow) => {
+    const counts = { gold: 0, silver: 0, bronze: 0 }
+    for (const c of row.categories) {
+      if (c.medal === 'gold') counts.gold += 1
+      else if (c.medal === 'silver') counts.silver += 1
+      else if (c.medal === 'bronze') counts.bronze += 1
+    }
+    return counts
   }
 
   return (
     <section className="mt-14">
       <div className="mb-6 flex items-center gap-3">
-        <div className="h-px flex-1 bg-gradient-to-r from-brass/40 via-brass/10 to-transparent" />
-        <h2 className="font-display text-lg font-semibold tracking-wide text-bone">История рейтинга</h2>
-        <div className="h-px flex-1 bg-gradient-to-l from-brass/40 via-brass/10 to-transparent" />
+        <div className="h-px flex-1 bg-gradient-to-r from-rust/40 via-rust/10 to-transparent" />
+        <h2 className="font-display text-lg font-semibold tracking-wide text-bone">История турниров и рейтинга</h2>
+        <div className="h-px flex-1 bg-gradient-to-l from-rust/40 via-rust/10 to-transparent" />
       </div>
 
       <div className="overflow-hidden rounded-xl border border-steel-dim/15 bg-gradient-to-b from-petrol/30 to-ink-soft/50">
@@ -49,6 +77,8 @@ function EloHistorySection({ items }: { items: EloHistoryItem[] }) {
             <thead>
               <tr className="border-b border-steel-dim/15">
                 <th className="px-5 py-3.5 font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Турнир</th>
+                <th className="px-5 py-3.5 font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Место</th>
+                <th className="px-5 py-3.5 font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Медаль</th>
                 <th className="px-5 py-3.5 text-right font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Было</th>
                 <th className="px-5 py-3.5 text-right font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Стало</th>
                 <th className="px-5 py-3.5 text-right font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Изменение</th>
@@ -56,22 +86,46 @@ function EloHistorySection({ items }: { items: EloHistoryItem[] }) {
             </thead>
             <tbody>
               {rows.map((r, i) => {
-                const { before, after, delta } = change(i)
+                const ch = change(i)
+                const medals = medalCounts(r)
                 return (
                   <tr key={r.competition_id} className="border-b border-steel-dim/10 transition-colors last:border-none hover:bg-bone/[0.02]">
                     <td className="px-5 py-3.5">
                       <Link to={`/competitions/${r.competition_id}`} className="font-medium text-bone transition-colors hover:text-brass">
                         {r.competition_name}
                       </Link>
+                      {r.categories.length > 0 && (
+                        <div className="mt-0.5 text-xs text-steel">{r.categories.map((c) => c.name).join(' · ')}</div>
+                      )}
                       <div className="mt-0.5 font-mono text-xs text-steel-dim">{formatDate(r.date)}</div>
                     </td>
-                    <td className="px-5 py-3.5 text-right font-mono text-sm text-steel">{before}</td>
-                    <td className="px-5 py-3.5 text-right font-mono text-sm font-semibold text-bone">{after}</td>
-                    <td className={`px-5 py-3.5 text-right font-mono text-sm font-semibold ${
-                      delta > 0 ? 'text-brass' : delta < 0 ? 'text-rust' : 'text-steel-dim'
-                    }`}>
-                      {delta > 0 ? `+${delta}` : delta}
+                    <td className="px-5 py-3.5 font-mono text-sm font-medium text-bone">
+                      {r.categories.map((c) => c.place ?? '—').join(' · ')}
                     </td>
+                    <td className="px-5 py-3.5">
+                      {medals.gold + medals.silver + medals.bronze === 0 ? (
+                        <span className="text-steel-dim">—</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1.5">
+                          {medals.gold > 0 && <MedalBadge medal="gold" />}
+                          {medals.silver > 0 && <MedalBadge medal="silver" />}
+                          {medals.bronze > 0 && <MedalBadge medal="bronze" />}
+                        </div>
+                      )}
+                    </td>
+                    {ch ? (
+                      <>
+                        <td className="px-5 py-3.5 text-right font-mono text-sm text-steel">{ch.before}</td>
+                        <td className="px-5 py-3.5 text-right font-mono text-sm font-semibold text-bone">{ch.after}</td>
+                        <td className={`px-5 py-3.5 text-right font-mono text-sm font-semibold ${
+                          ch.delta > 0 ? 'text-brass' : ch.delta < 0 ? 'text-rust' : 'text-steel-dim'
+                        }`}>
+                          {ch.delta > 0 ? `+${ch.delta}` : ch.delta}
+                        </td>
+                      </>
+                    ) : (
+                      <td colSpan={3} className="px-5 py-3.5 text-right font-mono text-sm text-steel-dim">—</td>
+                    )}
                   </tr>
                 )
               })}
@@ -338,59 +392,17 @@ export function AthleteProfile() {
           </section>
         )}
 
-        {/* История рейтинга */}
-        {eloHistory.data && eloHistory.data.items.length > 0 && (
-          <EloHistorySection items={eloHistory.data.items} />
-        )}
-
-        {/* История турниров */}
-        <section className="mt-14">
-          <div className="mb-6 flex items-center gap-3">
-            <div className="h-px flex-1 bg-gradient-to-r from-rust/40 via-rust/10 to-transparent" />
-            <h2 className="font-display text-lg font-semibold tracking-wide text-bone">История турниров</h2>
-            <div className="h-px flex-1 bg-gradient-to-l from-rust/40 via-rust/10 to-transparent" />
-          </div>
-
-          {history.isLoading && <LoadingState label="Загрузка истории" />}
-          {history.isError && <ErrorState message={(history.error as Error).message} onRetry={() => history.refetch()} />}
-          {history.data && history.data.length === 0 && (
+        {/* История турниров и рейтинга */}
+        {history.isLoading && <LoadingState label="Загрузка истории" />}
+        {history.isError && <ErrorState message={(history.error as Error).message} onRetry={() => history.refetch()} />}
+        {history.data && history.data.length === 0 && (
+          <section className="mt-14">
             <EmptyState title="Пока нет опубликованных турниров" />
-          )}
-          {history.data && history.data.length > 0 && (
-            <div className="overflow-hidden rounded-xl border border-steel-dim/15 bg-gradient-to-b from-petrol/30 to-ink-soft/50">
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-steel-dim/15">
-                      <th className="px-5 py-3.5 font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Турнир</th>
-                      <th className="px-5 py-3.5 font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Дата</th>
-                      <th className="px-5 py-3.5 font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Категория</th>
-                      <th className="px-5 py-3.5 font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Место</th>
-                      <th className="px-5 py-3.5 font-mono text-xs font-medium uppercase tracking-widest text-steel-dim">Медаль</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {history.data.map((h, i) => (
-                      <tr key={i} className="border-b border-steel-dim/10 transition-colors hover:bg-bone/[0.02] last:border-none">
-                        <td className="px-5 py-3.5">
-                          <Link to={`/competitions/${h.competition_id}`} className="font-medium text-bone transition-colors hover:text-brass">
-                            {h.competition_name}
-                          </Link>
-                        </td>
-                        <td className="px-5 py-3.5 font-mono text-sm text-steel">{formatDate(h.date)}</td>
-                        <td className="px-5 py-3.5 text-steel">{h.category_name}</td>
-                        <td className="px-5 py-3.5 font-mono text-sm font-medium text-bone">{h.place ?? '—'}</td>
-                        <td className="px-5 py-3.5">
-                          <MedalBadge medal={h.medal} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </section>
+          </section>
+        )}
+        {history.data && history.data.length > 0 && (
+          <CareerHistory history={history.data} eloItems={eloHistory.data?.items ?? []} />
+        )}
 
         {/* Последние матчи */}
         <section className="mt-14 mb-20">
