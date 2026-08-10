@@ -260,9 +260,14 @@ def _hand_standings(db: Session, competition_id: int, category_id: int, hand: st
     champion = None
     runner_up = None
     if is_single:
-        final_matches = [m for m in matches if m.win_next_id is None and m.status == "done"]
+        # Связи матчей (win_next_id) на сервер НЕ синкаются (всегда NULL),
+        # поэтому финал SE определяем по структуре: done-матч с максимальным
+        # stage во всей категории. Финал создаётся вместе с сеткой сразу,
+        # так что его stage известен ещё до начала турнира.
+        max_stage = max((m.stage for m in matches), default=-1)
+        final_matches = [m for m in matches if m.stage == max_stage and m.status == "done"]
         if final_matches:
-            last = max(final_matches, key=lambda m: m.stage)
+            last = max(final_matches, key=lambda m: m.match_order)
             champion = last.winner_id
             if champion in stats:
                 stats[champion]["eliminated"] = False

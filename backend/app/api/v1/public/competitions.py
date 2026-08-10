@@ -423,18 +423,27 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
         if not stats:
             continue
 
-        # Чемпион — победитель последнего сыгранного матча, из которого уже
-        # нет перехода дальше (win_next_id IS NULL): финал winners-сетки для
-        # single elimination или гранд-финал для double elimination. Та же
-        # логика, что и get_standings в десктопе — по bracket == "final"
-        # искать нельзя, в SE финал лежит в winners-сетке.
-        terminal_done = [
-            m for m in cat_matches if m.win_next_id is None and m.status == "done"
-        ]
+        # Чемпион определяем по СТРУКТУРЕ сетки, а не по win_next_id:
+        # десктоп не передаёт связи матчей (win_next_id/lose_next_id) на
+        # сервер — там они всегда NULL, поэтому прежняя проверка
+        # "win_next_id IS NULL" считала любой сыгранный матч финалом и
+        # вешала победителя первого же матча 1/4 на 1-е место. Для single
+        # elimination финал — это done-матч с максимальным stage во всей
+        # категории (все матчи сетки создаются сразу, финал существует с
+        # момента генерации, даже если ещё не сыгран). Для double
+        # elimination чемпион — победитель последнего сыгранного
+        # гранд-финала (bracket == "final").
+        all_ms = cat_hand_all.get((cat_id, hand), [])
+        max_stage_cat = max((m.stage for m in all_ms), default=-1)
         champion = None
-        if terminal_done:
-            last_term = max(terminal_done, key=lambda m: m.stage)
-            champion = last_term.winner_id
+        if max_losses == 1:
+            finals_done = [m for m in cat_matches if m.stage == max_stage_cat]
+            if finals_done:
+                champion = max(finals_done, key=lambda m: m.match_order).winner_id
+        else:
+            gf_done_matches = [m for m in cat_matches if m.bracket == "final"]
+            if gf_done_matches:
+                champion = gf_done_matches[-1].winner_id
         gf_done = champion is not None
 
         eliminated = []
