@@ -1,8 +1,31 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api.v1.router import api_router
+from app.db.session import SessionLocal
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """При старте пересчитываем агрегированную статистику спортсменов из
+    фактических матчей и мест завершённых турниров. Это чинит данные уже
+    завершённых турниров (например, после досыгранных вручную матчей) без
+    ручного вмешательства. Сбой пересчёта не должен ронять приложение."""
+    try:
+        db = SessionLocal()
+        try:
+            from app.services.stats_engine import recalculate_all
+
+            recalculate_all(db)
+        finally:
+            db.close()
+    except Exception:
+        pass
+    yield
+
 
 app = FastAPI(
     title="Atyrau Armsport API",
@@ -13,6 +36,7 @@ app = FastAPI(
         "сайта, JWT+роль), /api/v1/sync (только десктоп-приложение, "
         "service-token)."
     ),
+    lifespan=lifespan,
 )
 
 # CORS — допускаем только нужные методы и заголовки

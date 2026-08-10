@@ -495,7 +495,13 @@ def finalize_competition(db: Session, competition: Competition) -> dict:
         for participant in participants.values():
             _record_participation(db, participant, competition)
     db.commit()
-    return {"status": "ok", "place_records": place_records}
+
+    # Пересчитываем агрегированную статистику спортсменов из фактических
+    # матчей и мест завершённого турнира.
+    from app.services.stats_engine import recalculate_all
+
+    stats_count = recalculate_all(db)
+    return {"status": "ok", "place_records": place_records, "stats_count": stats_count}
 
 
 def _category_hands_label(db: Session, competition: Competition, category: Category) -> str:
