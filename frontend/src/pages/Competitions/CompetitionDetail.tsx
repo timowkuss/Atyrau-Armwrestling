@@ -326,26 +326,6 @@ export function CompetitionDetail() {
           </>
         )}
       </section>
-
-      <section className="mt-10 mb-16">
-        <h2 className="font-display text-xl text-bone">Результаты</h2>
-        <div className="rivet-line my-4" />
-        {results.isLoading && <LoadingState label="Загрузка результатов" />}
-        {results.isError && (
-          <ErrorState message={(results.error as Error).message} onRetry={() => results.refetch()} />
-        )}
-        {results.data && results.data.length === 0 && (
-          <EmptyState title={isFinished ? 'Результаты не найдены' : 'Результаты ещё не внесены'} />
-        )}
-        {Object.entries(resultsByCategory).map(([category, rows]) => (
-          <div key={category} className="mb-6">
-            <h3 className="font-display text-sm text-brass">
-              {cleanCategoryName(category)}{c.format_type === 'combined' ? ' · Двоеборье' : ''}
-            </h3>
-            <ResultsTable rows={rows ?? []} />
-          </div>
-        ))}
-      </section>
     </div>
   )
 }
