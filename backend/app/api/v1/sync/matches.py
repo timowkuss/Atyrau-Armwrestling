@@ -48,11 +48,22 @@ def create_match(
     _: bool = Depends(require_desktop_sync),
 ):
     """Пишется сразу по ходу сетки в десктопе, а не пакетом в конце
-    (см. ARCHITECTURE.md §5, шаг 4)."""
+    (см. ARCHITECTURE.md §5, шаг 4).
+
+    Идемпотентен по (category_id, mid): если десктоп потерял ответ (таймаут)
+    и retry пришёл повторно — возвращаем уже созданный матч, а не плодим
+    дубль (дубль = двойное Эло и ложные победы в расстановке мест)."""
     _validate_participants_belong(
         db, payload.category_id, {payload.p1_id, payload.p2_id, payload.winner_id}
     )
-    match = Match(competition_id=_competition_id_of(db, payload), **payload.model_dump())
+    existing = _find_by_client_mid(db, payload.category_id, payload.mid)
+    if existing is not None:
+        return {"id": existing.id, "status": "existing"}
+    match = Match(
+        competition_id=_competition_id_of(db, payload),
+        client_mid=payload.mid,
+        **payload.model_dump(exclude={"mid"}),
+    )
     db.add(match)
     db.flush()
     # На практике winner_id на создании почти всегда пуст (матч только
@@ -79,15 +90,31 @@ def create_matches_batch(
     Семантика идентична одиночному create_match: после каждого матча
     применяется elo (apply_match_result сам отфильтрует BYE) и по
     каждой затронутой категории+руке пересчитываются итоговые места.
-    Разница лишь в том, что коммит — один на весь пакет."""
+    Разница лишь в том, что коммит — один на весь пакет.
+
+    Идемпотентность: дубли внутри пакета (одинаковый (category_id, mid),
+    возможные при повторной отправке потерянного ответа) схлопываются в
+    одну запись — повторно создаются только реально новые матчи."""
     created: list[Match] = []
+    seen: set[tuple[int, int]] = set()
     affected: set[tuple[int, str]] = set()
     for item in payload.matches:
+        if item.mid is not None:
+            key = (item.category_id, item.mid)
+            if key in seen:
+                continue  # повторная строка того же матча в пакете
+            seen.add(key)
         _validate_participants_belong(
             db, item.category_id, {item.p1_id, item.p2_id, item.winner_id}
         )
+        existing = _find_by_client_mid(db, item.category_id, item.mid)
+        if existing is not None:
+            created.append(existing)
+            continue
         match = Match(
-            competition_id=_competition_id_of(db, item), **item.model_dump()
+            competition_id=_competition_id_of(db, item),
+            client_mid=item.mid,
+            **item.model_dump(exclude={"mid"}),
         )
         db.add(match)
         db.flush()
@@ -109,6 +136,20 @@ def _competition_id_of(db: Session, payload: MatchSyncCreate) -> int:
     if category is None:
         raise HTTPException(status_code=404, detail="Категория не найдена")
     return category.competition_id
+
+
+def _find_by_client_mid(
+    db: Session, category_id: int, mid: int | None
+) -> Match | None:
+    """Существующий матч по идемпотентному ключу (category_id, mid).
+    mid=None (старые клиенты) — уникального ключа нет, всегда None."""
+    if mid is None:
+        return None
+    return (
+        db.query(Match)
+        .filter(Match.category_id == category_id, Match.client_mid == mid)
+        .first()
+    )
 
 
 @router.patch("/{match_id}")

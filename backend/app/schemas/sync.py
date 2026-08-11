@@ -111,6 +111,11 @@ class CompetitionParticipantSyncCreate(_StrictModel):
 
 
 class MatchSyncCreate(_StrictModel):
+    # Локальный id матча из десктопа (таблица matches в armwrestling.db).
+    # Используется сервером как идемпотентный ключ: повторный POST с тем же
+    # (category_id, mid) — это ретрай после потерянного ответа, а не новый
+    # матч, сервер вернёт существующий id вместо создания дубля.
+    mid: int | None = Field(default=None, ge=0)
     category_id: int  # центральный id
     hand: Literal["Правая", "Левая", "Обе"] = "Правая"
     round_name: str | None = None

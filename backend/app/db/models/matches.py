@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -16,9 +16,19 @@ class Match(Base):
     __table_args__ = (
         Index("idx_matches_category_hand", "category_id", "hand"),
         Index("idx_matches_category_hand_status", "category_id", "hand", "status"),
+        # Идемпотентность создания: локальный id матча из десктопа (mid).
+        # Повторный create_match с тем же (category_id, client_mid) — это
+        # ретрай потерянного ответа, а не новый матч: возвращаем существующий
+        # вместо дубля (иначе двойное Эло/двойные победы в местах). NULL
+        # (старые клиенты) оставляет прежнее поведение — дублей не создаёт.
+        UniqueConstraint("category_id", "client_mid", name="uq_matches_category_client_mid"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    # Локальный id матча из десктопа (столбец id таблицы matches в
+    # armwrestling.db). Хранится для идемпотентности create_match: retry
+    # после потерянного ответа не плодит дубль (см. uq_matches_category_client_mid).
+    client_mid: Mapped[int | None] = mapped_column(Integer)
     competition_id: Mapped[int] = mapped_column(
         ForeignKey("competitions.id", ondelete="CASCADE"), nullable=False
     )

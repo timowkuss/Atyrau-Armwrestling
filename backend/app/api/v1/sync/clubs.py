@@ -89,7 +89,7 @@ def update_club(
 ):
     club = db.query(Club).filter(Club.id == club_id).first()
     if club is None:
-        return {"error": "not_found"}, 404
+        raise HTTPException(status_code=404, detail="Клуб не найден")
 
     data = payload.model_dump(exclude_unset=True)
     if "city_name" in data:

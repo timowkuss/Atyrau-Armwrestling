@@ -285,13 +285,18 @@ class SyncApiClient:
     def create_match(self, category_id, hand="Правая", round_name=None, bracket="winners",
                       match_order=0, stage=0, p1_id=None, p2_id=None, winner_id=None,
                       p1_losses=0, p2_losses=0, is_bye=False, status="pending",
-                      table_number=None):
+                      table_number=None, mid=None):
+        """mid — локальный id матча из armwrestling.db. Сервер использует его
+        как идемпотентный ключ (category_id, mid): если ответ на первый
+        create_match потерялся (таймаут) и офлайн-очередь шлёт retry, сервер
+        вернёт уже созданный матч вместо дубля (дубль = двойное Эло)."""
         return self._request("POST", "/matches", json_body={
             "category_id": category_id, "hand": hand, "round_name": round_name,
             "bracket": bracket, "match_order": match_order, "stage": stage,
             "p1_id": p1_id, "p2_id": p2_id, "winner_id": winner_id,
             "p1_losses": p1_losses, "p2_losses": p2_losses,
             "is_bye": is_bye, "status": status, "table_number": table_number,
+            "mid": mid,
         })
 
     def update_match(self, remote_match_id, p1_id=None, p2_id=None, winner_id=None,

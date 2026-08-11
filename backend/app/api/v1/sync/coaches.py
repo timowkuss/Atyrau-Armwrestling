@@ -230,7 +230,7 @@ def update_coach(
 ):
     coach = db.query(Coach).filter(Coach.id == coach_id).first()
     if coach is None:
-        return {"error": "not_found"}, 404
+        raise HTTPException(status_code=404, detail="Тренер не найден")
 
     old_photo_path = coach.photo_path
     data = payload.model_dump(exclude_unset=True)

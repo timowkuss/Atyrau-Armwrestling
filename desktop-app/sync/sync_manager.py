@@ -817,6 +817,7 @@ class SyncManager:
                 is_bye=int(match.get("is_bye", 0)) > 0,
                 status=match.get("status", "pending"),
                 table_number=match.get("table_number"),
+                mid=mid,
             )
             self.state.map_set("match", mid, remote["id"])
             return remote["id"]
@@ -1387,6 +1388,7 @@ class SyncManager:
                         p1_losses=payload.get("p1_losses", 0), p2_losses=payload.get("p2_losses", 0),
                         is_bye=int(payload.get("is_bye", 0)) > 0, status=payload.get("status", "pending"),
                         table_number=payload.get("table_number"),
+                        mid=payload.get("mid"),
                     )
                 except ApiClientError as e:
                     if e.status_code == 404:

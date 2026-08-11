@@ -271,7 +271,7 @@ def update_athlete(
 ):
     athlete = db.query(Athlete).filter(Athlete.id == athlete_id).first()
     if athlete is None:
-        return {"error": "not_found"}, 404
+        raise HTTPException(status_code=404, detail="Спортсмен не найден")
 
     old_club_id = athlete.club_id
     old_photo_path = athlete.photo_path

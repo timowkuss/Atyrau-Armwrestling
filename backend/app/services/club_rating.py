@@ -441,6 +441,40 @@ def _upsert_result(
                 points=PLACE_POINTS.get(place, 0),
             )
         )
+    else:
+        # Место могло измениться (исправление результата задним числом +
+        # повторная финализация) — перезаписываем, а не молча пропускаем,
+        # иначе в results остаётся устаревшее место/медаль.
+        medal = {1: "gold", 2: "silver", 3: "bronze"}.get(place, "none")
+        result.place = place
+        result.medal = medal
+        result.points = PLACE_POINTS.get(place, 0)
+
+
+def _clear_place_awards(db: Session, competition_id: int) -> None:
+    """Отменяет ранее начисленные за турнир очки клубам (REASON_PLACE):
+    записи истории удаляются, аккумулятор club_rating.rating уменьшается
+    на их дельты, clubs.rating_points синхронизируется.
+
+    Нужно для безопасной ПОВТОРНОЙ финализации (статус турнира снова
+    перевели в completed): если места с прошлого раза изменились, старые
+    начисления с новым местом дали бы ВТОРОЙ ключ истории (описание
+    включает место) и двойные очки клубу. Пересборка «с нуля» делает
+    финализацию идемпотентной и самовосстанавливающейся."""
+    rows = (
+        db.query(ClubRatingHistory)
+        .filter(
+            ClubRatingHistory.tournament_id == competition_id,
+            ClubRatingHistory.reason == REASON_PLACE,
+        )
+        .all()
+    )
+    for row in rows:
+        rating_row = db.query(ClubRating).filter(ClubRating.club_id == row.club_id).first()
+        if rating_row is not None:
+            rating_row.rating = max(0, rating_row.rating - row.points)
+            _sync_club_points(db, row.club_id, rating_row.rating)
+        db.delete(row)
 
 
 def finalize_competition(db: Session, competition: Competition) -> dict:
@@ -454,6 +488,11 @@ def finalize_competition(db: Session, competition: Competition) -> dict:
     """
     if competition.status != "completed":
         return {"status": "skipped", "reason": "not completed"}
+
+    # Повторная финализация (статус снова -> completed): отменяем старые
+    # начисления за места, чтобы пересобрать их по актуальной расстановке,
+    # а не задвоить (см. _clear_place_awards).
+    _clear_place_awards(db, competition.id)
 
     categories = (
         db.query(Category).filter(Category.competition_id == competition.id).all()

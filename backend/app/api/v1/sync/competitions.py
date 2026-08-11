@@ -49,6 +49,23 @@ def create_competition(
     comp_date = parse_flexible_date(payload.date)
     phase = _compute_phase(comp_date)
 
+    # Идемпотентность создания: retry после потерянного ответа (таймаут,
+    # повтор из офлайн-очереди десктопа) не должен плодить второй турнир
+    # с тем же именем и датой — возвращаем уже существующий. Риск ложного
+    # срабатывания отсутствует: два разных турнира с одним именем и одной
+    # датой десктоп не создаёт, а на сайте они неотличимы.
+    existing = (
+        db.query(Competition)
+        .filter(Competition.name == payload.name, Competition.date == comp_date)
+        .first()
+    )
+    if existing is not None:
+        return {
+            "id": existing.id,
+            "matched_city": existing.location_city_id is not None,
+            "status": existing.status,
+        }
+
     competition = Competition(
         name=payload.name,
         date=comp_date,
@@ -76,6 +93,21 @@ def create_category(
     if competition is None:
         raise HTTPException(status_code=404, detail="Соревнование не найдено")
 
+    # Retry после потерянного ответа: категория с тем же именем+рукой уже
+    # создана — возвращаем её id, а не плодим дубль (дубль категории =
+    # дубли участников и матчей с чужими ссылками).
+    existing = (
+        db.query(Category)
+        .filter(
+            Category.competition_id == competition_id,
+            Category.name == payload.name,
+            Category.hand == payload.hand,
+        )
+        .first()
+    )
+    if existing is not None:
+        return {"id": existing.id, "status": "existing"}
+
     category = Category(
         competition_id=competition_id,
         name=payload.name,
@@ -97,6 +129,21 @@ def create_participant(
     competition = db.query(Competition).filter(Competition.id == competition_id).first()
     if competition is None:
         raise HTTPException(status_code=404, detail="Соревнование не найдено")
+
+    # Retry после потерянного ответа: тот же спортсмен в той же категории
+    # уже зарегистрирован — возвращаем его id (дубль участника раздвоил бы
+    # матчи и исказил расстановку мест: один человек в двух участниках).
+    existing = (
+        db.query(CompetitionParticipant)
+        .filter(
+            CompetitionParticipant.competition_id == competition_id,
+            CompetitionParticipant.athlete_id == payload.athlete_id,
+            CompetitionParticipant.category_id == payload.category_id,
+        )
+        .first()
+    )
+    if existing is not None:
+        return {"id": existing.id, "status": "existing"}
 
     participant = CompetitionParticipant(
         competition_id=competition_id,

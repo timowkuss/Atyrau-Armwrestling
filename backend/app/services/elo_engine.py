@@ -41,7 +41,17 @@ def _clamp(delta: int) -> int:
     return max(-MAX_DELTA, min(MAX_DELTA, delta))
 
 
-def _calculate_deltas(rating_winner: int, rating_loser: int) -> tuple[int, int]:
+def _calculate_deltas(
+    rating_winner: int, rating_loser: int, rng_seed: tuple
+) -> tuple[int, int]:
+    """Дельты Эло. Раньше random.randint давал НОВЫЕ случайные значения на
+    каждый вызов — повторный apply_match_result того же результата (retry
+    PATCH после потерянного ответа) сначала откатывал старые дельты, а
+    потом начислял новые, и Эло «дрейфовало» с каждым ретраем. Теперь RNG
+    сидируется по (id матча, спортсмены, рука, победитель): повтор того же
+    результата даёт ровно те же дельты -> повторный вызов = чистый ноль,
+    пересборка истории из матчей детерминирована."""
+    rng = random.Random(f"{rng_seed[0]}:{rng_seed[1]}:{rng_seed[2]}:{rng_seed[3]}:{rng_seed[4]}")
     diff = abs(rating_winner - rating_loser)
     higher_won = rating_winner > rating_loser
 
@@ -50,25 +60,25 @@ def _calculate_deltas(rating_winner: int, rating_loser: int) -> tuple[int, int]:
         base_loss = -15
     elif diff <= 299:
         if higher_won:
-            base_gain = random.randint(5, 8)
-            base_loss = -random.randint(5, 8)
+            base_gain = rng.randint(5, 8)
+            base_loss = -rng.randint(5, 8)
         else:
-            base_gain = random.randint(15, 20)
-            base_loss = -random.randint(15, 20)
+            base_gain = rng.randint(15, 20)
+            base_loss = -rng.randint(15, 20)
     elif diff <= 499:
         if higher_won:
-            base_gain = random.randint(3, 5)
-            base_loss = -random.randint(3, 5)
+            base_gain = rng.randint(3, 5)
+            base_loss = -rng.randint(3, 5)
         else:
-            base_gain = random.randint(25, 35)
-            base_loss = -random.randint(25, 35)
+            base_gain = rng.randint(25, 35)
+            base_loss = -rng.randint(25, 35)
     else:
         if higher_won:
-            base_gain = random.randint(1, 3)
-            base_loss = -random.randint(1, 3)
+            base_gain = rng.randint(1, 3)
+            base_loss = -rng.randint(1, 3)
         else:
-            base_gain = random.randint(35, 40)
-            base_loss = -random.randint(35, 40)
+            base_gain = rng.randint(35, 40)
+            base_loss = -rng.randint(35, 40)
 
     return base_gain, base_loss
 
@@ -121,7 +131,11 @@ def apply_match_result(db: Session, match: Match) -> None:
         winner_stats, loser_stats = stats2, stats1
         winner_rating, loser_rating = rating2, rating1
 
-    raw_win_delta, raw_loss_delta = _calculate_deltas(winner_rating, loser_rating)
+    raw_win_delta, raw_loss_delta = _calculate_deltas(
+        winner_rating,
+        loser_rating,
+        (match.id, p1.athlete_id, p2.athlete_id, match.hand, match.winner_id),
+    )
 
     loss_coeff = _high_rating_coeff(loser_rating)
     loser_raw = round(raw_loss_delta * loss_coeff)
