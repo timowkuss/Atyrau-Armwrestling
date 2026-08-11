@@ -85,6 +85,55 @@ function CareerHistory({
 
   const toggle = (id: number) => setOpen((v) => (v === id ? null : id))
 
+  const renderMatch = (m: AthleteMatchHistoryItem) => (
+    <div key={m.match_id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2">
+          {m.opponent_id && m.opponent_name ? (
+            <Link to={`/athletes/${m.opponent_id}`} className="font-medium text-bone transition-colors hover:text-brass">
+              {m.opponent_name}
+            </Link>
+          ) : (
+            <span className="text-steel-dim">—</span>
+          )}
+          {m.opponent_elo != null && (
+            <span className="font-mono text-xs text-steel-dim">рейтинг {m.opponent_elo}</span>
+          )}
+        </div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-xs text-steel-dim">
+          {m.category_name && <span>{m.category_name}</span>}
+          {m.hand && <span className="inline-flex items-center gap-1"><span className="h-1 w-1 rounded-full bg-steel-dim/40" />{m.hand}</span>}
+          {m.round_name && <span className="inline-flex items-center gap-1"><span className="h-1 w-1 rounded-full bg-steel-dim/40" />{m.round_name}</span>}
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        {m.is_winner === null ? (
+          <span className="font-mono text-xs text-steel-dim">—</span>
+        ) : (
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-xs font-medium ${
+              m.is_winner
+                ? 'border border-success/30 bg-success/10 text-success'
+                : 'border border-danger/30 bg-danger/10 text-danger'
+            }`}
+          >
+            {m.is_winner ? 'победа' : 'поражение'}
+          </span>
+        )}
+        {m.elo_delta != null && (
+          <span className={`w-12 text-right font-mono text-sm font-semibold ${
+            m.elo_delta > 0 ? 'text-brass' : m.elo_delta < 0 ? 'text-rust' : 'text-steel-dim'
+          }`}>
+            {m.elo_delta > 0 ? `+${m.elo_delta}` : m.elo_delta}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+
+  const deltaText = (d: number) => (d > 0 ? `+${d}` : `${d}`)
+  const deltaCls = (d: number) => (d > 0 ? 'text-brass' : d < 0 ? 'text-rust' : 'text-steel-dim')
+
   return (
     <section className="mt-14">
       <div className="mb-6 flex items-center gap-3">
@@ -93,7 +142,89 @@ function CareerHistory({
         <div className="h-px flex-1 bg-gradient-to-l from-rust/40 via-rust/10 to-transparent" />
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-steel-dim/15 bg-gradient-to-b from-petrol/30 to-ink-soft/50">
+      {/* Мобильная версия — карточки */}
+      <div className="space-y-3 sm:hidden">
+        {rows.map((r, i) => {
+          const ch = change(i)
+          const medals = medalCounts(r)
+          const isOpen = open === r.competition_id
+          const compMatches = matchGroups.get(r.competition_id)
+          return (
+            <div key={r.competition_id} className="overflow-hidden rounded-xl border border-steel-dim/15 bg-gradient-to-b from-petrol/30 to-ink-soft/50">
+              <button
+                type="button"
+                onClick={() => toggle(r.competition_id)}
+                aria-expanded={isOpen}
+                className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
+              >
+                <span className="min-w-0">
+                  <span className="block font-medium leading-snug text-bone">{r.competition_name}</span>
+                  {r.categories.length > 0 && (
+                    <span className="mt-0.5 block text-xs leading-snug text-steel">{r.categories.map((c) => c.name).join(' · ')}</span>
+                  )}
+                  <span className="mt-0.5 block font-mono text-xs text-steel-dim">{formatDate(r.date)}</span>
+                </span>
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 16 16"
+                  className={`flex-shrink-0 text-steel-dim transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}
+                >
+                  <path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              <div className="rivet-line" />
+              <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="min-w-0">
+                    <div className="text-eyebrow text-steel-dim">Место</div>
+                    <div className="truncate font-mono text-sm font-medium text-bone">
+                      {r.categories.map((c) => c.place ?? '—').join(' · ')}
+                    </div>
+                  </div>
+                  {medals.gold + medals.silver + medals.bronze > 0 && (
+                    <div className="flex flex-col gap-0.5">
+                      {medals.gold > 0 && <MedalBadge medal="gold" />}
+                      {medals.silver > 0 && <MedalBadge medal="silver" />}
+                      {medals.bronze > 0 && <MedalBadge medal="bronze" />}
+                    </div>
+                  )}
+                </div>
+                {ch ? (
+                  <div className="shrink-0 text-right">
+                    <div className="font-mono text-sm">
+                      <span className="text-steel">{ch.before}</span>
+                      <span className="mx-1 text-steel-dim">→</span>
+                      <span className="font-semibold text-bone">{ch.after}</span>
+                    </div>
+                    <div className={`font-mono text-xs font-semibold ${deltaCls(ch.delta)}`}>
+                      {deltaText(ch.delta)}
+                    </div>
+                  </div>
+                ) : (
+                  <span className="shrink-0 text-steel-dim">—</span>
+                )}
+              </div>
+              {isOpen && (
+                <div className="border-t border-steel-dim/10 px-4 py-3">
+                  <div className="mb-2 flex items-center gap-2 text-eyebrow text-steel-dim">
+                    <span className="h-1 w-1 rounded-full bg-brass/60" />
+                    Матчи турнира
+                  </div>
+                  {compMatches && compMatches.length > 0 ? (
+                    <div className="divide-y divide-steel-dim/10">{compMatches.map((m) => renderMatch(m))}</div>
+                  ) : (
+                    <EmptyState title="Матчей нет" />
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Десктопная версия — таблица */}
+      <div className="hidden overflow-hidden rounded-xl border border-steel-dim/15 bg-gradient-to-b from-petrol/30 to-ink-soft/50 sm:block">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-sm">
             <thead>
@@ -155,10 +286,8 @@ function CareerHistory({
                         <>
                           <td className="px-5 py-3.5 text-right font-mono text-sm text-steel">{ch.before}</td>
                           <td className="px-5 py-3.5 text-right font-mono text-sm font-semibold text-bone">{ch.after}</td>
-                          <td className={`px-5 py-3.5 text-right font-mono text-sm font-semibold ${
-                            ch.delta > 0 ? 'text-brass' : ch.delta < 0 ? 'text-rust' : 'text-steel-dim'
-                          }`}>
-                            {ch.delta > 0 ? `+${ch.delta}` : ch.delta}
+                          <td className={`px-5 py-3.5 text-right font-mono text-sm font-semibold ${deltaCls(ch.delta)}`}>
+                            {deltaText(ch.delta)}
                           </td>
                         </>
                       ) : (
@@ -173,53 +302,7 @@ function CareerHistory({
                             Матчи турнира
                           </div>
                           {compMatches && compMatches.length > 0 ? (
-                            <div className="divide-y divide-steel-dim/10">
-                              {compMatches.map((m) => (
-                                <div key={m.match_id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex flex-wrap items-center gap-x-2">
-                                      {m.opponent_id && m.opponent_name ? (
-                                        <Link to={`/athletes/${m.opponent_id}`} className="font-medium text-bone transition-colors hover:text-brass">
-                                          {m.opponent_name}
-                                        </Link>
-                                      ) : (
-                                        <span className="text-steel-dim">—</span>
-                                      )}
-                                      {m.opponent_elo != null && (
-                                        <span className="font-mono text-xs text-steel-dim">рейтинг {m.opponent_elo}</span>
-                                      )}
-                                    </div>
-                                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-xs text-steel-dim">
-                                      {m.category_name && <span>{m.category_name}</span>}
-                                      {m.hand && <span className="inline-flex items-center gap-1"><span className="h-1 w-1 rounded-full bg-steel-dim/40" />{m.hand}</span>}
-                                      {m.round_name && <span className="inline-flex items-center gap-1"><span className="h-1 w-1 rounded-full bg-steel-dim/40" />{m.round_name}</span>}
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-3">
-                                    {m.is_winner === null ? (
-                                      <span className="font-mono text-xs text-steel-dim">—</span>
-                                    ) : (
-                                      <span
-                                        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-xs font-medium ${
-                                          m.is_winner
-                                            ? 'border border-success/30 bg-success/10 text-success'
-                                            : 'border border-danger/30 bg-danger/10 text-danger'
-                                        }`}
-                                      >
-                                        {m.is_winner ? 'победа' : 'поражение'}
-                                      </span>
-                                    )}
-                                    {m.elo_delta != null && (
-                                      <span className={`w-12 text-right font-mono text-sm font-semibold ${
-                                        m.elo_delta > 0 ? 'text-brass' : m.elo_delta < 0 ? 'text-rust' : 'text-steel-dim'
-                                      }`}>
-                                        {m.elo_delta > 0 ? `+${m.elo_delta}` : m.elo_delta}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
+                            <div className="divide-y divide-steel-dim/10">{compMatches.map((m) => renderMatch(m))}</div>
                           ) : (
                             <EmptyState title="Матчей нет" />
                           )}
