@@ -24,6 +24,7 @@ from app.schemas.athletes import (
 from app.services.cloudinary_photos import delete_cloudinary_photo
 from app.services.club_rating import apply_athlete_removed
 from app.services.elo_engine import elo_combined
+from app.services.stats_engine import recompute_athlete_statistics
 
 router = APIRouter(prefix="/athletes", tags=["admin:athletes"])
 
@@ -381,5 +382,8 @@ def recalculate_athlete_statistics(
     stats.is_manual_override = False
     stats.overridden_by = None
     stats.overridden_at = None
+    db.flush()
+
+    recompute_athlete_statistics(db, athlete_id)
     db.commit()
     return {"status": "override_cleared"}

@@ -1,47 +1,35 @@
-"""Пересчёт агрегированной статистики спортсменов (athlete_statistics).
-
-Считается из фактических данных завершённых турниров:
-- total_competitions  — число завершённых турниров с участием;
-- total_wins/losses   — по сыгранным матчам (status=done, без bye), отдельно
-  по рукам (left/right);
-- win_rate            — wins / (wins + losses), 0 если матчей нет;
-- gold/silver/bronze  — число мест 1/2/3 в категориях завершённых турниров
-  (место пересчитывается из матчей через _category_standings, а не из
-  сохранённой таблицы results — она могла остаться от более ранней версии);
-
-Эло не трогаем: оно накапливается отдельно, apply_match_result() при каждом
-сыгранном матче. Спортсмены с is_manual_override=True пересчёту не
-подвергаются (ручные правки админа сохраняются).
-
-Вызывается после завершения турнира (finalize_competition) и при старте
-приложения — чтобы данные уже завершённых турниров починились автоматически.
-"""
+from __future__ import annotations
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.db.models.athletes import Athlete
-from app.db.models.categories import Category
 from app.db.models.competitions import Competition, CompetitionParticipant
 from app.db.models.elo_history import EloHistory
 from app.db.models.matches import Match
+from app.db.models.results import Result
 from app.db.models.statistics import AthleteStatistic
-from app.services.club_rating import _category_standings
-from app.services.elo_engine import elo_combined
+from app.services.elo_engine import _hand_field, elo_combined
+
+"""
+Второй кусок пайплайна "турнир доигран -> данные на сайте актуальны"
+(первый — app/services/results_engine.py, места 1-2-3). Модель
+AthleteStatistic уже давно описывает total_wins/total_losses/gold_count
+и т.д. и явно ссылается в докстринге на некий "stats_engine.py", который
+должен их пересчитывать — но такого файла в проекте не было, эти поля
+нигде не заполнялись за пределами seed_demo_data.py.
+
+Как и elo_engine.py, стата пересчитывается ЦЕЛИКОМ по имеющимся matches/
+results (а не инкрементально +1/-1) — так пересчёт идемпотентен и сам
+себя чинит при любых исправлениях результатов задним числом, вместо
+накопления рассинхрона. is_manual_override уважается точно так же, как
+в elo_engine.py: если админ вручную поправил статистику, автопересчёт
+эту карточку пропускает, пока override не снимут через
+POST /admin/athletes/{id}/statistics/recalculate.
+"""
 
 
-def _hand(hand: str) -> str | None:
-    h = (hand or "").strip().lower()
-    if h.startswith("лев"):
-        return "left"
-    if h.startswith("прав"):
-        return "right"
-    return None
-
-
-def recalculate_for(db: Session, athlete_id: int) -> bool:
-    """Пересчитывает статистику одного спортсмена. Возвращает True, если
-    данные были пересчитаны (False — ручной оверрайд или нет данных)."""
+def _get_or_create_stats(db: Session, athlete_id: int) -> AthleteStatistic:
     stats = (
         db.query(AthleteStatistic)
         .filter(AthleteStatistic.athlete_id == athlete_id)
@@ -50,39 +38,41 @@ def recalculate_for(db: Session, athlete_id: int) -> bool:
     if stats is None:
         stats = AthleteStatistic(athlete_id=athlete_id)
         db.add(stats)
-    if stats.is_manual_override:
-        return False
+        db.flush()
+    return stats
 
-    completed_ids = [
-        cid
-        for (cid,) in db.query(Competition.id)
-        .filter(Competition.status == "completed")
+
+def recompute_athlete_statistics(db: Session, athlete_id: int) -> AthleteStatistic | None:
+    """Пересчитывает статистику одного спортсмена с нуля. Возвращает
+    обновлённый AthleteStatistic, либо None, если пересчёт пропущен
+    (is_manual_override=True — карточка защищена от автопересчёта)."""
+    stats = _get_or_create_stats(db, athlete_id)
+    if stats.is_manual_override:
+        return None
+
+    participant_ids = [
+        pid for (pid,) in db.query(CompetitionParticipant.id)
+        .filter(CompetitionParticipant.athlete_id == athlete_id)
         .all()
     ]
-    if not completed_ids:
-        return False
 
-    participants = (
-        db.query(CompetitionParticipant)
-        .filter(
-            CompetitionParticipant.athlete_id == athlete_id,
-            CompetitionParticipant.competition_id.in_(completed_ids),
-        )
-        .all()
-    )
-    if not participants:
-        return False
+    if not participant_ids:
+        stats.total_competitions = 0
+        stats.total_wins = 0
+        stats.total_losses = 0
+        stats.win_rate = 0.0
+        stats.left_hand_wins = 0
+        stats.left_hand_losses = 0
+        stats.right_hand_wins = 0
+        stats.right_hand_losses = 0
+        stats.gold_count = 0
+        stats.silver_count = 0
+        stats.bronze_count = 0
+        return stats
 
-    participant_ids = [p.id for p in participants]
-    participant_set = set(participant_ids)
-
-    total_competitions = len({p.competition_id for p in participants})
-
-    # ── победы/поражения по матчам ──
     matches = (
         db.query(Match)
         .filter(
-            Match.competition_id.in_(completed_ids),
             Match.status == "done",
             Match.is_bye.is_(False),
             Match.winner_id.isnot(None),
@@ -92,39 +82,41 @@ def recalculate_for(db: Session, athlete_id: int) -> bool:
     )
 
     total_wins = total_losses = 0
-    lw = ll = rw = rl = 0
+    left_wins = left_losses = right_wins = right_losses = 0
+
     for m in matches:
-        hand = _hand(m.hand)
-        won = m.winner_id in participant_set
+        played = m.p1_id in participant_ids or m.p2_id in participant_ids
+        if not played:
+            continue
+        won = m.winner_id in participant_ids
+        field = _hand_field(m.hand)  # "elo_left" / "elo_right" / None
+
         if won:
             total_wins += 1
-            if hand == "left":
-                lw += 1
-            elif hand == "right":
-                rw += 1
         else:
             total_losses += 1
-            if hand == "left":
-                ll += 1
-            elif hand == "right":
-                rl += 1
 
-    # ── медали по местам в категориях завершённых турниров ──
-    standings_cache: dict[tuple[int, int], dict[int, int]] = {}
-    gold = silver = bronze = 0
-    for p in participants:
-        key = (p.competition_id, p.category_id)
-        if key not in standings_cache:
-            comp = db.get(Competition, p.competition_id)
-            cat = db.get(Category, p.category_id)
-            if comp is None or cat is None:
-                standings_cache[key] = {}
+        if field == "elo_left":
+            if won:
+                left_wins += 1
             else:
-                standings_cache[key] = {
-                    s["participant_id"]: s["place"]
-                    for s in _category_standings(db, comp, cat)
-                }
-        place = standings_cache[key].get(p.id)
+                left_losses += 1
+        elif field == "elo_right":
+            if won:
+                right_wins += 1
+            else:
+                right_losses += 1
+        # неопознанная рука (пустая/непонятная строка) — считаем только
+        # в общий total, в разбивку по руке не попадает (см. elo_engine.py,
+        # там та же логика: apply_match_result просто выходит без учёта Эло)
+
+    gold = silver = bronze = 0
+    results = (
+        db.query(Result.place)
+        .filter(Result.competition_participant_id.in_(participant_ids))
+        .all()
+    )
+    for (place,) in results:
         if place == 1:
             gold += 1
         elif place == 2:
@@ -132,20 +124,30 @@ def recalculate_for(db: Session, athlete_id: int) -> bool:
         elif place == 3:
             bronze += 1
 
-    win_rate = round(total_wins / (total_wins + total_losses), 3) if (total_wins + total_losses) else 0.0
+    total_competitions = (
+        db.query(CompetitionParticipant.competition_id)
+        .filter(CompetitionParticipant.athlete_id == athlete_id)
+        .distinct()
+        .count()
+    )
 
     stats.total_competitions = total_competitions
     stats.total_wins = total_wins
     stats.total_losses = total_losses
-    stats.win_rate = win_rate
-    stats.left_hand_wins = lw
-    stats.left_hand_losses = ll
-    stats.right_hand_wins = rw
-    stats.right_hand_losses = rl
+    stats.win_rate = (
+        round(total_wins / (total_wins + total_losses), 4)
+        if (total_wins + total_losses) > 0
+        else 0.0
+    )
+    stats.left_hand_wins = left_wins
+    stats.left_hand_losses = left_losses
+    stats.right_hand_wins = right_wins
+    stats.right_hand_losses = right_losses
     stats.gold_count = gold
     stats.silver_count = silver
     stats.bronze_count = bronze
-    return True
+
+    return stats
 
 
 def recalculate_all(db: Session) -> int:
@@ -154,7 +156,7 @@ def recalculate_all(db: Session) -> int:
     athlete_ids = [aid for (aid,) in db.query(Athlete.id).all()]
     count = 0
     for aid in athlete_ids:
-        if recalculate_for(db, aid):
+        if recompute_athlete_statistics(db, aid) is not None:
             count += 1
     db.commit()
     return count
@@ -170,8 +172,7 @@ def record_elo_snapshots(db: Session, competition: Competition) -> int:
     недостающие снимки создаются при старте приложения с текущими
     значениями.
 
-    Возвращает число созданных записей. Коммитит в конце.
-    """
+    Возвращает число созданных записей. Коммитит в конце."""
     if competition.status != "completed":
         return 0
 
@@ -221,3 +222,44 @@ def record_elo_snapshots(db: Session, competition: Competition) -> int:
             created += 1
     db.commit()
     return created
+
+
+def recompute_match_participants(db: Session, match: Match) -> None:
+    """Пересчитывает статистику двух участников конкретного матча —
+    вызывается после каждого apply_match_result, тем же местом, что и
+    сам Эло (см. app/api/v1/sync/matches.py)."""
+    for pid in (match.p1_id, match.p2_id):
+        if pid is None:
+            continue
+        participant = db.get(CompetitionParticipant, pid)
+        if participant is not None:
+            recompute_athlete_statistics(db, participant.athlete_id)
+
+
+def recompute_category_athletes(db: Session, category_id: int, hand: str) -> None:
+    """Пересчитывает статистику ВСЕХ участников категории+руки — нужно
+    после results_engine.finalize_category_results, потому что финал
+    может изменить медаль сразу нескольким людям (например, 3-е место
+    в нижней сетке), а не только двум игрокам последнего матча."""
+    matches = (
+        db.query(Match)
+        .filter(Match.category_id == category_id, Match.hand == hand)
+        .all()
+    )
+    participant_ids = set()
+    for m in matches:
+        if m.p1_id:
+            participant_ids.add(m.p1_id)
+        if m.p2_id:
+            participant_ids.add(m.p2_id)
+    if not participant_ids:
+        return
+
+    athlete_ids = {
+        athlete_id
+        for (athlete_id,) in db.query(CompetitionParticipant.athlete_id)
+        .filter(CompetitionParticipant.id.in_(participant_ids))
+        .all()
+    }
+    for athlete_id in athlete_ids:
+        recompute_athlete_statistics(db, athlete_id)

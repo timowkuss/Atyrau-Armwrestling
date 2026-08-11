@@ -6,6 +6,7 @@ from app.db.models.matches import Match
 from app.db.session import get_db
 from app.schemas.sync import MatchSyncCreate, MatchSyncUpdate
 from app.services.elo_engine import apply_match_result
+from app.services.results_engine import finalize_category_results
 
 router = APIRouter(prefix="/matches", tags=["sync:matches"])
 
@@ -25,6 +26,9 @@ def create_match(
     # появился в сетке), но если это BYE-проброс с сразу известным
     # победителем — apply_match_result сам отфильтрует BYE и выйдет.
     apply_match_result(db, match)
+    # Если этим матчем сетка категории+руки внезапно уже доигралась
+    # (крайний случай — bye до самого финала), посчитаем места сразу же.
+    finalize_category_results(db, match.category_id, match.hand)
     db.commit()
     db.refresh(match)
     return {"id": match.id}
@@ -58,6 +62,11 @@ def update_match(
     # Здесь приходит победитель по ходу турнира (или его исправление) —
     # это и есть точка пересчёта рейтинга, см. app/services/elo_engine.py.
     apply_match_result(db, match)
+    # Та же точка — самое надёжное место пересчитать итоговые места
+    # категории: сработает и когда доигран обычный финал, и когда
+    # сыграна переигровка гранд-финала, и при исправлении результата
+    # задним числом (пересчёт идемпотентный, см. results_engine.py).
+    finalize_category_results(db, match.category_id, match.hand)
 
     db.commit()
     return {"status": "ok"}

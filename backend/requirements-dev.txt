@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# только для локального запуска тестов (backend/tests) — в проде не нужен
+pytest>=8.0
