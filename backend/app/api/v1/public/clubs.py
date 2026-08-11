@@ -28,17 +28,30 @@ def list_clubs(
     page_size: int = 20,
     db: Session = Depends(get_db),
 ):
+    # Счётчики считаются коррелированными подзапросами, а не джойнами:
+    # последовательные outerjoin(Athlete)+outerjoin(Coach) дают декартово
+    # произведение, и оба count() превращаются в athletes×coaches
+    # (например, 14×14=196 вместо честных 14 и 14).
+    athlete_count_sq = (
+        db.query(func.count(Athlete.id))
+        .filter(Athlete.club_id == Club.id, Athlete.is_hidden.is_(False))
+        .correlate(Club)
+        .scalar_subquery()
+    )
+    coach_count_sq = (
+        db.query(func.count(Coach.id))
+        .filter(Coach.club_id == Club.id, Coach.is_hidden.is_(False))
+        .correlate(Club)
+        .scalar_subquery()
+    )
     query = (
         db.query(
             Club,
             City.name.label("city_name"),
-            func.count(Athlete.id).label("athletes_count"),
-            func.count(Coach.id).label("coaches_count"),
+            athlete_count_sq.label("athletes_count"),
+            coach_count_sq.label("coaches_count"),
         )
         .outerjoin(City, Club.city_id == City.id)
-        .outerjoin(Athlete, (Athlete.club_id == Club.id) & (Athlete.is_hidden.is_(False)))
-        .outerjoin(Coach, Coach.club_id == Club.id)
-        .group_by(Club.id, City.name)
     )
     if city_id is not None:
         query = query.filter(Club.city_id == city_id)
