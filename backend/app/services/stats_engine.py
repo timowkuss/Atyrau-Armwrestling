@@ -162,6 +162,32 @@ def recalculate_all(db: Session) -> int:
     return count
 
 
+def recalculate_competition_participants(
+    db: Session, competition: Competition
+) -> int:
+    """Пересчитывает статистику только участников конкретного турнира
+    (уважает is_manual_override). Возвращает число пересчитанных.
+
+    Оптимизация для finalize_competition: при завершении турнира меняются
+    данные только его участников, поэтому пересчёт всей таблицы athletes
+    (recalculate_all) при 10k-100k спортсменов даёт десятки-сотни тысяч
+    лишних запросов. Здесь фильтр по участникам турнира даёт тот же
+    результат с затратами, пропорциональными размеру турнира."""
+    athlete_ids = [
+        aid
+        for (aid,) in db.query(CompetitionParticipant.athlete_id)
+        .filter(CompetitionParticipant.competition_id == competition.id)
+        .distinct()
+        .all()
+    ]
+    count = 0
+    for aid in athlete_ids:
+        if recompute_athlete_statistics(db, aid) is not None:
+            count += 1
+    db.commit()
+    return count
+
+
 def record_elo_snapshots(db: Session, competition: Competition) -> int:
     """Фиксирует снимок elo спортсменов после завершённого турнира — по
     левой руке, правой и суммарному рейтингу (обе руки).

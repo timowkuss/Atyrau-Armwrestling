@@ -26,7 +26,7 @@ import calendar
 from datetime import date, datetime, timezone
 
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.db.models.athletes import Athlete
 from app.db.models.categories import Category
@@ -498,9 +498,15 @@ def finalize_competition(db: Session, competition: Competition) -> dict:
 
     # Пересчитываем агрегированную статистику спортсменов из фактических
     # матчей и мест завершённого турнира и фиксируем снимки elo-истории.
-    from app.services.stats_engine import recalculate_all, record_elo_snapshots
+    # Пересчитываются только участники этого турнира (не вся таблица
+    # athletes — при 10k+ спортсменов полный пересчёт = десятки тысяч
+    # лишних запросов; статистика остальных от этого турнира не меняется).
+    from app.services.stats_engine import (
+        recalculate_competition_participants,
+        record_elo_snapshots,
+    )
 
-    stats_count = recalculate_all(db)
+    stats_count = recalculate_competition_participants(db, competition)
     elo_records = record_elo_snapshots(db, competition)
     return {
         "status": "ok",
@@ -585,8 +591,15 @@ def get_club_rating(db: Session, club_id: int) -> int:
 
 
 def get_club_rating_history(db: Session, club_id: int) -> list[ClubRatingHistory]:
+    # joinedload на athlete/tournament: убирает N+1 в эндпоинте
+    # GET /clubs/{id}/rating, где для каждого элемента истории отдельно
+    # тянулись оба связанных объекта (2+2×len(history) запросов).
     return (
         db.query(ClubRatingHistory)
+        .options(
+            joinedload(ClubRatingHistory.athlete),
+            joinedload(ClubRatingHistory.tournament),
+        )
         .filter(ClubRatingHistory.club_id == club_id)
         .order_by(ClubRatingHistory.created_at.desc(), ClubRatingHistory.id.desc())
         .all()

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class _StrictModel(BaseModel):
@@ -123,6 +123,16 @@ class MatchSyncCreate(_StrictModel):
     is_bye: bool = False
     status: str = "pending"
     table_number: int | None = None
+
+
+class MatchSyncBatchCreate(_StrictModel):
+    """Пакетное создание матчей (см. POST /sync/matches/batch).
+
+    Один HTTP-запрос вместо тысячи: при синхронизации сетки турнира из
+    десктопа каждый матч раньше уходил отдельным POST (4000-6000 запросов
+    на турнир), что давило и сеть, и пул соединений, и очередь БД."""
+
+    matches: list[MatchSyncCreate] = Field(default_factory=list)
 
 
 class MatchSyncUpdate(_StrictModel):

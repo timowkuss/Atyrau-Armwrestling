@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.api.v1.deps import require_desktop_sync
 from app.db.models.matches import Match
 from app.db.session import get_db
-from app.schemas.sync import MatchSyncCreate, MatchSyncUpdate
+from app.schemas.sync import MatchSyncBatchCreate, MatchSyncCreate, MatchSyncUpdate
 from app.services.elo_engine import apply_match_result
 from app.services.results_engine import finalize_category_results
 
@@ -32,6 +32,38 @@ def create_match(
     db.commit()
     db.refresh(match)
     return {"id": match.id}
+
+
+@router.post("/batch", status_code=201)
+def create_matches_batch(
+    payload: MatchSyncBatchCreate,
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_desktop_sync),
+):
+    """Пакетное создание матчей сетки одним запросом (десктоп при
+    первичной синхронизации турнира: 4000-6000 отдельных POST → 1).
+
+    Семантика идентична одиночному create_match: после каждого матча
+    применяется elo (apply_match_result сам отфильтрует BYE) и по
+    каждой затронутой категории+руке пересчитываются итоговые места.
+    Разница лишь в том, что коммит — один на весь пакет."""
+    created: list[Match] = []
+    affected: set[tuple[int, str]] = set()
+    for item in payload.matches:
+        match = Match(
+            competition_id=_competition_id_of(db, item), **item.model_dump()
+        )
+        db.add(match)
+        db.flush()
+        created.append(match)
+        apply_match_result(db, match)
+        affected.add((match.category_id, match.hand))
+
+    for category_id, hand in affected:
+        finalize_category_results(db, category_id, hand)
+
+    db.commit()
+    return {"ids": [m.id for m in created]}
 
 
 def _competition_id_of(db: Session, payload: MatchSyncCreate) -> int:

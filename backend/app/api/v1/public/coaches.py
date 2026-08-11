@@ -9,7 +9,7 @@ from app.db.models.geo import City
 from app.db.session import get_db
 from app.schemas.coaches import CoachDetailOut, CoachListOut
 from app.schemas.common import Page
-from app.services.coach_rating import calculate_coach_rating
+from app.services.coach_rating import calculate_coach_ratings_map
 
 router = APIRouter(prefix="/coaches", tags=["public:coaches"])
 
@@ -49,6 +49,9 @@ def list_coaches(
         .limit(page_size)
         .all()
     )
+    # Рейтинги всех тренеров страницы одним пакетным запросом вместо
+    # 3×page_size отдельных (см. calculate_coach_ratings_map).
+    ratings = calculate_coach_ratings_map(db, [c.id for c, _, _, _ in rows])
     items = [
         CoachListOut(
             id=coach.id,
@@ -60,7 +63,7 @@ def list_coaches(
             qualification=coach.qualification,
             birth_date=coach.birth_date,
             athletes_count=athletes_count,
-            rating=calculate_coach_rating(db, coach.id)["rating"],
+            rating=ratings[coach.id]["rating"],
         )
         for coach, club_name, city_name, athletes_count in rows
     ]

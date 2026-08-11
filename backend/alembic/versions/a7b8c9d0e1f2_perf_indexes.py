@@ -1,7 +1,7 @@
 """performance indexes
 
 Revision ID: a7b8c9d0e1f2
-Revises: c6f7a8b9d1e2
+Revises: f1a2b3c4d5e6
 Create Date: 2026-08-11
 
 Модель app/db/models/matches.py объявляет
@@ -16,7 +16,7 @@ __table_args__, но ни одна из существующих миграци�
 from alembic import op
 
 revision = "a7b8c9d0e1f2"
-down_revision = "c6f7a8b9d1e2"
+down_revision = "f1a2b3c4d5e6"
 branch_labels = None
 depends_on = None
 

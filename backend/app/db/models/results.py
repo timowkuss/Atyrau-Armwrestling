@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import CheckConstraint, ForeignKey, Integer, String
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -15,6 +15,7 @@ class Result(Base):
         CheckConstraint(
             "medal in ('gold','silver','bronze','none')", name="ck_results_medal"
         ),
+        Index("idx_results_competition_category", "competition_id", "category_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

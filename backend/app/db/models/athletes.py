@@ -6,6 +6,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     String,
     Text,
     func,
@@ -31,6 +32,9 @@ class Athlete(Base):
         CheckConstraint(
             "gender is null or gender in ('male','female')", name="ck_athletes_gender"
         ),
+        Index("idx_athletes_club_id", "club_id"),
+        Index("idx_athletes_coach_id", "coach_id"),
+        Index("idx_athletes_updated_at", "updated_at"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
