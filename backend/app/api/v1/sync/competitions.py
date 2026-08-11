@@ -3,7 +3,7 @@ from app.api.v1.sync._common import parse_flexible_date
 
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.v1.deps import require_desktop_sync
@@ -167,7 +167,7 @@ def publish_competition(
 class DvoeborieOverrideItem(BaseModel):
     category_id: int
     participant_id: int
-    manual_rank: int
+    manual_rank: int = Field(ge=1, le=1000000)
 
 
 class DvoeborieOverridesSync(BaseModel):

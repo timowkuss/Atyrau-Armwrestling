@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -37,8 +37,8 @@ def _release_students(db: Session, coach_id: int) -> None:
 
 @router.get("", response_model=Page[CoachAdminListOut])
 def list_coaches_admin(
-    page: int = 1,
-    page_size: int = 200,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(200, ge=1, le=500),
     db: Session = Depends(get_db),
     _: User = Depends(require_role(*WRITE_ROLES, "editor")),
 ):

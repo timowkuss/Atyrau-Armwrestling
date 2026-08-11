@@ -2,6 +2,8 @@ from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+import secrets
+
 from app.core.config import settings
 from app.core.security import decode_access_token
 from app.db.models.users import User
@@ -63,7 +65,12 @@ def require_desktop_sync(x_sync_token: str | None = Header(default=None)):
     service-token в заголовке X-Sync-Token, НЕ пользовательский JWT
     (см. ARCHITECTURE.md §4.3: desktop_sync шире прав любого сайтового
     админа, но выдаётся только доверенному клиенту-организатору)."""
-    if not x_sync_token or x_sync_token != settings.DESKTOP_SYNC_TOKEN:
+    # secrets.compare_digest — сравнение за константное время: обычный
+    # оператор != при утечке частичного равенства даёт timing-канал для
+    # перебора токена по символам.
+    if not x_sync_token or not secrets.compare_digest(
+        x_sync_token, settings.DESKTOP_SYNC_TOKEN
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Неверный или отсутствующий X-Sync-Token",

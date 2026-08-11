@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api.v1.router import api_router
+from app.core.config import settings
 from app.db.session import SessionLocal
 
 
@@ -48,17 +49,21 @@ app = FastAPI(
         "service-token)."
     ),
     lifespan=lifespan,
+    # Swagger в проде не отдаём: он раскрывает полную карту эндпоинтов
+    # потенциальному атакующему (в dev остаётся).
+    docs_url=None if settings.ENVIRONMENT == "production" else "/docs",
+    redoc_url=None if settings.ENVIRONMENT == "production" else "/redoc",
 )
 
-# CORS — допускаем только нужные методы и заголовки
+# CORS — только точные домены фронтенда, без regex: allow_origin_regex
+# с жадным .* позволял любому задеплоить поддомен atyrau-armwrestling-*.
+#vercel.app и получать отражённый Origin с credentials.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-    "https://atyrau-armwrestling.vercel.app",
-    "http://localhost:5173",
+        "https://atyrau-armwrestling.vercel.app",
+        "http://localhost:5173",
     ],
-    allow_origin_regex=r"https://atyrau-armwrestling.*\.vercel\.app",
-    allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Sync-Token"],
 )
@@ -70,6 +75,19 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        # Referrer-Policy: API не отдаёт HTML, но заголовок защищает от
+        # утечки токена в Referer при внешних переходах.
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        # CSP: API отвечает JSON'ом, поэтому default-src 'none'. Swagger UI
+        # (self-hosted в /docs) грузит скрипты/стили со своего CDN —
+        # разрешаем только ему и только с 'unsafe-inline', без 'unsafe-eval'.
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'none'; "
+            "frame-ancestors 'none'; "
+            "script-src 'self' 'unsafe-inline' cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' cdn.jsdelivr.net; "
+            "img-src 'self' data:; font-src 'self'"
+        )
         return response
 
 

@@ -41,11 +41,23 @@ def _extract_public_id(url: str) -> str | None:
     """Достаёт public_id из обычной Cloudinary secure_url вида
     https://res.cloudinary.com/<cloud>/image/upload/v169.../coaches/photo2.jpg
     -> "coaches/photo2". Рассчитан на простую загрузку без трансформаций
-    в URL (именно так грузит desktop-приложение — см. cloudinary_client.py)."""
+    в URL (именно так грузит desktop-приложение — см. cloudinary_client.py).
+
+    Удаляется только файл из собственного аккаунта: URL другого
+    cloud name (чужой аккаунт/тестовое окружение) не распознаётся —
+    десктоп не должен иметь возможности удалять что-либо в Cloudinary,
+    кроме своих же загруженных фото."""
     if not url or "res.cloudinary.com" not in url:
         return None
     try:
-        after_upload = url.split("/upload/", 1)[1]
+        after_cloud = url.split("res.cloudinary.com/", 1)[1]
+    except IndexError:
+        return None
+    cloud_name, _, rest = after_cloud.partition("/")
+    if not rest or (cloud_name != _CLOUD_NAME and _CLOUD_NAME):
+        return None
+    try:
+        after_upload = rest.split("/upload/", 1)[1]
     except IndexError:
         return None
     parts = after_upload.split("/")

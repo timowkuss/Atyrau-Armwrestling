@@ -13,7 +13,7 @@ import os
 import unittest
 from datetime import date
 
-os.environ.setdefault("JWT_SECRET", "test-secret")
+os.environ.setdefault("JWT_SECRET", "test-secret-0123456789abcdef0123456789abcdef")
 os.environ.setdefault("DESKTOP_SYNC_TOKEN", "test-sync-token")
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db.models.news import News
@@ -10,7 +10,11 @@ router = APIRouter(prefix="/news", tags=["public:news"])
 
 
 @router.get("", response_model=Page[NewsListOut])
-def list_news(page: int = 1, page_size: int = 20, db: Session = Depends(get_db)):
+def list_news(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
     query = db.query(News).filter(News.is_published.is_(True)).order_by(News.published_at.desc())
     total = query.count()
     items = query.offset((page - 1) * page_size).limit(page_size).all()

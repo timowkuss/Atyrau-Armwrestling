@@ -1,4 +1,6 @@
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class _StrictModel(BaseModel):
@@ -110,19 +112,32 @@ class CompetitionParticipantSyncCreate(_StrictModel):
 
 class MatchSyncCreate(_StrictModel):
     category_id: int  # центральный id
-    hand: str = "Правая"
+    hand: Literal["Правая", "Левая", "Обе"] = "Правая"
     round_name: str | None = None
-    bracket: str = "winners"
-    match_order: int = 0
-    stage: int = 0
+    bracket: Literal["winners", "losers", "final"] = "winners"
+    match_order: int = Field(default=0, ge=0)
+    stage: int = Field(default=0, ge=0)
     p1_id: int | None = None  # центральный id competition_participants
     p2_id: int | None = None
     winner_id: int | None = None
-    p1_losses: int = 0
-    p2_losses: int = 0
+    p1_losses: int = Field(default=0, ge=0, le=2)
+    p2_losses: int = Field(default=0, ge=0, le=2)
     is_bye: bool = False
-    status: str = "pending"
-    table_number: int | None = None
+    status: Literal["pending", "waiting", "done", "bye"] = "pending"
+    table_number: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _winner_is_participant(self):
+        # Победитель обязан быть одним из участников матча: клиент не может
+        # «назначить» победителем произвольного участника чужой категории.
+        if self.winner_id is not None and self.winner_id not in (
+            self.p1_id,
+            self.p2_id,
+        ):
+            raise ValueError(
+                "winner_id должен совпадать с p1_id или p2_id"
+            )
+        return self
 
 
 class MatchSyncBatchCreate(_StrictModel):
@@ -130,19 +145,37 @@ class MatchSyncBatchCreate(_StrictModel):
 
     Один HTTP-запрос вместо тысячи: при синхронизации сетки турнира из
     десктопа каждый матч раньше уходил отдельным POST (4000-6000 запросов
-    на турнир), что давило и сеть, и пул соединений, и очередь БД."""
+    на турнир), что давило и сеть, и пул соединений, и очередь БД.
+    Лимит размера пакета защищает от DoS гигантским телом запроса."""
 
-    matches: list[MatchSyncCreate] = Field(default_factory=list)
+    matches: list[MatchSyncCreate] = Field(default_factory=list, max_length=10000)
 
 
 class MatchSyncUpdate(_StrictModel):
     p1_id: int | None = None
     p2_id: int | None = None
     winner_id: int | None = None
-    p1_losses: int | None = None
-    p2_losses: int | None = None
-    status: str | None = None
-    table_number: int | None = None
+    p1_losses: int | None = Field(default=None, ge=0, le=2)
+    p2_losses: int | None = Field(default=None, ge=0, le=2)
+    status: Literal["pending", "waiting", "done", "bye"] | None = None
+    table_number: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _winner_is_participant(self):
+        # winner_id из update обязан быть p1_id или p2_id (на момент
+        # обновления), если оба известны; если один из участников ещё
+        # не определён — победа невозможна, winner_id должен быть None.
+        if self.winner_id is not None:
+            if self.p1_id is None and self.p2_id is None:
+                raise ValueError(
+                    "winner_id нельзя задать без участников матча"
+                )
+            if self.p1_id is not None and self.p2_id is not None:
+                if self.winner_id not in (self.p1_id, self.p2_id):
+                    raise ValueError(
+                        "winner_id должен совпадать с p1_id или p2_id"
+                    )
+        return self
 
 
 class AthleteChangeItem(BaseModel):

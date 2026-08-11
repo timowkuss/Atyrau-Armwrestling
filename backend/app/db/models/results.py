@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -14,6 +14,17 @@ class Result(Base):
     __table_args__ = (
         CheckConstraint(
             "medal in ('gold','silver','bronze','none')", name="ck_results_medal"
+        ),
+        CheckConstraint(
+            "place IS NULL OR place >= 0", name="ck_results_place_positive"
+        ),
+        # Один участник — одно место в категории: дубль мог бы появиться
+        # при повторной синхронизации/пересчёте результатов.
+        UniqueConstraint(
+            "competition_id",
+            "category_id",
+            "competition_participant_id",
+            name="uq_results_participant_category",
         ),
         Index("idx_results_competition_category", "competition_id", "category_id"),
     )

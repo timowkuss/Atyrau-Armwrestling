@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, extract, func, or_
 from sqlalchemy.orm import Session, joinedload
 
@@ -41,8 +41,8 @@ def list_athletes(
     weight_category_id: int | None = None,
     rank: str | None = None,
     gender: str | None = None,
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = (
@@ -241,6 +241,7 @@ def get_athlete_history(athlete_id: int, db: Session = Depends(get_db)):
     итогах турнира), а не читаются из таблицы results — она может остаться
     устаревшей после досыгранных позже матчей.
     """
+    _ensure_visible_athlete(db, athlete_id)
     participations = (
         db.query(CompetitionParticipant, Competition, Category)
         .join(Competition, CompetitionParticipant.competition_id == Competition.id)
@@ -285,8 +286,7 @@ def get_athlete_history(athlete_id: int, db: Session = Depends(get_db)):
 def get_athlete_elo_history(athlete_id: int, db: Session = Depends(get_db)):
     """История рейтинга Эло спортсмена: снимки после завершённых турниров
     по левой руке, правой и суммарному рейтингу (обе руки)."""
-    if db.get(Athlete, athlete_id) is None:
-        raise HTTPException(status_code=404, detail="Спортсмен не найден")
+    _ensure_visible_athlete(db, athlete_id)
 
     rows = (
         db.query(EloHistory, Competition)
@@ -310,6 +310,7 @@ def get_athlete_elo_history(athlete_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{athlete_id}/matches", response_model=list[AthleteMatchHistoryItem])
 def get_athlete_matches(athlete_id: int, db: Session = Depends(get_db)):
+    _ensure_visible_athlete(db, athlete_id)
     P1 = CompetitionParticipant
     matches = (
         db.query(Match, Competition, Category)
@@ -407,3 +408,17 @@ def get_athlete_matches(athlete_id: int, db: Session = Depends(get_db)):
             )
         )
     return items
+
+
+def _ensure_visible_athlete(db: Session, athlete_id: int) -> None:
+    """Единая проверка для публичных роутов {athlete_id}: скрытые спортсмены
+    (is_hidden) не должны быть читаемы по прямой ссылке/перебору id — иначе
+    через /history, /elo-history, /matches раскрывается существование и
+    рейтинг скрытых лиц, хотя карточка /{id} возвращает 404."""
+    exists = (
+        db.query(Athlete.id)
+        .filter(Athlete.id == athlete_id, Athlete.is_hidden.is_(False))
+        .first()
+    )
+    if exists is None:
+        raise HTTPException(status_code=404, detail="Спортсмен не найден")

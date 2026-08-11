@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
@@ -29,8 +29,8 @@ router = APIRouter(prefix="/competitions", tags=["public:competitions"])
 def list_competitions(
     year: int | None = None,
     status: str = "",
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = (
@@ -75,11 +75,24 @@ def list_competitions(
     return Page(items=items, total=total, page=page, page_size=page_size)
 
 
-@router.get("/{competition_id}", response_model=CompetitionDetailOut)
-def get_competition(competition_id: int, db: Session = Depends(get_db)):
-    competition = db.query(Competition).filter(Competition.id == competition_id).first()
+def _get_public_competition(db: Session, competition_id: int) -> Competition:
+    """Черновики (draft) не публикуются: по прямой ссылке/перебору id
+    черновой турнир не должен раскрывать сетку, участников и результаты.
+    Поэтому все публичные роуты с {competition_id} возвращают 404 и для
+    несуществующего, и для чернового турнира."""
+    competition = (
+        db.query(Competition)
+        .filter(Competition.id == competition_id, Competition.status != "draft")
+        .first()
+    )
     if competition is None:
         raise HTTPException(status_code=404, detail="Соревнование не найдено")
+    return competition
+
+
+@router.get("/{competition_id}", response_model=CompetitionDetailOut)
+def get_competition(competition_id: int, db: Session = Depends(get_db)):
+    competition = _get_public_competition(db, competition_id)
 
     city_name = (
         db.get(City, competition.location_city_id).name
@@ -122,6 +135,7 @@ def get_competition_results(competition_id: int, db: Session = Depends(get_db)):
     итог на сайте расходился с фактической сеткой."""
     from app.services.club_rating import _category_standings
 
+    _get_public_competition(db, competition_id)
     competition = db.get(Competition, competition_id)
     if competition is None:
         return []
@@ -169,6 +183,8 @@ def get_competition_hand_results(competition_id: int, db: Session = Depends(get_
     Считается на лету из матчей через _hand_standings. Несыгранные руки
     (нет матчей со статусом done) в выдаче отсутствуют."""
     from app.services.club_rating import _hand_standings
+
+    _get_public_competition(db, competition_id)
 
     categories = db.query(Category).filter(Category.competition_id == competition_id).all()
     if not categories:
@@ -223,6 +239,7 @@ def get_competition_hand_results(competition_id: int, db: Session = Depends(get_
 
 @router.get("/{competition_id}/bracket", response_model=list[BracketMatchOut])
 def get_competition_bracket(competition_id: int, db: Session = Depends(get_db)):
+    _get_public_competition(db, competition_id)
     matches = (
         db.query(Match, Category)
         .join(Category, Match.category_id == Category.id)
@@ -308,6 +325,8 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
     выдачу не попадают.
     """
     UNKNOWN = "Неизвестно"
+
+    _get_public_competition(db, competition_id)
 
     # -------------------- 1. Определяем систему: DE или SE --------------------
     has_loser_bracket = (
@@ -613,6 +632,8 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
 def get_competition_participants(competition_id: int, db: Session = Depends(get_db)):
     """Список участников соревнования, сгруппированный по категориям."""
     from pydantic import BaseModel
+
+    _get_public_competition(db, competition_id)
 
     class ParticipantOut(BaseModel):
         athlete_id: int

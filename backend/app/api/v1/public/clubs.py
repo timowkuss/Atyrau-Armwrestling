@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -24,8 +24,8 @@ router = APIRouter(prefix="/clubs", tags=["public:clubs"])
 def list_clubs(
     name: str | None = None,
     city_id: int | None = None,
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     # Счётчики считаются коррелированными подзапросами, а не джойнами:
