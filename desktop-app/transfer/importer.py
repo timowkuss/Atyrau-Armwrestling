@@ -127,7 +127,9 @@ def validate_archive(payload, metadata):
             if winner is None:
                 ghost = m.get("p1_id") is None and m.get("p2_id") is None \
                     and m.get("is_bye")
-                if not ghost:
+                # Переигровка гранд-финала помечается движком 'bye' без
+                # победителя, когда чемпион победил без переигровки.
+                if not ghost and m.get("bracket") != "final":
                     raise ImportValidationError(
                         f"Матч #{m['id']} завершён без победителя")
             else:

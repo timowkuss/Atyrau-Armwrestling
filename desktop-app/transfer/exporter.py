@@ -42,7 +42,8 @@ def validate_competition_integrity(conn, tid: int) -> list:
                 f"#{p['category_id']}")
 
     for m in conn.execute(
-            "SELECT id, category_id, p1_id, p2_id, winner_id, status, is_bye "
+            "SELECT id, category_id, p1_id, p2_id, winner_id, status, is_bye, "
+            "bracket "
             "FROM matches WHERE tournament_id=?", (tid,)):
         if m["category_id"] not in categories:
             problems.append(
@@ -66,7 +67,7 @@ def validate_competition_integrity(conn, tid: int) -> list:
                 f"Матч #{m['id']} ещё не завершён, но указан победитель")
         if m["status"] in ("done", "bye") and m["winner_id"] is None:
             ghost = m["p1_id"] is None and m["p2_id"] is None and m["is_bye"]
-            if not ghost:
+            if not ghost and m["bracket"] != "final":
                 problems.append(f"Матч #{m['id']} завершён без победителя")
         if m["winner_id"] is not None and m["winner_id"] not in (m["p1_id"], m["p2_id"]):
             problems.append(
