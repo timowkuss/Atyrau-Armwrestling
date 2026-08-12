@@ -120,17 +120,22 @@ def validate_archive(payload, metadata):
         if winner is not None and winner not in participants:
             raise ImportValidationError(
                 f"Матч #{m['id']}: победитель #{winner} отсутствует")
-        if m.get("status") not in ("pending", "done"):
+        if m.get("status") not in ("pending", "waiting", "done", "bye"):
             raise ImportValidationError(
                 f"Матч #{m['id']}: недопустимый статус '{m.get('status')}'")
-        if m.get("status") == "done":
+        if m.get("status") in ("done", "bye"):
             if winner is None:
-                raise ImportValidationError(
-                    f"Матч #{m['id']} завершён без победителя")
-            done_results.add(m["id"])
-            if winner not in (m.get("p1_id"), m.get("p2_id")):
-                raise ImportValidationError(
-                    f"Матч #{m['id']}: победитель не является участником")
+                ghost = m.get("p1_id") is None and m.get("p2_id") is None \
+                    and m.get("is_bye")
+                if not ghost:
+                    raise ImportValidationError(
+                        f"Матч #{m['id']} завершён без победителя")
+            else:
+                if winner not in (m.get("p1_id"), m.get("p2_id")):
+                    raise ImportValidationError(
+                        f"Матч #{m['id']}: победитель не является участником")
+            if m.get("status") == "done":
+                done_results.add(m["id"])
         elif winner is not None:
             raise ImportValidationError(
                 f"Матч #{m['id']} не завершён, но есть победитель")
