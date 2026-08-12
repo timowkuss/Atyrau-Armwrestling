@@ -20,7 +20,11 @@ def _load():
     cfg = dict(_defaults)
     if _CONFIG_FILE.exists():
         try:
-            cfg.update(json.loads(_CONFIG_FILE.read_text(encoding="utf-8")))
+            # utf-8-sig: файл мог быть сохранён редактором с BOM — при чтении
+            # как utf-8 первым символом окажется \ufeff и JSON не распарсится
+            # (молча уедем на дефолтный localhost — это была реальная причина
+            # «пустого» десктопа при живом сервере).
+            cfg.update(json.loads(_CONFIG_FILE.read_text(encoding="utf-8-sig")))
         except (json.JSONDecodeError, OSError):
             pass
     for key in cfg:
