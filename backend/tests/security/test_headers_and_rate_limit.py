@@ -67,6 +67,33 @@ class SecurityHeadersTest(unittest.TestCase):
 class LoginRateLimitTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        # Логин ходит в БД через get_db приложения. Подменяем зависимость
+        # на общий StaticPool-движок (иначе in-memory sqlite видит
+        # "no such table" из потока приложения).
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+        from sqlalchemy.pool import StaticPool
+
+        from app.db import models  # noqa: F401
+        from app.db.base import Base
+        from app.db.session import get_db
+
+        engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(engine)
+        cls._Session = sessionmaker(bind=engine)
+
+        def override_db():
+            db = cls._Session()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        app_main.app.dependency_overrides[get_db] = override_db
         cls.client = TestClient(app_main.app)
 
     def setUp(self):
