@@ -32,6 +32,7 @@ import json
 import os
 import struct
 import zipfile
+import zlib
 from datetime import datetime, timezone
 
 # Версия формата экспорта. Ломать формат — только с инкрементом.
@@ -146,9 +147,12 @@ def read_archive(src_path: str, password: str | None = None,
         raise BackupFormatError("Файл не найден.")
     try:
         zf = zipfile.ZipFile(src_path)
-    except zipfile.BadZipFile:
+    except (zipfile.BadZipFile, zlib.error, EOFError, ValueError):
         raise BackupFormatError("Файл повреждён — это не архив .armwrestling.")
-    names = set(zf.namelist())
+    try:
+        names = set(zf.namelist())
+    except (zipfile.BadZipFile, zlib.error, EOFError, ValueError):
+        raise BackupFormatError("Файл повреждён — не читается оглавление.")
     if "metadata.json" not in names:
         raise BackupFormatError(
             "В файле нет metadata.json — это не файл .armwrestling.")
@@ -161,6 +165,8 @@ def read_archive(src_path: str, password: str | None = None,
             f"({', '.join(extra[:3])}).")
     try:
         metadata = json.loads(zf.read("metadata.json").decode("utf-8"))
+    except (zipfile.BadZipFile, zlib.error, EOFError, ValueError):
+        raise BackupFormatError("metadata.json повреждён (не читается).")
     except Exception:
         raise BackupFormatError("metadata.json повреждён.")
     for req in REQUIRED_MEMBERS:
@@ -180,7 +186,11 @@ def read_archive(src_path: str, password: str | None = None,
     raw: dict = {}
     payload = {}
     for name in REQUIRED_MEMBERS:
-        data = zf.read(name)
+        try:
+            data = zf.read(name)
+        except (zipfile.BadZipFile, zlib.error, EOFError, ValueError):
+            raise BackupFormatError(
+                f"Раздел {name} повреждён (не читается).")
         if encrypted:
             try:
                 data = decrypt_payload(data, password, salt)
@@ -210,7 +220,7 @@ def read_member_bytes(src_path: str, name: str,
             data = zf.read(name)
     except KeyError:
         raise BackupFormatError(f"В файле нет раздела {name}.")
-    except zipfile.BadZipFile:
+    except (zipfile.BadZipFile, zlib.error, EOFError, ValueError):
         raise BackupFormatError("Файл повреждён — это не архив .armwrestling.")
     if password:
         try:
