@@ -29,4 +29,5 @@ photo_cache/
 photos/
 *.db-wal
 *.db-shm
+*.db-journal
 
