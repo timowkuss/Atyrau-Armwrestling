@@ -725,6 +725,24 @@ iin TEXT,                        -- ИИН, 12 цифр
                     "UPDATE tournaments SET photo_folder=? WHERE id=?",
                     (folder, row["id"]))
 
+        # Сессия соревнования для переноса между компьютерами
+        # (экспорт/импорт .armwrestling): uuid сессии, созданный при
+        # экспорте; при импорте на другом устройстве выдаётся новая сессия.
+        if "session_id" not in t_cols:
+            self.conn.execute("ALTER TABLE tournaments ADD COLUMN session_id TEXT")
+
+        self.conn.commit()
+        # Журнал переносов: что и откуда импортировалось (для предупреждения
+        # «соревнование уже восстановлено на другом устройстве»).
+        self.conn.execute("""
+        CREATE TABLE IF NOT EXISTS transfer_marks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+            previous_session_id TEXT,
+            imported_from TEXT,
+            imported_at TEXT DEFAULT (datetime('now'))
+        )
+        """)
         self.conn.commit()
         cols = [r[1] for r in self.conn.execute("PRAGMA table_info(matches)").fetchall()]
         for col, defval in [("win_next_id", "NULL"), ("win_next_slot", "1"),
@@ -1405,6 +1423,17 @@ from sync.sync_manager import sync_manager  # noqa: E402
 from sync.cloudinary_client import upload_photo, CloudinaryUploadError, is_configured  # noqa: E402
 from sync.photo_cache import precache_photos, resolve_local_photo_path  # noqa: E402
 
+# ─── Экспорт/импорт соревнования (.armwrestling), авто-бэкапы ──────
+from transfer.backup_manager import BackupManager  # noqa: E402
+from transfer.exporter import export_competition, ExportError, \
+    validate_competition_integrity  # noqa: E402
+from transfer.importer import import_competition, preview_archive, \
+    CompetitionExistsError, IdCollisionError, ImportValidationError  # noqa: E402
+from transfer.pack import BackupFormatError  # noqa: E402
+
+backup_manager = BackupManager()
+BACKUP_DIR = Path(__file__).resolve().parent / "backups"
+
 _original_create_tournament = Database.create_tournament
 _original_add_category = Database.add_category
 _original_add_participant = Database.add_participant
@@ -1502,6 +1531,12 @@ def _synced_save_match(self, match: dict):
             sync_manager.on_match_created(mid, match)
     except Exception as e:
         print(f"[sync] save_match: {e}")
+    try:
+        # Авто-бэкап после критической операции (завершение матча).
+        if snapshot.get("status") == "done":
+            backup_manager.request_backup()
+    except Exception as e:
+        print(f"[backup] hook: {e}")
     return mid
 
 def _synced_add_athlete(self, first_name, last_name, birth_date, gender,
@@ -2188,6 +2223,11 @@ def _run_batched_bracket_generation(db, impl_fn, *args):
         sync_manager.force_queue = prev_force_queue
         if sync_manager.enabled:
             Thread(target=sync_manager.flush_pending, daemon=True).start()
+        # Сетка изменилась — это критическая операция, планируем бэкап.
+        try:
+            backup_manager.request_backup()
+        except Exception as e:
+            print(f"[backup] hook: {e}")
 
 
 class DoubleEliminationEngine:
@@ -7605,6 +7645,16 @@ class App(ctk.CTk):
         self._start_auto_sync()
         self._start_pull_sync()
 
+        # Экспорт/импорт и авто-бэкапы: конфигурация и тикеры.
+        try:
+            backup_manager.configure(conn=self.db.conn, state=sync_manager.state,
+                                     backup_dir=str(BACKUP_DIR))
+            self._last_blocked = False
+            self.after(2000, self._status_tick)
+            self.after(2500, self._startup_recovery_check)
+        except Exception as e:
+            print(f"[transfer] init: {e}")
+
         # Проверка неактивных спортсменов (клубный рейтинг) после старта UI.
         self.after(1500, self._check_club_inactivity)
 
@@ -7705,6 +7755,12 @@ class App(ctk.CTk):
             font=ctk.CTkFont(size=13, weight="bold"),
             command=self._new_tournament)
         self.new_tournament_btn.pack(side="right")
+        self.import_tournament_btn = ctk.CTkButton(
+            top, text="📥  Импорт соревнования", height=38, width=180,
+            fg_color=ACCENT_DIM, hover_color=ACCENT_HOVER,
+            font=ctk.CTkFont(size=13),
+            command=self._import_tournament_dialog)
+        self.import_tournament_btn.pack(side="right", padx=(0, 10))
         self.delete_tournament_btn = ctk.CTkButton(
             top, text="🗑  Удалить", height=38, width=110,
             fg_color=DANGER, hover_color=DANGER_HOVER,
@@ -7767,6 +7823,34 @@ class App(ctk.CTk):
                     fg_color=ACCENT_DIM, hover_color=ACCENT_HOVER,
                     command=self._open_display_board)
         self.display_btn.grid(row=0, column=2)
+
+        # ─── Перенос соревнования: экспорт / импорт / аварийный экспорт ───
+        self.export_btn = ctk.CTkButton(self.header_actions, text="📦 Экспорт",
+                    width=110, height=30,
+                    fg_color="#1a3a5a", hover_color="#2a5a7a",
+                    font=ctk.CTkFont(size=12, weight="bold"),
+                    command=self._export_tournament_dialog)
+        self.export_btn.grid(row=1, column=0, padx=(0, 8), pady=(2, 0))
+
+        self.import_btn = ctk.CTkButton(self.header_actions, text="📥 Импорт",
+                    width=100, height=30,
+                    fg_color="#1a3a5a", hover_color="#2a5a7a",
+                    font=ctk.CTkFont(size=12, weight="bold"),
+                    command=self._import_tournament_dialog)
+        self.import_btn.grid(row=1, column=1, padx=(0, 8), pady=(2, 0))
+
+        self.emergency_export_btn = ctk.CTkButton(
+                    self.header_actions, text="🚨 Аварийный экспорт",
+                    width=150, height=30,
+                    fg_color=DANGER, hover_color=DANGER_HOVER,
+                    font=ctk.CTkFont(size=12, weight="bold"),
+                    command=self._emergency_export)
+        self.emergency_export_btn.grid(row=1, column=2, padx=(0, 8), pady=(2, 0))
+
+        self.transfer_status_label = ctk.CTkLabel(self.header_actions,
+                    text="", font=ctk.CTkFont(size=11),
+                    text_color=TEXT_DIM)
+        self.transfer_status_label.grid(row=1, column=3, padx=(4, 0), pady=(2, 0))
 
         self.notebook = ctk.CTkTabview(self.tournament_detail_view, fg_color=BG)
         self.notebook.pack(fill="both", expand=True, padx=8, pady=(0, 8))
@@ -8966,6 +9050,337 @@ class App(ctk.CTk):
         self.tournament_list_view.pack(fill="both", expand=True)
         self._refresh_tournament_list()
 
+    # ════════════════════════════════════════════════════════════════
+    #  ЭКСПОРТ / ИМПОРТ СОРЕВНОВАНИЯ (.armwrestling)
+    # ════════════════════════════════════════════════════════════════
+    def _default_export_filename(self, tid):
+        try:
+            t = self.db.get_tournament(tid)
+            name = re.sub(r'[\\/*?:"<>|]', "_", t["name"])[:40] or "competition"
+            date = (t.get("date") or "date").replace(".", "_")
+            return f"{name}_{date}.armwrestling"
+        except Exception:
+            return "competition.armwrestling"
+
+    def _export_tournament_dialog(self):
+        """Соревнование → Экспорт: проверка целостности, файл, проверка."""
+        tid = self.current_tournament_id
+        if not tid:
+            return
+        owner = _messagebox_owner()
+        try:
+            problems = validate_competition_integrity(self.db.conn, tid)
+        except Exception as e:
+            messagebox.showerror("Экспорт", f"Не удалось проверить данные: {e}",
+                                 parent=owner)
+            return
+        if problems:
+            messagebox.showerror(
+                "Экспорт невозможен",
+                "Соревнование содержит повреждённые данные — исправьте их "
+                "перед экспортом:\n\n- " + "\n- ".join(problems[:8]),
+                parent=owner)
+            return
+        dest = filedialog.asksaveasfilename(
+            parent=owner, defaultextension=".armwrestling",
+            filetypes=[("Соревнование", "*.armwrestling")],
+            initialfile=self._default_export_filename(tid),
+            title="Экспорт соревнования")
+        if not dest:
+            return
+        password = None
+        if messagebox.askyesno("Защита паролем",
+                               "Защитить файл паролем?",
+                               parent=owner):
+            password = simpledialog.askstring("Пароль",
+                                              "Введите пароль:",
+                                              show="*", parent=owner)
+            if password is None:
+                return
+        include_photos = messagebox.askyesno(
+            "Фотографии", "Включить фотографии в архив?",
+            parent=owner)
+        try:
+            metadata = export_competition(self.db.conn, sync_manager.state,
+                                          tid, dest, password=password,
+                                          include_photos=include_photos)
+        except ExportError as e:
+            messagebox.showerror("Экспорт", str(e), parent=owner)
+            return
+        except Exception as e:
+            messagebox.showerror("Экспорт", f"Ошибка экспорта: {e}",
+                                 parent=owner)
+            return
+        messagebox.showinfo(
+            "Экспорт успешно создан",
+            f"Файл:\n{dest}\n\n"
+            f"Матчей: {metadata['counts']['matches']}, "
+            f"завершено: {metadata['counts']['finished_matches']}\n"
+            f"Синхронизация файла — резервная копия соревнования "
+            "для переноса на другой компьютер.",
+            parent=owner)
+
+    def _emergency_export(self):
+        """Аварийный экспорт: максимально быстро, без проверки целостности."""
+        tid = self.current_tournament_id
+        if not tid:
+            return
+        owner = _messagebox_owner()
+        if not messagebox.askyesno("Аварийный экспорт",
+                                   "Создать аварийную копию соревнования "
+                                   "прямо сейчас?", parent=owner):
+            return
+        try:
+            path = backup_manager.emergency_export(tid)
+        except Exception as e:
+            messagebox.showerror("Аварийный экспорт", str(e), parent=owner)
+            return
+        messagebox.showinfo("Аварийный экспорт",
+                            f"Сохранено:\n{path}\n\n"
+                            "Файл можно перенести на другой компьютер и "
+                            "импортировать.", parent=owner)
+
+    def _import_tournament_dialog(self):
+        src = filedialog.askopenfilename(
+            parent=_messagebox_owner(),
+            filetypes=[("Соревнование", "*.armwrestling")],
+            title="Импорт соревнования")
+        if src:
+            self._do_import_file(src)
+
+    def _do_import_file(self, src, password=None, force=False):
+        """Полный поток импорта: проверка файла → предпросмотр → транзакция."""
+        owner = _messagebox_owner()
+        try:
+            metadata, summary = preview_archive(src, password)
+        except BackupFormatError as e:
+            if password is None and "парол" in str(e).lower():
+                password = simpledialog.askstring(
+                    "Пароль", str(e) + "\n\nВведите пароль:",
+                    show="*", parent=owner)
+                if password is None:
+                    return
+                self._do_import_file(src, password, force)
+                return
+            messagebox.showerror("Импорт", str(e), parent=owner)
+            return
+        except ImportValidationError as e:
+            messagebox.showerror("Импорт: файл повреждён", str(e),
+                                 parent=owner)
+            return
+
+        tid = summary["competition_id"]
+        existing = self.db.get_tournament(tid)
+        if existing and not force:
+            same_session = True
+            try:
+                same_session = (existing["session_id"]
+                                == summary.get("session_id"))
+            except Exception:
+                pass
+            msg = (f"В приложении уже есть соревнование с таким ID:\n"
+                   f"«{existing['name']}».\n\n"
+                   "Импортировать файл и ЗАМЕНИТЬ данные существующего "
+                   "соревнования?")
+            if not same_session:
+                msg = ("⚠️ Соревнование в файле создано в другой сессии "
+                       "(другой компьютер/восстановление).\n\n" + msg)
+            choice = messagebox.askyesnocancel(
+                "Соревнование уже существует",
+                msg + "\n\n«Да» — заменить (восстановить из файла)\n"
+                      "«Нет» — открыть существующее\n"
+                      "«Отмена» — не импортировать",
+                parent=owner)
+            if choice is None:
+                return
+            if not choice:
+                self._select_tournament(tid)
+                return
+            force = True
+
+        if not self._show_import_preview(summary):
+            return
+
+        try:
+            result = import_competition(self.db.conn, sync_manager.state,
+                                        src, password=password,
+                                        force_replace=force,
+                                        photos_dir=str(PHOTOS_DIR))
+        except CompetitionExistsError as e:
+            messagebox.showwarning("Соревнование уже существует",
+                                   str(e), parent=owner)
+            return
+        except (IdCollisionError, ImportValidationError) as e:
+            messagebox.showerror("Импорт невозможен", str(e), parent=owner)
+            return
+        except Exception as e:
+            messagebox.showerror("Импорт не удался",
+                                 f"Все изменения откачены.\n\n{e}",
+                                 parent=owner)
+            return
+
+        self._refresh_tournament_list()
+        messagebox.showinfo(
+            "Соревнование восстановлено",
+            f"«{result['name']}»\n\n"
+            f"Матчей всего: {result['matches']}\n"
+            f"Завершено: {result['finished']}\n"
+            f"Осталось: {result['unfinished']}\n"
+            f"Pending sync: {result['pending_operations']}\n\n"
+            f"Последнее изменение: {result['last_modified_at']}",
+            parent=owner)
+        self._select_tournament(tid)
+
+    def _show_import_preview(self, summary):
+        """Окно предпросмотра перед импортом. Возвращает True, если
+        пользователь подтвердил импорт."""
+        dlg = tk.Toplevel(self)
+        dlg.withdraw()
+        dlg.title("Предпросмотр импорта")
+        dlg.geometry("520x560")
+        center_toplevel(dlg, 520, 560)
+        dlg.configure(bg=PANEL)
+        dlg.resizable(False, False)
+        dlg.deiconify()
+
+        confirmed = {"ok": False}
+        ctk.CTkLabel(dlg, text="📥  Импорт соревнования",
+                     font=ctk.CTkFont(size=18, weight="bold")).pack(
+                         pady=(22, 12))
+
+        info = ctk.CTkFrame(dlg, fg_color="transparent")
+        info.pack(fill="x", padx=35)
+        rows = [
+            ("Соревнование", summary.get("name")),
+            ("Дата", summary.get("date")),
+            ("Спортсменов", summary.get("athletes")),
+            ("Тренеров", summary.get("coaches")),
+            ("Клубов", summary.get("clubs")),
+            ("Категорий", summary.get("categories")),
+            ("Матчей", summary.get("matches")),
+            ("Завершено", summary.get("finished")),
+            ("Осталось", summary.get("unfinished")),
+            ("Pending sync", summary.get("pending_operations")),
+            ("Последнее изменение", summary.get("last_modified_at")),
+        ]
+        for label, value in rows:
+            row = ctk.CTkFrame(info, fg_color="transparent")
+            row.pack(fill="x", pady=2)
+            ctk.CTkLabel(row, text=label + ":",
+                         width=180, anchor="w", text_color=TEXT_DIM,
+                         font=ctk.CTkFont(size=12)).pack(side="left")
+            ctk.CTkLabel(row, text=str(value), anchor="w",
+                         font=ctk.CTkFont(size=12, weight="bold")).pack(
+                             side="left")
+
+        btns = ctk.CTkFrame(dlg, fg_color="transparent")
+        btns.pack(pady=(24, 12))
+        ctk.CTkButton(btns, text="Импортировать", width=150, height=38,
+                      fg_color=SUCCESS, hover_color=SUCCESS_HOVER,
+                      font=ctk.CTkFont(size=13, weight="bold"),
+                      command=lambda: (confirmed.update(ok=True),
+                                       dlg.destroy())).pack(
+                          side="left", padx=8)
+        ctk.CTkButton(btns, text="Отмена", width=120, height=38,
+                      fg_color=DANGER, hover_color=DANGER_HOVER,
+                      command=dlg.destroy).pack(side="left", padx=8)
+        dlg.transient(self)
+        try:
+            dlg.grab_set()
+        except Exception:
+            pass
+        self.wait_window(dlg)
+        return confirmed["ok"]
+
+    # ════════════════════════════════════════════════════════════════
+    #  ИНДИКАТОР СОХРАННОСТИ + ВОССТАНОВЛЕНИЕ ПРИ СТАРТЕ
+    # ════════════════════════════════════════════════════════════════
+    def _status_tick(self):
+        """Периодический индикатор: backup age + несинхронизированные
+        операции + ошибки синхронизации."""
+        try:
+            if not getattr(self, "transfer_status_label", None):
+                return
+            label = self.transfer_status_label
+            if not self.current_tournament_id:
+                label.configure(text="")
+                return
+            pending = sync_manager.state.pending_count()
+            latest = backup_manager.latest_backup()
+            parts = []
+            if latest is not None:
+                age = int(latest["age"])
+                if age < 60:
+                    parts.append(f"Последний backup: {age} сек назад")
+                elif age < 3600:
+                    parts.append(f"Последний backup: {age // 60} мин назад")
+                else:
+                    parts.append(f"Последний backup: {age // 3600} ч назад")
+            if pending:
+                parts.append(f"Несинхронизировано: {pending}")
+            if not parts:
+                label.configure(
+                    text="🟢 Все данные сохранены",
+                    text_color="#4dff88")
+            elif getattr(self, "_last_blocked", False):
+                label.configure(
+                    text="🔴 Есть ошибка синхронизации · "
+                    + " · ".join(parts), text_color="#ff6666")
+            else:
+                label.configure(
+                    text="🟡 " + " · ".join(parts),
+                    text_color="#ffcc00")
+        except Exception as e:
+            print(f"[status] {e}")
+        finally:
+            self.after(2000, self._status_tick)
+
+    def _startup_recovery_check(self):
+        """При старте: целостность БД, незавершённые соревнования,
+        последний backup."""
+        try:
+            ok, msg = backup_manager.check_integrity()
+            if not ok:
+                owner = _messagebox_owner()
+                if messagebox.askyesno(
+                        "Повреждена локальная БД",
+                        msg + "\n\nВосстановить из последнего backup?",
+                        parent=owner):
+                    latest = backup_manager.latest_backup()
+                    if latest and os.path.exists(latest["path"]):
+                        self._do_import_file(latest["path"], force=True)
+                    else:
+                        messagebox.showwarning(
+                            "Backup не найден",
+                            "Нет файлов в папке backups/.\n"
+                            "Импортируйте .armwrestling вручную.",
+                            parent=owner)
+                return
+            unfinished = self.db.conn.execute(
+                "SELECT id, name FROM tournaments "
+                "WHERE status IN ('active','upcoming')").fetchall()
+            latest = backup_manager.latest_backup()
+            if unfinished and latest:
+                owner = _messagebox_owner()
+                age = int(latest["age"])
+                choice = messagebox.askyesnocancel(
+                    "Обнаружено незавершённое соревнование",
+                    f"Найдено незавершённых соревнований: {len(unfinished)}\n"
+                    f"Последний backup: {os.path.basename(latest['path'])}\n"
+                    f"({age} сек назад)\n\n"
+                    "«Да» — открыть соревнование\n"
+                    "«Нет» — открыть файл backup\n"
+                    "«Отмена» — не сейчас",
+                    parent=owner)
+                if choice is None:
+                    return
+                if choice:
+                    self._select_tournament(unfinished[0]["id"])
+                else:
+                    self._import_tournament_dialog()
+        except Exception as e:
+            print(f"[transfer] recovery check: {e}")
+
     def _refresh_status_badge(self, tournament=None):
         """Обновляет бейдж статуса и кнопки по трём состояниям турнира:
         upcoming (скоро начнётся) — кнопка «Начать соревнования»;
@@ -9030,6 +9445,11 @@ class App(ctk.CTk):
                     print("club rating finalize error:", e)
                 from sync.sync_manager import sync_manager
                 sync_manager.update_tournament_status(self.current_tournament_id, "completed")
+                # Завершение турнира — критическая операция: бэкап сразу.
+                try:
+                    backup_manager.autobackup_now(self.current_tournament_id)
+                except Exception as e:
+                    print(f"[backup] finish hook: {e}")
         self._select_tournament(self.current_tournament_id)
 
     def _tournament_locked(self, show_warning=True):
@@ -9272,13 +9692,19 @@ class App(ctk.CTk):
                 # недоступном сервере.
                 sync_manager.try_auto_flush_async()
             blocked = sync_manager.take_blocked_warning()
+            self._last_blocked = bool(blocked)
             if blocked:
                 ops = ", ".join(sorted({b["operation"] for b in blocked}))
                 self._show_sync_toast(
                     f"⚠️ Не удаётся синхронизировать: {ops}. "
                     "Проверьте интернет и токен (desktop-app/.env). "
-                    "Записи не потеряны — отправка повторится сама."
-                )
+                    "Записи не потеряны — отправка повторится сама.")
+            # Периодический авто-бэкап (не чаще min_interval, только если
+            # были изменения — см. backup_manager.maybe_autobackup).
+            try:
+                backup_manager.maybe_autobackup(self.current_tournament_id)
+            except Exception as e:
+                print(f"[backup] tick: {e}")
         except Exception as e:
             # Тикер не должен умирать из-за одной ошибки (иначе синхронизация
             # молча останавливается навсегда — мы это уже ловили).
