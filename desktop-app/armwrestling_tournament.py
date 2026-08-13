@@ -4512,6 +4512,25 @@ class BracketWindow(ctk.CTkToplevel):
             return
 
         from collections import OrderedDict
+
+        # Скрытые «сервисные» матчи: авто-проходы «X vs BYE» и ghost-слоты
+        # «BYE vs BYE» (is_bye=1, второй участник пуст). Бокс для них не рисуем —
+        # прошедший участник уже виден в следующем раунде, а стрелки цепочек
+        # (win_next_id / lose_next_id) перепрыгивают через такие матчи.
+        by_id = {m["id"]: m for m in matches}
+        ghost_ids = {
+            m["id"] for m in matches
+            if m["is_bye"] == 1 and m["p2_id"] is None
+        }
+
+        def visible_rounds(src_rounds):
+            out = OrderedDict()
+            for rname, rmatches in src_rounds.items():
+                kept = [m for m in rmatches if m["id"] not in ghost_ids]
+                if kept:
+                    out[rname] = kept
+            return out
+
         w_rounds = OrderedDict()
         l_rounds = OrderedDict()
         f_rounds = OrderedDict()
@@ -4522,8 +4541,14 @@ class BracketWindow(ctk.CTkToplevel):
                 w_rounds.setdefault(r, []).append(m)
             elif b == "losers":
                 l_rounds.setdefault(r, []).append(m)
-            else:   
+            else:
                 f_rounds.setdefault(r, []).append(m)
+
+        # Колонки без единого видимого матча (все слоты — ghost/byes) выкидываем,
+        # чтобы не оставалось пустых вертикалей между реальными раундами.
+        w_rounds = visible_rounds(w_rounds)
+        l_rounds = visible_rounds(l_rounds)
+        f_rounds = visible_rounds(f_rounds)
 
         # Крупнее карточки и больше воздуха между колонками/строками —
         # так надписи не наезжают друг на друга и сетка выглядит аккуратнее.
@@ -4547,48 +4572,31 @@ class BracketWindow(ctk.CTkToplevel):
             first_center = Y_W_START + (SLOT_H * (2 ** round_idx) - BOX_H) / 2
             return first_center + match_idx * step
 
-        w_col_x = []
-        w_y_positions = []
+        # Сначала только вычисляем координаты всех боксов (не рисуем) — потом
+        # по ним строим стрелки, и уже поверх стрелок рисуем сами карточки.
+        # Так длинные стрелки «ныряют» под карточками, а не пробивают их.
+        box_pos = {}       # match_id -> (x, y)
+        box_defs = []      # (match, x, y, highlight)
+        text_defs = []     # (x, y, text, fill, font, anchor)
+        max_y_w = Y_W_START
 
         for ri, (rname, rmatches) in enumerate(w_rounds_list):
             x = X_START + ri * (BOX_W + H_GAP)
-            col_ys = []
             for mi, m in enumerate(rmatches):
                 y = y_pos(mi, ri)
-                self._draw_match_box(m, x, y, BOX_W, BOX_H)
-                col_ys.append(y)
-                if ri + 1 < len(w_rounds_list):
-                    x_mid = x + BOX_W + H_GAP // 2
-                    y_center = y + BOX_H // 2
-                    self.canvas.create_line(x + BOX_W, y_center, x_mid, y_center,
-                        fill="#2a4a6a", width=1)
-            w_col_x.append(x)
-            w_y_positions.append(col_ys)
-
+                box_pos[m["id"]] = (x, y)
+                box_defs.append((m, x, y, None))
+                max_y_w = max(max_y_w, y + BOX_H)
             label = stage_labels.get(("winners", rname))
             if label:
-                self.canvas.create_text(
-                    x + BOX_W / 2, Y_W_START - HEADER_H / 2,
-                    text=label, fill="#7fb8ff",
-                    font=("Arial", 15, "bold"), anchor="c")
-
-            if ri + 1 < len(w_rounds_list) and len(col_ys) >= 2:
-                x_mid = x + BOX_W + H_GAP // 2
-                x_next = x + BOX_W + H_GAP
-                for pair in range(0, len(col_ys), 2):
-                    if pair + 1 < len(col_ys):
-                        y1 = col_ys[pair] + BOX_H // 2
-                        y2 = col_ys[pair + 1] + BOX_H // 2
-                        y_mid = (y1 + y2) // 2
-                        self.canvas.create_line(x_mid, y1, x_mid, y2, fill="#2a4a6a", width=1)
-                        self.canvas.create_line(x_mid, y_mid, x_next, y_mid, fill="#2a4a6a", width=1)
+                text_defs.append(
+                    (x + BOX_W / 2, Y_W_START - HEADER_H / 2, label, "#7fb8ff",
+                     ("Arial", 15, "bold"), "c"))
 
         x_final = X_START + len(w_rounds_list) * (BOX_W + H_GAP)
         y_final = Y_W_START
-        gf_x_by_index = {}
         for fi, (rname, rmatches) in enumerate(f_rounds.items()):
             x_this = x_final + fi * (BOX_W + H_GAP)   # ← сдвиг вправо вместо вниз
-            gf_x_by_index[fi] = x_this
             is_reset_round = "переигровка" in rname
             visible_matches = [
                 m for m in rmatches
@@ -4597,160 +4605,107 @@ class BracketWindow(ctk.CTkToplevel):
             if visible_matches:
                 # Первый матч финала — «Финал», переигровка — «Гранд-финал».
                 label = "Гранд-финал" if is_reset_round else "Финал"
-                self.canvas.create_text(
-                    x_this + BOX_W / 2, Y_W_START - HEADER_H / 2,
-                    text=label, fill="#ffcc66",
-                    font=("Arial", 15, "bold"), anchor="c")
+                text_defs.append(
+                    (x_this + BOX_W / 2, Y_W_START - HEADER_H / 2, label, "#ffcc66",
+                     ("Arial", 15, "bold"), "c"))
             for m in visible_matches:
-                self._draw_match_box(m, x_this, y_final, BOX_W, BOX_H, highlight="#3a3010")
-                if fi == 0 and w_col_x:
-                    x_prev = w_col_x[-1] + BOX_W
-                    x_mid = x_prev + H_GAP // 2
-                    y_wf = w_y_positions[-1][0] + BOX_H // 2 if w_y_positions and w_y_positions[-1] else y_final + BOX_H // 2
-                    y_f = y_final + BOX_H // 2
-                    self.canvas.create_line(x_prev, y_wf, x_mid, y_wf, fill="#8a6a10", width=1)
-                    self.canvas.create_line(x_mid, y_wf, x_mid, y_f, fill="#8a6a10", width=1)
-                    self.canvas.create_line(x_mid, y_f, x_this, y_f, fill="#8a6a10", width=1)
-                elif fi > 0 and fi - 1 in gf_x_by_index:
-                    # Переигровка — просто следующая карточка на той же
-                    # строке, соединяем её с обычным гранд-финалом слева.
-                    x_prev = gf_x_by_index[fi - 1] + BOX_W
-                    y_c = y_final + BOX_H // 2
-                    self.canvas.create_line(x_prev, y_c, x_this, y_c, fill="#8a6a10", width=1)
-
-        max_y_w = Y_W_START
-        for col_ys in w_y_positions:
-            for y in col_ys:
-                max_y_w = max(max_y_w, y + BOX_H)
+                box_pos[m["id"]] = (x_this, y_final)
+                box_defs.append((m, x_this, y_final, "#3a3010"))
+                max_y_w = max(max_y_w, y_final + BOX_H)
 
         Y_L_START = max_y_w + 80
         l_rounds_list = list(l_rounds.values())
+        for ri, rmatches in enumerate(l_rounds_list):
+            x = X_START + (ri + 1) * (BOX_W + H_GAP)
+            # Шаг растёт вдвое каждые два раунда (после объединяющих раундов)
+            step_mult = 2 ** (ri // 2)
+            step = SLOT_H * step_mult
+            # Центрируем первый матч относительно всей высоты первого раунда
+            total_first = SLOT_H * max(len(l_rounds_list[0]), 1)
+            first_offset = (step - SLOT_H) // 2
+            col_ys = []
+            for mi, m in enumerate(rmatches):
+                y = Y_L_START + first_offset + mi * step
+                box_pos[m["id"]] = (x, y)
+                box_defs.append((m, x, y, "#2a1510"))
+                col_ys.append(y)
+            label = stage_labels.get(("losers", l_round_names[ri]))
+            if label and col_ys:
+                text_defs.append(
+                    (x + BOX_W / 2, min(col_ys) - 18, label, "#ff9955",
+                     ("Arial", 14, "bold"), "c"))
 
+        # ── Стрелки ──
+        # Рисуем строго по ссылкам win_next_id / lose_next_id (а не по позициям
+        # match_order): сквозь ghost-слоты цепочка перепрыгивает на следующий
+        # видимый матч, а связки «верхняя → нижняя сетка» и «нижняя → финал»
+        # больше не теряются. Линии цветим по тому, куда ведёт стрелка.
+        LINE_COLORS = {"winners": "#2a4a6a", "losers": "#7a3a1a", "final": "#8a6a10"}
+
+        def resolve_next(match, kind):
+            nid = match["win_next_id"] if kind == "win" else match["lose_next_id"]
+            steps = 0
+            while nid is not None and nid not in box_pos and steps < 64:
+                n = by_id.get(nid)
+                if n is None:
+                    nid = None
+                    break
+                nid = n["win_next_id"]
+                steps += 1
+            return nid
+
+        for mid in list(box_pos):
+            m = by_id[mid]
+            for kind in ("win", "lose"):
+                tid = resolve_next(m, kind)
+                if tid is None or tid not in box_pos:
+                    continue
+                x1 = box_pos[mid][0] + BOX_W
+                y1 = box_pos[mid][1] + BOX_H // 2
+                x2 = box_pos[tid][0]
+                y2 = box_pos[tid][1] + BOX_H // 2
+                if x2 < x1:
+                    # цель левее (гранд-финал правее и ниже нижней сетки):
+                    # уводим вправо, поднимаемся и заходим с правого края
+                    x2r = x2 + BOX_W
+                    xm = max(x1, x2r) + H_GAP // 4
+                    pts = [(x1, y1), (xm, y1), (xm, y2), (x2r, y2)]
+                elif kind == "lose":
+                    # проигравший уходит в нижнюю сетку: сразу «ныряем» вниз
+                    # в зазоре у правого края родного бокса — не перекрываем
+                    # стрелку победителя, идущую по центру зазора выше
+                    xm = x1 + H_GAP // 4
+                    pts = [(x1, y1), (xm, y1), (xm, y2), (x2, y2)]
+                else:
+                    # обычный угловой переход вправо через середину зазора
+                    xm = (x1 + x2) // 2
+                    pts = [(x1, y1), (xm, y1), (xm, y2), (x2, y2)]
+                color = LINE_COLORS.get(by_id[tid]["bracket"], "#2a4a6a")
+                self.canvas.create_line(*[c for p in pts for c in p], fill=color, width=1)
+
+        # ── Карточки и подписи поверх стрелок ──
         if l_rounds_list:
             self.canvas.create_text(
                 X_START, Y_L_START - 46,
                 text="⬇  НИЖНЯЯ СЕТКА (Losers Bracket)",
                 fill="#cc6633", font=("Arial", 13, "bold"), anchor="w")
 
-            # Вычисляем позиции матчей нижней сетки с правильным вертикальным расположением.
-            # В нечётных раундах (0,2,4…) приходят проигравшие из верхней сетки — матчи
-            # расположены попарно и занимают вдвое больше места, чем в предыдущем раунде.
-            # В чётных раундах (1,3,5…) победители уплотняются вдвое.
-            # Базовый шаг вертикали берём из первого раунда нижней сетки.
+        for m, x, y, highlight in box_defs:
+            self._draw_match_box(m, x, y, BOX_W, BOX_H, highlight=highlight)
+        for tx, ty, text, fill, font, anchor in text_defs:
+            self.canvas.create_text(tx, ty, text=text, fill=fill, font=font, anchor=anchor)
 
-            L_SLOT_H = BOX_H + 22   # шаг для первого раунда нижней сетки (совпадает с SLOT_H верхней)
-            l_col_positions = []     # list of list of (x, y) per round
-
-            for ri, rmatches in enumerate(l_rounds_list):
-                x = X_START + (ri + 1) * (BOX_W + H_GAP)
-                # Шаг растёт вдвое каждые два раунда (после объединяющих раундов)
-                step_mult = 2 ** (ri // 2)
-                step = L_SLOT_H * step_mult
-                # Центрируем первый матч относительно всей высоты первого раунда
-                total_first = L_SLOT_H * max(len(l_rounds_list[0]), 1)
-                first_offset = (step - L_SLOT_H) // 2
-                col_ys = []
-                for mi, m in enumerate(rmatches):
-                    y = Y_L_START + first_offset + mi * step
-                    self._draw_match_box(m, x, y, BOX_W, BOX_H, highlight="#2a1510")
-                    col_ys.append(y)
-                l_col_positions.append((x, col_ys))
-
-                label = stage_labels.get(("losers", l_round_names[ri]))
-                if label and col_ys:
-                    self.canvas.create_text(
-                        x + BOX_W / 2, min(col_ys) - 18,
-                        text=label, fill="#ff9955",
-                        font=("Arial", 14, "bold"), anchor="c")
-
-            # Соединительные линии между раундами нижней сетки.
-            # Тип перехода определяется по РЕАЛЬНЫМ размерам раундов (а не по чётности
-            # индекса), чтобы точно соответствовать фактической маршрутизации матчей
-            # (win_next_id) для любого числа участников.
-            LINE_COLOR = "#7a3a1a"
-            for ri in range(len(l_col_positions) - 1):
-                x_cur, ys_cur = l_col_positions[ri]
-                x_nxt, ys_nxt = l_col_positions[ri + 1]
-                x_out = x_cur + BOX_W
-                x_mid = x_out + H_GAP // 2
-                x_in = x_nxt
-
-                is_merging_round = len(ys_nxt) < len(ys_cur)
-
-                if is_merging_round:
-                    # Объединяющий раунд: каждые два матча → один следующий
-                    for pair_start in range(0, len(ys_cur), 2):
-                        if pair_start + 1 < len(ys_cur):
-                            y1 = ys_cur[pair_start] + BOX_H // 2
-                            y2 = ys_cur[pair_start + 1] + BOX_H // 2
-                            target_idx = pair_start // 2
-                            if target_idx < len(ys_nxt):
-                                y_target = ys_nxt[target_idx] + BOX_H // 2
-                                # горизонталь от текущих матчей до середины
-                                self.canvas.create_line(x_out, y1, x_mid, y1,
-                                    fill=LINE_COLOR, width=1)
-                                self.canvas.create_line(x_out, y2, x_mid, y2,
-                                    fill=LINE_COLOR, width=1)
-                                # вертикаль, соединяющая пару
-                                self.canvas.create_line(x_mid, y1, x_mid, y2,
-                                    fill=LINE_COLOR, width=1)
-                                # горизонталь к следующему матчу
-                                self.canvas.create_line(x_mid, y_target, x_in, y_target,
-                                    fill=LINE_COLOR, width=1)
-                        elif pair_start < len(ys_cur):
-                            # нечётное число — одиночный матч идёт напрямую
-                            y1 = ys_cur[pair_start] + BOX_H // 2
-                            target_idx = pair_start // 2
-                            if target_idx < len(ys_nxt):
-                                y_target = ys_nxt[target_idx] + BOX_H // 2
-                                self.canvas.create_line(x_out, y1, x_mid, y1,
-                                    fill=LINE_COLOR, width=1)
-                                self.canvas.create_line(x_mid, y1, x_mid, y_target,
-                                    fill=LINE_COLOR, width=1)
-                                self.canvas.create_line(x_mid, y_target, x_in, y_target,
-                                    fill=LINE_COLOR, width=1)
-                elif len(ys_nxt) > len(ys_cur):
-                    # Расширяющийся переход (не должен встречаться в норме, но
-                    # обрабатываем на всякий случай): матчи распределяются 1-к-1
-                    # по первым соответствующим позициям следующего раунда.
-                    for mi_cur, y_cur in enumerate(ys_cur):
-                        if mi_cur < len(ys_nxt):
-                            y_from = y_cur + BOX_H // 2
-                            y_to = ys_nxt[mi_cur] + BOX_H // 2
-                            self.canvas.create_line(x_out, y_from, x_mid, y_from,
-                                fill=LINE_COLOR, width=1)
-                            self.canvas.create_line(x_mid, y_from, x_mid, y_to,
-                                fill=LINE_COLOR, width=1)
-                            self.canvas.create_line(x_mid, y_to, x_in, y_to,
-                                fill=LINE_COLOR, width=1)
-                else:
-                    # Раунд приёма: каждый матч → один следующий (1-к-1)
-                    for mi_cur, y_cur in enumerate(ys_cur):
-                        if mi_cur < len(ys_nxt):
-                            y_from = y_cur + BOX_H // 2
-                            y_to = ys_nxt[mi_cur] + BOX_H // 2
-                            self.canvas.create_line(x_out, y_from, x_mid, y_from,
-                                fill=LINE_COLOR, width=1)
-                            self.canvas.create_line(x_mid, y_from, x_mid, y_to,
-                                fill=LINE_COLOR, width=1)
-                            self.canvas.create_line(x_mid, y_to, x_in, y_to,
-                                fill=LINE_COLOR, width=1)
-
-        total_w = x_final + len(f_rounds) * (BOX_W + H_GAP) + 60
+        total_w = X_START + max(len(w_rounds_list) + len(f_rounds), len(l_rounds_list) + 1) * (BOX_W + H_GAP) + BOX_W + 90
+        total_h = Y_L_START
         if l_rounds_list:
-            x_l_end = X_START + (len(l_rounds_list) + 1) * (BOX_W + H_GAP) + 60
-            total_w = max(total_w, x_l_end)
-            # Высота: берём максимум по всем раундам нижней сетки
-            max_l_y = Y_L_START
             for ri, rmatches in enumerate(l_rounds_list):
                 step_mult = 2 ** (ri // 2)
                 step = (BOX_H + 22) * step_mult
                 first_offset = (step - (BOX_H + 22)) // 2
-                bottom = Y_L_START + first_offset + (len(rmatches) - 1) * step + BOX_H
-                max_l_y = max(max_l_y, bottom)
-            total_h = max_l_y + 60
+                total_h = max(total_h, Y_L_START + first_offset + (len(rmatches) - 1) * step + BOX_H)
         else:
-            total_h = max_y_w + 60
+            total_h = max_y_w
+        total_h += 60
         self.canvas.configure(scrollregion=(0, 0, total_w, total_h))
 
     @staticmethod
