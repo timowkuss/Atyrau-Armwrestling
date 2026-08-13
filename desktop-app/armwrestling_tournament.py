@@ -1394,6 +1394,20 @@ iin TEXT,                        -- ИИН, 12 цифр
             (table_number, category_id, hand))
         self.conn.commit()
 
+    def get_broadcast_table_numbers(self, tournament_id, category_id, hand):
+        """Множество номеров столов, занятых ДРУГИМИ сетками этого же
+        турнира (категория+рука). Трансляция переживает закрытие окна
+        (table_number живёт в БД), поэтому при проверке «свободных столов»
+        мало смотреть на открытые окна — занятыми считаются и сохранённые
+        номера. Столы других турниров не учитываются: они транслируются
+        в другое время и на тех же номерах."""
+        rows = self.conn.execute(
+            "SELECT DISTINCT table_number FROM matches "
+            "WHERE tournament_id=? AND table_number IS NOT NULL "
+            "AND NOT (category_id=? AND hand=?)",
+            (tournament_id, category_id, hand)).fetchall()
+        return {r["table_number"] for r in rows}
+
     def get_participant(self, pid):
         if not pid:
             return None
@@ -2230,6 +2244,57 @@ def _run_batched_bracket_generation(db, impl_fn, *args):
             print(f"[backup] hook: {e}")
 
 
+def _replay_bracket_results(engine, category_id, hand, results_by_slot):
+    """Полностью пересчитывает сетку по зафиксированным результатам.
+
+    results_by_slot — {match_id: 1|2} «чья сторона победила» (p1 или p2)
+    для реально сыгранных матчей. Слот сохраняется, а не сам игрок: при
+    изменении результата выше участники нижестоящего матча меняются,
+    поэтому победителя пересчитываем по стороне сетки. Сетка сбрасывается
+    к «генерационному» состоянию (участники фиксированы только в первом
+    раунде WB), затем результаты проигрываются в топологическом порядке
+    (по stage: winners → losers → final), как обычный прогресс турнира.
+    Bye и ghost-слоты достраиваются движком.
+    """
+    matches = engine.db.get_matches(category_id, hand)
+    bkey = lambda m: (m["stage"], {"winners": 0, "losers": 1, "final": 2}.get(m["bracket"], 3), m["match_order"])
+
+    # 1) Сброс к состоянию сразу после генерации.
+    #    Структурные ghost-матчи (done, оба слота пусты — результат
+    #    _collapse_chained_byes) не трогаем: их ломать незачем.
+    for m in sorted(matches, key=bkey):
+        if m["status"] == "done" and not m["p1_id"] and not m["p2_id"]:
+            continue
+        if m["bracket"] == "winners" and m["stage"] == 0:
+            engine.db.conn.execute(
+                "UPDATE matches SET winner_id=NULL, p1_losses=0, p2_losses=0, "
+                "status=CASE WHEN p1_id IS NOT NULL AND p2_id IS NOT NULL "
+                "THEN 'pending' ELSE 'waiting' END WHERE id=?",
+                (m["id"],))
+        else:
+            engine.db.conn.execute(
+                "UPDATE matches SET p1_id=NULL, p2_id=NULL, winner_id=NULL, "
+                "p1_losses=0, p2_losses=0, status='waiting' WHERE id=?",
+                (m["id"],))
+    engine.db.conn.commit()
+
+    # 2) Проигрываем результаты в топологическом порядке.
+    for m in sorted(matches, key=bkey):
+        slot = results_by_slot.get(m["id"])
+        if slot is None:
+            continue
+        live = engine._get_match(m["id"])
+        if not live or not live["p1_id"] or not live["p2_id"]:
+            # Bye/ghost-слот либо матч, который движок уже решил иначе
+            # (напр. супер-финал не понадобился) — результат выставит шаг 3.
+            continue
+        wid = live["p1_id"] if slot == 1 else live["p2_id"]
+        engine.advance_winner(m["id"], wid)
+
+    # 3) Добиваем остатки (ghost'ы, оставшиеся bye и каскад).
+    engine._resolve_all_byes(category_id, hand)
+
+
 class DoubleEliminationEngine:
     """
     Реализация сетки double elimination для произвольного числа участников.
@@ -2712,6 +2777,7 @@ class DoubleEliminationEngine:
                         self.db.conn.execute(
                             "UPDATE matches SET status='done', is_bye=1 WHERE id=?", (m["id"],))
                         self.db.conn.commit()
+                        self._sync_match(m["id"])
                         changed = True
             if not changed:
                 break
@@ -2779,6 +2845,28 @@ class DoubleEliminationEngine:
 
         self._propagate(match_id, winner_id, loser_id)
         self._resolve_all_byes(m["category_id"], m["hand"])
+
+    def change_winner(self, match_id, new_winner_id):
+        """Пересматривает победителя уже сыгранного матча.
+
+        Собирает зафиксированные результаты всей сетки (по стороне —
+        кто выиграл пару), подменяет победителя указанного матча и
+        полностью пересчитывает сетку до конца. Возвращает True при
+        успехе (новый победитель — участник матча).
+        """
+        m = self._get_match(match_id)
+        if not m or m["status"] != "done":
+            return False
+        if new_winner_id not in (m["p1_id"], m["p2_id"]):
+            return False
+
+        by_slot = {}
+        for mm in self.db.get_matches(m["category_id"], m["hand"]):
+            if mm["p1_id"] and mm["p2_id"] and mm["winner_id"] and mm["status"] == "done":
+                by_slot[mm["id"]] = 1 if mm["winner_id"] == mm["p1_id"] else 2
+        by_slot[match_id] = 1 if new_winner_id == m["p1_id"] else 2
+        _replay_bracket_results(self, m["category_id"], m["hand"], by_slot)
+        return True
 
     # ──── ТЕКУЩИЙ / СЛЕДУЮЩИЙ МАТЧ ────
     def get_current_and_next_match(self, category_id, hand):
@@ -3576,6 +3664,27 @@ class SingleEliminationEngine:
             self._place_player(m["win_next_id"], m["win_next_slot"], winner_id)
         self._resolve_all_byes(m["category_id"], m["hand"])
 
+    def change_winner(self, match_id, new_winner_id):
+        """Пересматривает победителя уже сыгранного матча.
+
+        Собирает зафиксированные результаты всей сетки, подменяет победителя
+        указанного матча и полностью пересчитывает сетку до конца. Возвращает
+        True при успехе (новый победитель — участник матча).
+        """
+        m = self._get_match(match_id)
+        if not m or m["status"] != "done":
+            return False
+        if new_winner_id not in (m["p1_id"], m["p2_id"]):
+            return False
+
+        by_slot = {}
+        for mm in self.db.get_matches(m["category_id"], m["hand"]):
+            if mm["p1_id"] and mm["p2_id"] and mm["winner_id"] and mm["status"] == "done":
+                by_slot[mm["id"]] = 1 if mm["winner_id"] == mm["p1_id"] else 2
+        by_slot[match_id] = 1 if new_winner_id == m["p1_id"] else 2
+        _replay_bracket_results(self, m["category_id"], m["hand"], by_slot)
+        return True
+
     def get_current_and_next_match(self, category_id, hand):
         matches = self.db.get_matches(category_id, hand)
 
@@ -3991,6 +4100,13 @@ class BracketWindow(ctk.CTkToplevel):
         vscroll.pack(side="right", fill="y")
         self.canvas.pack(fill="both", expand=True)
 
+        # Колесо мыши: вертикальный скролл, Shift+колесо — горизонтальный
+        # (сетка большого турнира не помещается в окно).
+        self.canvas.bind("<MouseWheel>", self._on_canvas_wheel)
+        self.canvas.bind("<Shift-MouseWheel>", self._on_canvas_hwheel)
+        self.canvas_frame.bind("<MouseWheel>", self._on_canvas_wheel)
+        self.canvas_frame.bind("<Shift-MouseWheel>", self._on_canvas_hwheel)
+
         match_tab = self.tabs.tab("📋 Поединки")
         self.match_scroll = ScrollableFrame(match_tab, fg_color=BG)
         self.match_scroll.pack(fill="both", expand=True, padx=10, pady=10)
@@ -4331,12 +4447,15 @@ class BracketWindow(ctk.CTkToplevel):
             print(f"[sync] assign_table: {e}")
 
     def _suggest_table_number(self):
-        """Первый свободный номер стола среди остальных открытых сеток,
-        которые сейчас транслируются на табло."""
+        """Первый свободный номер стола среди открытых сеток и сохранённых
+        в БД трансляций других категорий (окно может быть закрыто, но стол
+        из-за этого не освобождается)."""
         used = {
             w.table_number for w in getattr(self.master, "_open_bracket_windows", [])
             if w is not self and w.winfo_exists() and w.table_number is not None
         }
+        used |= self.db.get_broadcast_table_numbers(
+            self.tournament_id, self.category["id"], self.hand)
         n = 1
         while n in used:
             n += 1
@@ -4353,6 +4472,9 @@ class BracketWindow(ctk.CTkToplevel):
                 continue
             if w.table_number == table_number:
                 return f"{w.category['name']} — {w.hand}"
+        if table_number in self.db.get_broadcast_table_numbers(
+                self.tournament_id, self.category["id"], self.hand):
+            return "другая категория с сохранённой трансляцией"
         return None
 
     def _refresh_broadcast_status_label(self):
@@ -4720,10 +4842,18 @@ class BracketWindow(ctk.CTkToplevel):
         total_h += 60
         self.canvas.configure(scrollregion=(0, 0, total_w, total_h))
 
+    def _on_canvas_wheel(self, event):
+        """Вертикальный скролл сетки колесом мыши."""
+        self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        return "break"
+
+    def _on_canvas_hwheel(self, event):
+        """Горизонтальный скролл сетки Shift+колесо (большие сетки шире окна)."""
+        self.canvas.xview_scroll(int(-1 * (event.delta / 120)), "units")
+        return "break"
+
     @staticmethod
     def _round_rect(canvas, x1, y1, x2, y2, radius=14, **kwargs):
-        """Прямоугольник со скруглёнными углами (обычный create_rectangle
-        в Tkinter углы скруглять не умеет — рисуем сглаженный полигон)."""
         r = min(radius, (x2 - x1) / 2, (y2 - y1) / 2)
         points = [
             x1 + r, y1,
@@ -4857,7 +4987,22 @@ class BracketWindow(ctk.CTkToplevel):
 
         def set_winner(winner_id):
             self.canvas.delete("popup")
-            self.engine.advance_winner(match_id, winner_id)
+            if m["status"] == "done":
+                if m["winner_id"] == winner_id:
+                    # Победитель не изменился — пересчёт не нужен.
+                    return
+                # Пересмотр результата: подтверждаем и пересчитываем сетку.
+                winner_name = p1["name"] if winner_id == m["p1_id"] else p2["name"]
+                if not messagebox.askyesno("Сменить победителя",
+                        f"Матч завершён. Назначить победителем «{winner_name}»?\n\n"
+                        "Сетка будет пересчитана до конца.", parent=self):
+                    return
+                ok = self.engine.change_winner(match_id, winner_id)
+                if not ok:
+                    messagebox.showwarning("Ошибка",
+                            "Не удалось изменить победителя.", parent=self)
+            else:
+                self.engine.advance_winner(match_id, winner_id)
             self._invalidate_cache()
             self._load_bracket()
 
@@ -7791,6 +7936,13 @@ class App(ctk.CTk):
                     command=self._open_display_board)
         self.display_btn.grid(row=0, column=2)
 
+        self.refresh_section_btn = ctk.CTkButton(self.header_actions, text="🔄 Обновить данные",
+                    width=140, height=34,
+                    fg_color="#223047", hover_color="#2a3a57",
+                    font=ctk.CTkFont(size=12, weight="bold"),
+                    command=self._refresh_tournament_views)
+        self.refresh_section_btn.grid(row=0, column=3)
+
         # ─── Перенос соревнования: экспорт / импорт / аварийный экспорт ───
         self.export_btn = ctk.CTkButton(self.header_actions, text="📦 Экспорт",
                     width=110, height=30,
@@ -9017,9 +9169,24 @@ class App(ctk.CTk):
         self.tournament_list_view.pack(fill="both", expand=True)
         self._refresh_tournament_list()
 
+    def _refresh_tournament_views(self):
+        """Кнопка «Обновить данные» в шапке турнира: перечитывает все разделы
+        (категории, участники, сетки) из локальной БД и перерисовывает их.
+        Данные могли измениться не через это окно (например скриптом, другим
+        окном или после импорта) — кнопка приводит вкладки к актуальному виду."""
+        if not self.current_tournament_id:
+            return
+        t = self.db.get_tournament(self.current_tournament_id)
+        self.title_label.configure(
+            text=f"🏆  {t['name']}  |  {t['date']}  |  {t['location'] or ''}")
+        self._refresh_status_badge(t)
+        self._rebuild_age_filter()
+        self._refresh_categories()
+        self._refresh_participants()
+        self._refresh_brackets_tab()
+
     # ════════════════════════════════════════════════════════════════
     #  ЭКСПОРТ / ИМПОРТ СОРЕВНОВАНИЯ (.armwrestling)
-    # ════════════════════════════════════════════════════════════════
     def _default_export_filename(self, tid):
         try:
             t = self.db.get_tournament(tid)

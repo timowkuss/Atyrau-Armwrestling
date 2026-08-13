@@ -886,16 +886,27 @@ class SyncManager:
         )
 
         def go():
-            self.api.update_match(
-                remote_match_id,
-                p1_id=remote_p1,
-                p2_id=remote_p2,
-                winner_id=remote_winner,
-                p1_losses=match.get("p1_losses"),
-                p2_losses=match.get("p2_losses"),
-                status=match.get("status"),
-                **table_number_kwargs,
-            )
+            try:
+                self.api.update_match(
+                    remote_match_id,
+                    p1_id=remote_p1,
+                    p2_id=remote_p2,
+                    winner_id=remote_winner,
+                    p1_losses=match.get("p1_losses"),
+                    p2_losses=match.get("p2_losses"),
+                    status=match.get("status"),
+                    **table_number_kwargs,
+                )
+            except ApiClientError as e:
+                if e.status_code == 404:
+                    # Матч удалён на сервере (ребuild сетки) — снимаем mapping
+                    # сразу, не ретрая и не засоряя офлайн-очередь: повторный
+                    # PATCH к несуществующему матчу бессмысленен и лишь
+                    # приводит к лишним повторам «404 не найден».
+                    self.state.map_delete("match", mid)
+                    print(f"[sync] update_match mid={mid}: 404 — матч удалён на сервере, пропускаем")
+                    return remote_match_id
+                raise
             return remote_match_id
 
         return self._try("update_match", payload, go)
@@ -916,7 +927,14 @@ class SyncManager:
                 continue
 
             def go(remote_match_id=remote_match_id, table_number=table_number):
-                self.api.update_match(remote_match_id, table_number=table_number)
+                try:
+                    self.api.update_match(remote_match_id, table_number=table_number)
+                except ApiClientError as e:
+                    if e.status_code == 404:
+                        self.state.map_delete("match", mid)
+                        print(f"[sync] update_match mid={mid}: 404 — матч удалён на сервере, пропускаем")
+                        return remote_match_id
+                    raise
                 return remote_match_id
 
             self._try("update_match", payload, go)
@@ -1369,6 +1387,15 @@ class SyncManager:
                 return True
 
             if operation == "create_match":
+                # Матч уже создан на сервере (id_map проставлен, например при
+                # первом успешном create_match или когда тот же mid синкался
+                # через другой путь) — повторный POST бессмысленен и может
+                # упасть (например 422, если состав категории с тех пор
+                # изменился), а упав, заблокировать всю FIFO-очередь позади.
+                # Идемпотентно: операция выполнена, просто снимаем её.
+                if self.state.map_get("match", payload["mid"]) is not None:
+                    print(f"[sync] create_match mid={payload['mid']}: уже создан на сервере — пропускаю")
+                    return True
                 remote_category_id = self.state.map_get("category", payload["category_id"])
                 if remote_category_id is None:
                     print(f"[sync] DEBUG: create_match ждёт category_id={payload['category_id']}")

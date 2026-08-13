@@ -19,8 +19,11 @@ dist/
 
 # Database
 *.db
-*.db.bak
+*.db.bak*
 *.sqlite
+
+# Автобэкапы приложения — runtime-артефакты, не код
+desktop-app/backups/
 
 sync_config.json
 
