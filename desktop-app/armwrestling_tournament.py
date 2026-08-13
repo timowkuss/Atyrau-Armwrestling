@@ -4513,14 +4513,23 @@ class BracketWindow(ctk.CTkToplevel):
 
         from collections import OrderedDict
 
-        # Скрытые «сервисные» матчи: авто-проходы «X vs BYE» и ghost-слоты
-        # «BYE vs BYE» (is_bye=1, второй участник пуст). Бокс для них не рисуем —
-        # прошедший участник уже виден в следующем раунде, а стрелки цепочек
-        # (win_next_id / lose_next_id) перепрыгивают через такие матчи.
+        # Нерисуемые «сервисные» матчи:
+        #  - ghost-слоты «BYE vs BYE» (оба участника пустые);
+        #  - bye-матчи НЕ первого раунда своей секции (полуфинальные, в нижней
+        #    сетке и т.п.) — они появляются при переносе bye глубже в сетку.
+        #  А вот первый раунд при нечётном числе участников показываем честной
+        #  парой «участник / BYE», как и положено в турнирной сетке.
         by_id = {m["id"]: m for m in matches}
+        first_stage = {}
+        for m in matches:
+            bs = m["bracket"]
+            first_stage[bs] = min(first_stage.get(bs, m["stage"]), m["stage"])
         ghost_ids = {
             m["id"] for m in matches
-            if m["is_bye"] == 1 and m["p2_id"] is None
+            if m["is_bye"] == 1 and (
+                (m["p1_id"] is None and m["p2_id"] is None)
+                or (m["p2_id"] is None and m["stage"] != first_stage.get(m["bracket"], m["stage"]))
+            )
         }
 
         def visible_rounds(src_rounds):
@@ -4657,6 +4666,9 @@ class BracketWindow(ctk.CTkToplevel):
         for mid in list(box_pos):
             m = by_id[mid]
             for kind in ("win", "lose"):
+                if kind == "lose" and m["bracket"] == "winners":
+                    # стрелки из верхней сетки в нижнюю не рисуем
+                    continue
                 tid = resolve_next(m, kind)
                 if tid is None or tid not in box_pos:
                     continue
