@@ -877,6 +877,12 @@ class SyncManager:
                 print(f"[sync] reconcile mid={mid}: участники без id_map "
                       f"({missing_participants}) — пропускаю")
                 continue
+            if self.state.has_pending("create_match", "mid", mid):
+                # create_match для этого mid уже ждёт в очереди (первый
+                # reconcile при недоступной сети) — второй раз не ставим,
+                # чтобы не копить дубли, которые после сети пошлют N повторов
+                # идемпотентного POST на сервер.
+                continue
             payload = {"mid": mid, **dict(row)}
             self.state.enqueue("create_match", payload)
             added += 1

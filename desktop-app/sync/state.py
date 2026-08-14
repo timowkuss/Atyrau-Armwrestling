@@ -283,6 +283,20 @@ class SyncState:
             row = self.conn.execute("SELECT COUNT(*) as c FROM pending_queue").fetchone()
             return row["c"]
 
+    def has_pending(self, operation: str, id_key: str, id_value) -> bool:
+        """Есть ли уже в очереди операция данного типа с payload[id_key] == id_value.
+        Используется reconcile: повторный вызов (повторное открытие турнира,
+        второе нажатие «Обновить данные») не должен плодить дубли create_match
+        для одних и тех же mid, пока первый ещё висит в очереди (нет сети)."""
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT payload FROM pending_queue WHERE operation=?", (operation,)
+            ).fetchall()
+            for row in rows:
+                if json.loads(row["payload"]).get(id_key) == id_value:
+                    return True
+            return False
+
     # ── курсор обратной синхронизации (сайт -> десктоп) ─────────
     def get_cursor(self, name: str) -> str | None:
         with self._lock:
