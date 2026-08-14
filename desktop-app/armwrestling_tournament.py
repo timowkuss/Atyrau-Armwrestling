@@ -9156,6 +9156,7 @@ class App(ctk.CTk):
         self._refresh_participants()
         self._refresh_brackets_tab()
         self._show_tournament_detail()
+        self._reconcile_sync()
 
     def _show_tournament_detail(self):
         """Скрывает список турниров и открывает рабочую область выбранного."""
@@ -9184,6 +9185,23 @@ class App(ctk.CTk):
         self._refresh_categories()
         self._refresh_participants()
         self._refresh_brackets_tab()
+        self._reconcile_sync()
+
+    def _reconcile_sync(self):
+        """Сверяет локальные матчи текущего турнира с картой id_map и ставит
+        в очередь create_match для тех, что отсутствуют на сайте. Вызывается
+        из кнопки «Обновить данные» и при открытии турнира, чтобы сетка
+        самовосстанавливалась, если сервер потерял матчи."""
+        try:
+            from sync.sync_manager import sync_manager
+            tid = self.current_tournament_id
+            if not tid or not sync_manager.enabled:
+                return
+            added = sync_manager.reconcile_missing_matches(tid)
+            if added:
+                sync_manager.try_auto_flush_async()
+        except Exception as e:
+            print(f"[reconcile] ошибка: {e}")
 
     # ════════════════════════════════════════════════════════════════
     #  ЭКСПОРТ / ИМПОРТ СОРЕВНОВАНИЯ (.armwrestling)

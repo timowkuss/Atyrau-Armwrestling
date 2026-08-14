@@ -824,6 +824,66 @@ class SyncManager:
 
         return self._try("create_match", payload, go)
 
+    # ── reconcile: восстановление «потерянных» на сайте матчей ──
+    def reconcile_missing_matches(self, tid, db_path=None):
+        """Ищем локальные матчи турнира, отсутствующие на сайте (нет записи
+        в id_map), и ставим для них create_match в офлайн-очередь.
+
+        Зачем: матчи создаются на сервере ТОЛЬКО по событию локального
+        изменения (on_match_created). Если сервер потерял/удалил матчи
+        (сброс категории, ручная чистка, пересоздание БД сайта), а локально
+        они остались и с тех пор не менялись — они на сайт сами не вернутся.
+        Reconcile закрывает именно этот пробел: всё, что есть локально, но
+        не замаплено, снова попадает в очередь и долетает (через _replay).
+
+        Ограничения (чтобы не воскрешать чужой мусор):
+          * только турнир tid (сироты других/удалённых турниров не трогаем);
+          * только матчи, чья категория УЖЕ замаплена на сервер (иначе
+            create_match навсегда повиснет в очереди как «ждёт category_id»);
+          * матчи, где p1/p2/winner замаплены (или отсутствуют) — иначе
+            сервер ответит 422 и операция застрянет в blocked.
+
+        Возвращает число добавленных в очередь create_match."""
+        import sqlite3 as _sqlite3
+        db_path = db_path or _TOURNAMENT_DB_PATH
+        added = 0
+        try:
+            db = _sqlite3.connect(str(db_path))
+            db.row_factory = _sqlite3.Row
+        except Exception as e:
+            print(f"[sync] reconcile: не могу открыть локальную БД: {e}")
+            return 0
+        try:
+            rows = db.execute(
+                "SELECT * FROM matches WHERE tournament_id=?", (tid,)
+            ).fetchall()
+        except Exception as e:
+            print(f"[sync] reconcile: ошибка чтения матчей: {e}")
+            db.close()
+            return 0
+        db.close()
+
+        for row in rows:
+            mid = row["id"]
+            if self.state.map_get("match", mid) is not None:
+                continue
+            if self.state.map_get("category", row["category_id"]) is None:
+                continue
+            missing_participants = [
+                k for k in ("p1_id", "p2_id", "winner_id")
+                if row[k] is not None and self.state.map_get("participant", row[k]) is None
+            ]
+            if missing_participants:
+                print(f"[sync] reconcile mid={mid}: участники без id_map "
+                      f"({missing_participants}) — пропускаю")
+                continue
+            payload = {"mid": mid, **dict(row)}
+            self.state.enqueue("create_match", payload)
+            added += 1
+            print(f"[sync] reconcile mid={mid}: добавлен create_match "
+                  f"(cat={row['category_id']}, hand={row['hand']})")
+        return added
+
     # ── сброс/пересоздание сетки категории ──────────────────────
     def on_bracket_reset(self, category_id, hand, local_mids):
         """Database.clear_matches удаляет матчи из sqlite напрямую, без
