@@ -8,6 +8,14 @@ venv/
 node_modules/
 dist/
 
+# Сборка PyInstaller / инсталлятор — артефакты, не код
+desktop-app/build/
+desktop-app/dist/
+build/AtyrauArmwrestlingSetup.exe
+build/AtyrauArmwrestling_Portable.zip
+build/AtyrauArmwrestling.ico
+desktop-app/__pycache__/
+
 # VS Code
 .vscode/
 

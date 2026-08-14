@@ -32,6 +32,9 @@ from flask import Flask
 from threading import Thread
 import webbrowser
 
+from paths import (app_dir, backups_dir, data_path, db_path, env_file,
+                   photos_dir, resource_path, sync_state_db_path, is_frozen)
+
 # ─── .env рядом со скриптом/exe — сюда судья/организатор прописывает
 # CLOUDINARY_CLOUD_NAME и CLOUDINARY_UPLOAD_PRESET (см. sync/cloudinary_client.py).
 # ДОЛЖНО стоять раньше импорта sync.cloudinary_client ниже — тот читает
@@ -42,7 +45,7 @@ try:
     # приложение запущено ярлыком/из другого места, CWD может не совпадать
     # с desktop-app/, и иначе .env (в т.ч. DESKTOP_SYNC_TOKEN и Cloudinary)
     # молча не подхватится — весь sync начнёт падать с 401.
-    load_dotenv(Path(__file__).resolve().parent / ".env")
+    load_dotenv(env_file())
 except ImportError:
     pass  # python-dotenv не установлен — просто не подхватываем .env,
           # переменные окружения всё ещё можно задать вручную в системе
@@ -87,9 +90,9 @@ from ui_theme import (theme, BG, PANEL, PANEL_LIGHT, CARD, CARD_ALT, INPUT_BG,
                        INFO_HOVER, OptionMenu)
 theme.apply_global(ctk)
 
-DB_PATH = Path(__file__).resolve().parent / "armwrestling.db"
-PHOTOS_DIR = Path("photos")
-PHOTOS_DIR.mkdir(exist_ok=True)
+DB_PATH = db_path()
+PHOTOS_DIR = photos_dir()
+PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ─── Штрихкод ────
 BARCODE_PREFIX = "ARM"
@@ -1446,7 +1449,8 @@ from transfer.importer import import_competition, preview_archive, \
 from transfer.pack import BackupFormatError  # noqa: E402
 
 backup_manager = BackupManager()
-BACKUP_DIR = Path(__file__).resolve().parent / "backups"
+BACKUP_DIR = backups_dir()
+BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
 _original_create_tournament = Database.create_tournament
 _original_add_category = Database.add_category
@@ -1790,7 +1794,7 @@ class BadgeGenerator:
     GAP_Y = 0.2 * cm
 
     # Логотип города Атырау — всегда на бейджике (копия лежит рядом со скриптом)
-    LOGO_PATH = str(Path(__file__).resolve().parent / "assets" / "logo-atyrau-city.png")
+    LOGO_PATH = str(resource_path("assets/logo-atyrau-city.png"))
 
     # Палитра бейджика — продолжение фирменной гаммы приложения:
     # нефтепромысловый Атырау (petrol/brass/rust).
@@ -7769,6 +7773,45 @@ class App(ctk.CTk):
 
         # Проверка неактивных спортсменов (клубный рейтинг) после старта UI.
         self.after(1500, self._check_club_inactivity)
+        # Проверка подключения к серверу синхронизации (неблокирующая).
+        self.after(3000, self._backend_health_check)
+
+    def _backend_health_check(self):
+        """Разовая неблокирующая проверка доступности сервера синхронизации
+        при старте. НЕ висит: HTTP-запрос выполняется в фоновом потоке с
+        таймаутом (см. config.REQUEST_TIMEOUT_SECONDS), UI не блокируется.
+        Показывает понятный тост, а не «тихо молчит»."""
+        def _probe():
+            try:
+                from sync import config as sync_config
+                from sync.api_client import SyncApiClient
+                api = SyncApiClient()
+                api.timeout = min(api.timeout or 10, 10)
+                api.ping()
+                ok, msg = True, ""
+            except Exception as e:
+                ok, msg = False, str(e)
+            self.after(0, lambda: self._show_backend_health_result(ok, msg))
+        Thread(target=_probe, daemon=True).start()
+
+    def _show_backend_health_result(self, ok, msg):
+        try:
+            from sync import config as sync_config
+            host = sync_config.API_BASE_URL
+            if ok:
+                self._show_sync_toast(
+                    f"🟢 Сервер синхронизации доступен")
+            else:
+                low = msg.lower()
+                if ("timed out" in low or "conn" in low or "resolve" in low):
+                    reason = "нет интернета"
+                else:
+                    reason = "токен или адрес сервера"
+                self._show_sync_toast(
+                    f"⚠️ Сервер синхронизации недоступен ({reason}). "
+                    f"Проверьте подключение к интернету.\n{host}")
+        except Exception:
+            pass
 
     def _check_club_inactivity(self):
         try:

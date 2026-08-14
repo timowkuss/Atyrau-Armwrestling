@@ -6,7 +6,9 @@ import json
 import os
 from pathlib import Path
 
-_CONFIG_FILE = Path(__file__).resolve().parent.parent / "sync_config.json"
+from paths import config_file, data_path
+
+_CONFIG_FILE = config_file()
 
 _defaults = {
     "API_BASE_URL": "http://localhost:8000/api/v1/sync",
@@ -46,4 +48,4 @@ REQUEST_TIMEOUT_SECONDS: float = float(_cfg["REQUEST_TIMEOUT_SECONDS"])
 
 # Отдельный файл для карты локальных <-> центральных id и офлайн-очереди —
 # намеренно НЕ armwrestling.db, чтобы не трогать существующую схему.
-SYNC_STATE_DB_PATH = Path(__file__).resolve().parent.parent / "sync_state.db"
+SYNC_STATE_DB_PATH = data_path("sync_state.db")

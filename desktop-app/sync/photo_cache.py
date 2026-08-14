@@ -19,8 +19,10 @@ from pathlib import Path
 
 import requests
 
-CACHE_DIR = Path("photo_cache")
-CACHE_DIR.mkdir(exist_ok=True)
+from paths import photo_cache_dir
+
+CACHE_DIR = photo_cache_dir()
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 _TIMEOUT_SECONDS = 15
 

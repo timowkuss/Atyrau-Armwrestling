@@ -14,10 +14,12 @@ from pathlib import Path
 from .api_client import ApiClientError, SyncApiClient, UNSET
 from .state import SyncState
 from . import config
+from paths import db_path
 
-# armwrestling.db лежит в desktop-app/ (родитель папки sync/) — см. тот же
-# путь в armwrestling_tournament.py (DB_PATH).
-_TOURNAMENT_DB_PATH = Path(__file__).resolve().parent.parent / "armwrestling.db"
+# armwrestling.db лежит в writable-папке приложения (dev: desktop-app/,
+# frozen: %APPDATA%\AtyrauArmwrestling) — см. тот же путь в
+# armwrestling_tournament.py (DB_PATH).
+_TOURNAMENT_DB_PATH = db_path()
 
 
 class SyncManager:
