@@ -66,7 +66,10 @@ def validate_competition_integrity(conn, tid: int) -> list:
             problems.append(
                 f"Матч #{m['id']} ещё не завершён, но указан победитель")
         if m["status"] in ("done", "bye") and m["winner_id"] is None:
-            ghost = m["p1_id"] is None and m["p2_id"] is None and m["is_bye"]
+            # Ghost-матч: пустая ячейка сетки (нет ни одного участника) —
+            # через неё прошли bye'и (см. _collapse_chained_byes), победителя
+            # нет по определению. От флага is_bye не зависит.
+            ghost = m["p1_id"] is None and m["p2_id"] is None
             if not ghost and m["bracket"] != "final":
                 problems.append(f"Матч #{m['id']} завершён без победителя")
         if m["winner_id"] is not None and m["winner_id"] not in (m["p1_id"], m["p2_id"]):

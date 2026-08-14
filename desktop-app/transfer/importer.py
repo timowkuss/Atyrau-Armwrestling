@@ -125,8 +125,7 @@ def validate_archive(payload, metadata):
                 f"Матч #{m['id']}: недопустимый статус '{m.get('status')}'")
         if m.get("status") in ("done", "bye"):
             if winner is None:
-                ghost = m.get("p1_id") is None and m.get("p2_id") is None \
-                    and m.get("is_bye")
+                ghost = m.get("p1_id") is None and m.get("p2_id") is None
                 # Переигровка гранд-финала помечается движком 'bye' без
                 # победителя, когда чемпион победил без переигровки.
                 if not ghost and m.get("bracket") != "final":

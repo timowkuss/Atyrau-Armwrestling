@@ -7889,7 +7889,7 @@ class App(ctk.CTk):
         # ─── Вид 2: рабочая область выбранного турнира ───
         self.tournament_detail_view = ctk.CTkFrame(page, fg_color=BG, corner_radius=0)
 
-        self.header = ctk.CTkFrame(self.tournament_detail_view, height=60,
+        self.header = ctk.CTkFrame(self.tournament_detail_view, height=96,
                                    fg_color=PANEL, corner_radius=0)
         self.header.pack(fill="x")
         self.header.pack_propagate(False)

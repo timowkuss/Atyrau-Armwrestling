@@ -25,7 +25,8 @@ import unittest
 import armwrestling_tournament as app
 from tests.export_import.helpers import Laptop2, _NoSync  # noqa: E402
 
-from transfer.exporter import export_competition  # noqa: E402
+from transfer.exporter import (export_competition,  # noqa: E402
+                               validate_competition_integrity)
 from transfer.importer import import_competition  # noqa: E402
 
 
@@ -401,3 +402,30 @@ class TestBracketRoundtrip(BracketFixture):
                                        "после переноса (odd n)")
         finally:
             shutil.rmtree(laptop.tmp, ignore_errors=True)
+
+    def test_collapsed_ghost_matches_pass_integrity(self):
+        """Ghost-матчи после _collapse_chained_byes имеют статус 'done' и
+        is_bye=0 без участников и победителя. Валидатор экспорта должен
+        считать их легитимными (пустые ячейки LB) и не блокировать экспорт.
+        Регрессия: пустые ячейки 80/131 в реальном турнире блокировали
+        экспорт до того, как валидатор начал опираться на отсутствие
+        участников, а не на флаг is_bye."""
+        self._generate(10)
+        # Эмулируем collapse-матч: пустой, done, без is_bye.
+        ghosts = [m for m in self._matches()
+                  if (m["p1_id"] is None and m["p2_id"] is None
+                      and m["status"] in ("done", "bye"))]
+        self.assertTrue(ghosts, "сетка на 10 обязана дать пустые ячейки")
+        ms = self.db.get_matches(self.cat, HAND)
+        for m in ms:
+            if (m["p1_id"] is None and m["p2_id"] is None
+                    and m["status"] in ("done", "bye")):
+                self.db.conn.execute(
+                    "UPDATE matches SET is_bye=0 WHERE id=?", (m["id"],))
+        self.db.conn.commit()
+        problems = validate_competition_integrity(self.db.conn, self.tid)
+        self.assertEqual(problems, [],
+                         "ghost-матчи done/is_bye=0 не должны "
+                         f"блокировать экспорт: {problems}")
+        dest = os.path.join(self.tmp, "ghost.armwrestling")
+        export_competition(self.db.conn, None, self.tid, dest)
