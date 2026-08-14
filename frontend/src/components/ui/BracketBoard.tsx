@@ -15,7 +15,7 @@ import { cloudinaryThumb } from '@/lib/cloudinaryImage'
 
 // На мобильных — компактная геометрия: у́же боксы, меньший шаг, чтобы
 // вся сетка читалась при горизонтальной прокрутке.
-const COMPACT = { boxW: 150, hGap: 20, boxH: 52 }
+const COMPACT = { boxW: 190, hGap: 22, boxH: 68 }
 const FULL = { boxW: 220, hGap: 36, boxH: 64 }
 
 const COLOR_W = '#2a4a6a'
@@ -286,25 +286,27 @@ function initials(name: string): string {
     .toUpperCase()
 }
 
-function RowLabel({ name, photo, isBye }: { name: string | null; photo: string | null; isBye: boolean }) {
+function RowLabel({ name, photo, isBye, compact }: { name: string | null; photo: string | null; isBye: boolean; compact: boolean }) {
   const src = cloudinaryThumb(photo, 48)
   return (
     <span className="flex min-w-0 items-center gap-1.5">
-      <span className="h-6 w-6 shrink-0 overflow-hidden rounded-md bg-steel-dim/20 ring-1 ring-steel-dim/30">
+      <span className={`shrink-0 overflow-hidden rounded-md bg-steel-dim/20 ring-1 ring-steel-dim/30 ${compact ? 'h-5 w-5' : 'h-6 w-6'}`}>
         {src && name ? (
           <img src={src} alt={name} className="h-full w-full object-cover" loading="lazy" referrerPolicy="no-referrer" />
         ) : (
-          <span className="flex h-full w-full items-center justify-center text-[10px] font-mono text-bone/70">
+          <span className="flex h-full w-full items-center justify-center text-[9px] font-mono text-bone/70">
             {name ? initials(name) : '—'}
           </span>
         )}
       </span>
-      <span className="min-w-0 flex-1 truncate">{slotLabel(name, isBye)}</span>
+      <span className={`min-w-0 flex-1 ${compact ? 'break-words leading-snug' : 'truncate'}`}>
+        {slotLabel(name, isBye)}
+      </span>
     </span>
   )
 }
 
-function MatchBox({ match, x, y, g }: { match: BracketMatchOut; x: number; y: number; g: Geometry }) {
+function MatchBox({ match, x, y, g, compact }: { match: BracketMatchOut; x: number; y: number; g: Geometry; compact: boolean }) {
   const { boxW, boxH } = g
   const isByeMatch = match.status === 'bye'
   const hasWinner = match.winner_name != null
@@ -333,13 +335,13 @@ function MatchBox({ match, x, y, g }: { match: BracketMatchOut; x: number; y: nu
       }}
     >
       <div className="flex items-center justify-between gap-1.5">
-        <div className={`min-w-0 truncate text-[11px] leading-tight sm:text-xs ${rowClass(p1Won, hasWinner && p2Won, match.p1_name)}`}>
-          <RowLabel name={match.p1_name} photo={match.p1_photo} isBye={isByeMatch} />
+        <div className={`min-w-0 text-[11px] leading-tight sm:text-xs ${rowClass(p1Won, hasWinner && p2Won, match.p1_name)}`}>
+          <RowLabel name={match.p1_name} photo={match.p1_photo} isBye={isByeMatch} compact={compact} />
         </div>
       </div>
       <div className="my-0.5 h-px bg-steel-dim/15" />
-      <div className={`min-w-0 truncate text-[11px] leading-tight sm:text-xs ${rowClass(p2Won, hasWinner && p1Won, match.p2_name)}`}>
-        <RowLabel name={match.p2_name} photo={match.p2_photo} isBye={isByeMatch} />
+      <div className={`min-w-0 text-[11px] leading-tight sm:text-xs ${rowClass(p2Won, hasWinner && p1Won, match.p2_name)}`}>
+        <RowLabel name={match.p2_name} photo={match.p2_photo} isBye={isByeMatch} compact={compact} />
       </div>
     </div>
   )
@@ -368,7 +370,7 @@ export function BracketTree({ matches }: { matches: BracketMatchOut[] }) {
           </p>
         )}
         {layout.positioned.map(({ match, x, y }) => (
-          <MatchBox key={match.id} match={match} x={x} y={y} g={g} />
+          <MatchBox key={match.id} match={match} x={x} y={y} g={g} compact={compact} />
         ))}
       </div>
     </div>
