@@ -48,17 +48,17 @@ def create_match(
     _: bool = Depends(require_desktop_sync),
 ):
     """Пишется сразу по ходу сетки в десктопе, а не пакетом в конце
-    (см. ARCHITECTURE.md §5, шаг 4).
+    (см. ARCHICTURE.md §5, шаг 4).
 
     Идемпотентен по (category_id, mid): если десктоп потерял ответ (таймаут)
     и retry пришёл повторно — возвращаем уже созданный матч, а не плодим
     дубль (дубль = двойное Эло и ложные победы в расстановке мест)."""
-    _validate_participants_belong(
-        db, payload.category_id, {payload.p1_id, payload.p2_id, payload.winner_id}
-    )
     existing = _find_by_client_mid(db, payload.category_id, payload.mid)
     if existing is not None:
         return {"id": existing.id, "status": "existing"}
+    _validate_participants_belong(
+        db, payload.category_id, {payload.p1_id, payload.p2_id, payload.winner_id}
+    )
     match = Match(
         competition_id=_competition_id_of(db, payload),
         client_mid=payload.mid,

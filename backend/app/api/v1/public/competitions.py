@@ -378,7 +378,7 @@ def get_competition_queue(competition_id: int, db: Session = Depends(get_db)):
                 if pid is not None:
                     continue
                 src = source_by_slot.get((mid, slot))
-                if src is None or src in stale_ids:
+                if src is not None and src in stale_ids:
                     stale_ids.add(mid)
                     changed = True
                     break

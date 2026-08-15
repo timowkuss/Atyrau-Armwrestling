@@ -1120,17 +1120,17 @@ class SyncManager:
                         made_progress = True
                     elif ok is None:
                         continue
-                    elif is_delete:
-                        # Удаление не блокирует остальную очередь и не
-                        # теряется молча: фиксируем ошибку, продолжаем слать
-                        # следующие операции, а само удаление повторится при
-                        # следующем flush_pending.
+                    elif is_delete or not ok:
+                        # Ни одна упавшая операция не блокирует остальную
+                        # очередь: фиксируем ошибку, пропускаем и идём
+                        # к следующей операции.  Раньше create/update
+                        # немедленно останавливали весь flush (return),
+                        # из-за чего одна «битая» create_match блокировала
+                        # отправку ВСЕХ остальных матчей на сервер.
                         stalled.add(row["id"])
                         self.state.mark_failed(row["id"],
-                                               row["last_error"] or "delete не долетел — повторим позже")
-                    else:
-                        self.state.mark_failed(row["id"], "flush_pending: unrecoverable error")
-                        return succeeded, self.state.pending_count()
+                                               row["last_error"] or "не долетел — повторим позже")
+                        made_progress = True
                 if not made_progress:
                     break
             return succeeded, self.state.pending_count()
@@ -1492,6 +1492,16 @@ class SyncManager:
                         self.state.purge_pending("update_match", "mid", payload["mid"])
                         print(f"[sync] create_match mid={payload['mid']}: 404 — категория/соревнование удалены")
                         self.state.map_delete("category", payload["category_id"])
+                        return True
+                    if e.status_code == 422:
+                        # Участники/победитель не принадлежат категории
+                        # на сервере — id_map протух (sportсмен удалён /
+                        # пересоздан на сайте). Пропускаем этот матч, чтобы
+                        # не блокировать очередь; при следующем reconcile
+                        # он будет создан заново с актуальными ID.
+                        print(f"[sync] create_match mid={payload['mid']}: 422 — "
+                              f"участники не совпадают, пропускаю: {e}")
+                        self.state.purge_pending("update_match", "mid", payload["mid"])
                         return True
                     raise
                 self.state.map_set("match", payload["mid"], remote["id"])
