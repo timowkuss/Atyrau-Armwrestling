@@ -298,7 +298,20 @@ export function CompetitionBoard() {
           <p className="mt-16 text-center text-lg text-steel-dim">Загрузка...</p>
         )}
 
-        {tables.length > 0 && (
+        {competition.isError && (
+          <p className="mt-16 text-center text-lg text-rose-400">
+            Ошибка загрузки турнира. Проверьте соединение и обновите страницу.
+          </p>
+        )}
+
+        {!competition.isError && queue.isError && (
+          <p className="mt-16 text-center text-lg text-rose-400">
+            Не удалось получить очередь столов. Сервер недоступен — проверьте
+            соединение, данные обновятся автоматически.
+          </p>
+        )}
+
+        {!competition.isError && !queue.isError && tables.length > 0 && (
           <div className={`mt-4 grid ${gridClass} gap-3`}>
             {tables.map((table) => (
               <QueueBlock key={`${table.table_number}-${table.category_name}-${table.hand}`} table={table} tableCount={tables.length} />
@@ -306,7 +319,7 @@ export function CompetitionBoard() {
           </div>
         )}
 
-        {tables.length === 0 && !queue.isLoading && (
+        {!competition.isError && !queue.isError && tables.length === 0 && !queue.isLoading && (
           <p className="mt-16 text-center text-lg text-steel-dim">
             {selectedNames.size > 0 ? 'Нет столов' : 'Нет данных'}
           </p>

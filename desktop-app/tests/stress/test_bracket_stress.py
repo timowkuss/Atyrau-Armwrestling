@@ -429,3 +429,63 @@ class TestBracketRoundtrip(BracketFixture):
                          f"блокировать экспорт: {problems}")
         dest = os.path.join(self.tmp, "ghost.armwrestling")
         export_competition(self.db.conn, None, self.tid, dest)
+
+    def test_delete_tournament_removes_all_related_rows(self):
+        """Удаление турнира не должно оставлять orphan-записей (участники,
+        матчи, категории, рейтинги, переопределения, поколения сеток).
+        Регрессия: PRAGMA foreign_keys=ON не включён, поэтому ON DELETE
+        CASCADE из схемы не срабатывал — удаление оставляло мусор
+        (в реальной БД 44 orphan-записи после удаления турнира id=1)."""
+        self._generate(16)
+        # Сыграем пару матчей, чтобы в БД были и done-матчи, и бэкап-путь.
+        done = [m for m in self._matches()
+                if m["status"] == "pending" and m["p1_id"] and m["p2_id"]][:2]
+        for m in done:
+            self.engine.advance_winner(m["id"], m["p1_id"])
+        self.db.add_athlete("Тест", "Удаляемый", "1990-01-01", "M", "Club")
+        # Небольшой переопределитель двоеборья и поколение сетки.
+        self.db.conn.execute(
+            "INSERT OR IGNORE INTO dvoeborie_overrides "
+            "(tournament_id, category_id, pid, manual_rank) VALUES (?,?,?,?)",
+            (self.tid, self.cat, done[0]["p1_id"], 3))
+        self.db.conn.execute(
+            "INSERT OR IGNORE INTO bracket_generations (category_id, hand, generation) "
+            "VALUES (?,?,?)", (self.cat, HAND, 2))
+        self.db.conn.commit()
+
+        self.db.delete_tournament(self.tid)
+
+        # Таблица weight_categories живёт отдельно от tournaments — проверим
+        # все связанные таблицы через прямые SQL-запросы.
+        def leftover(sql, *args):
+            return self.db.conn.execute(sql, args).fetchall()
+
+        self.assertEqual(leftover("SELECT COUNT(*) FROM weight_categories "
+                                  "WHERE tournament_id=?", self.tid)[0][0], 0)
+        self.assertEqual(leftover("SELECT COUNT(*) FROM participants "
+                                  "WHERE tournament_id=?", self.tid)[0][0], 0)
+        self.assertEqual(leftover("SELECT COUNT(*) FROM matches "
+                                  "WHERE tournament_id=?", self.tid)[0][0], 0)
+        self.assertEqual(leftover("SELECT COUNT(*) FROM dvoeborie_overrides "
+                                  "WHERE tournament_id=?", self.tid)[0][0], 0)
+        self.assertEqual(leftover("SELECT COUNT(*) FROM bracket_generations "
+                                  "WHERE category_id=?", self.cat)[0][0], 0)
+        self.assertEqual(leftover("SELECT COUNT(*) FROM club_rating_history "
+                                  "WHERE tournament_id=?", self.tid)[0][0], 0)
+        self.assertEqual(leftover("SELECT COUNT(*) FROM tournaments "
+                                  "WHERE id=?", self.tid)[0][0], 0)
+
+    def test_delete_category_removes_related_matches(self):
+        """Удаление категории не должно оставлять матчи/участников с
+        битой ссылкой на категорию (FK-каскад не активен без прагмы)."""
+        self._generate(8)
+        self.db.delete_category(self.cat)
+        ms = self.db.conn.execute(
+            "SELECT COUNT(*) FROM matches WHERE category_id=?", (self.cat,)).fetchone()[0]
+        ps = self.db.conn.execute(
+            "SELECT COUNT(*) FROM participants WHERE category_id=?", (self.cat,)).fetchone()[0]
+        self.assertEqual(ms, 0, "после удаления категории не должно остаться матчей")
+        self.assertEqual(ps, 0, "после удаления категории не должно остаться участников")
+        cat = self.db.conn.execute(
+            "SELECT COUNT(*) FROM weight_categories WHERE id=?", (self.cat,)).fetchone()[0]
+        self.assertEqual(cat, 0, "сама категория должна быть удалена")

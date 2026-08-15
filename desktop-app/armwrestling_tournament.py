@@ -893,6 +893,22 @@ iin TEXT,                        -- ИИН, 12 цифр
         return self.conn.execute("SELECT * FROM tournaments WHERE id=?", (tid,)).fetchone()
 
     def delete_tournament(self, tid):
+        # PRAGMA foreign_keys=ON не включён (SQLite выключен по умолчанию),
+        # поэтому ON DELETE CASCADE из схемы НЕ срабатывает автоматически.
+        # Удаляем связанные записи вручную (как в delete_athlete), чтобы не
+        # оставлять orphan-записи (участники/матчи/категории удалённого турнира).
+        cats = [r["id"] for r in self.conn.execute(
+            "SELECT id FROM weight_categories WHERE tournament_id=?", (tid,))]
+        if cats:
+            marks = ",".join("?" * len(cats))
+            self.conn.execute(
+                f"DELETE FROM bracket_generations WHERE category_id IN ({marks})", tuple(cats))
+        self.conn.execute("DELETE FROM matches WHERE tournament_id=?", (tid,))
+        self.conn.execute("DELETE FROM participants WHERE tournament_id=?", (tid,))
+        self.conn.execute("DELETE FROM dvoeborie_overrides WHERE tournament_id=?", (tid,))
+        self.conn.execute("DELETE FROM club_rating_history WHERE tournament_id=?", (tid,))
+        self.conn.execute("DELETE FROM transfer_marks WHERE tournament_id=?", (tid,))
+        self.conn.execute("DELETE FROM weight_categories WHERE tournament_id=?", (tid,))
         self.conn.execute("DELETE FROM tournaments WHERE id=?", (tid,))
         self.conn.commit()
 
@@ -937,6 +953,12 @@ iin TEXT,                        -- ИИН, 12 цифр
             "SELECT * FROM weight_categories WHERE tournament_id=? ORDER BY max_weight", (tid,)).fetchall()
 
     def delete_category(self, cid):
+        # FK-каскад не срабатывает (PRAGMA foreign_keys=ON не включён) —
+        # удаляем зависимые матчи/участников/переопределения вручную.
+        self.conn.execute("DELETE FROM matches WHERE category_id=?", (cid,))
+        self.conn.execute("DELETE FROM participants WHERE category_id=?", (cid,))
+        self.conn.execute("DELETE FROM dvoeborie_overrides WHERE category_id=?", (cid,))
+        self.conn.execute("DELETE FROM bracket_generations WHERE category_id=?", (cid,))
         self.conn.execute("DELETE FROM weight_categories WHERE id=?", (cid,))
         self.conn.commit()
 
@@ -1546,6 +1568,11 @@ def _synced_save_match(self, match: dict):
             # стол и т.п.) не должно подвешивать диалог на HTTP-запрос.
             sync_manager.dispatch_match_update_async(mid, snapshot)
         else:
+            # Создание матча остаётся синхронным: оно обязано пройти ДО
+            # следующих матчей (id_map и офлайн-очередь строятся по порядку),
+            # на это завязаны тесты реальной синхронизации
+            # (tests/stress/test_change_winner_real_sync.py). Асинхронная
+            # отправка сюда ломала порядок и оставляла create_match в очереди.
             sync_manager.on_match_created(mid, match)
     except Exception as e:
         print(f"[sync] save_match: {e}")

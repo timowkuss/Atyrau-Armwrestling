@@ -18,7 +18,9 @@ export function useCompetition(id: number) {
     queryKey: ['competition', id],
     queryFn: () => api.competitions.get(id),
     enabled: Number.isFinite(id),
-    refetchInterval: 15000,
+    // Останавливаем опрос при ошибке (404/500): не долбим сервер раз в 15с
+    // на странице «Турнир не найден».
+    refetchInterval: (query) => (query.state.status === 'error' ? false : 15000),
     refetchIntervalInBackground: false,
   })
 }
@@ -56,7 +58,7 @@ export function useCompetitionBracket(id: number) {
     queryKey: ['competition', id, 'bracket'],
     queryFn: () => api.competitions.bracket(id),
     enabled: Number.isFinite(id),
-    refetchInterval: 10000,
+    refetchInterval: (query) => (query.state.status === 'error' ? false : 10000),
     refetchIntervalInBackground: false,
   })
 }
@@ -69,7 +71,7 @@ export function useCompetitionQueue(id: number) {
     queryKey: ['competition', id, 'queue'],
     queryFn: () => api.competitions.queue(id),
     enabled: Number.isFinite(id),
-    refetchInterval: 3000,
+    refetchInterval: (query) => (query.state.status === 'error' ? false : 3000),
     refetchIntervalInBackground: false,
   })
 }

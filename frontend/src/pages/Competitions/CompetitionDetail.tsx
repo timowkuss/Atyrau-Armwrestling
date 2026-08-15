@@ -426,6 +426,13 @@ export function CompetitionDetail() {
             )}
             {bracket.isLoading ? (
               <LoadingState label="Загрузка сетки" />
+            ) : bracket.isError ? (
+              <EmptyState
+                title="Сетка не загрузилась"
+                message="Не удалось получить данные сетки. Проверьте соединение и обновите страницу."
+              />
+            ) : !selectedCategory ? (
+              <EmptyState title="Категории не найдены" />
             ) : bracket.data && bracket.data.length > 0 ? (
               <CategoryBracketSection
                 key={selectedCategory.id}
